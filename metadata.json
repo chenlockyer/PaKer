@@ -1,0 +1,5 @@
+{
+  "name": "House of Cards 3D",
+  "description": "A 3D physics-based game where you build structures with poker cards. Features AI-powered building tips.",
+  "requestFramePermissions": []
+}
