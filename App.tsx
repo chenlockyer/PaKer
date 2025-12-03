@@ -37,10 +37,15 @@ const App: React.FC = () => {
 
       switch(e.key.toLowerCase()) {
         case '1': setRotationMode(RotationMode.FLAT); break;
-        case '2': setRotationMode(RotationMode.VERTICAL_X); break;
-        case '3': setRotationMode(RotationMode.VERTICAL_Z); break;
-        case '4': setRotationMode(RotationMode.TILTED_LEFT); break;
-        case '5': setRotationMode(RotationMode.TILTED_RIGHT); break;
+        case '2': setRotationMode(RotationMode.STAND_X); break;
+        case '3': setRotationMode(RotationMode.STAND_Y); break;
+        case '4': setRotationMode(RotationMode.STAND_Z); break;
+        case '5': setRotationMode(RotationMode.TILT_X_FWD); break;
+        case '6': setRotationMode(RotationMode.TILT_X_BACK); break;
+        case '7': setRotationMode(RotationMode.TILT_Z_LEFT); break;
+        case '8': setRotationMode(RotationMode.TILT_Z_RIGHT); break;
+        case '9': setRotationMode(RotationMode.ROOF_FWD); break;
+        case '0': setRotationMode(RotationMode.ROOF_BACK); break;
         case 'l': toggleFreezeMode(); break;
         case 'tab': 
             e.preventDefault();
@@ -57,7 +62,7 @@ const App: React.FC = () => {
     <div className="relative w-full h-screen bg-gray-900 overflow-hidden">
       <GameScene 
         rotationMode={rotationMode} 
-        interactionMode={interactionMode}
+        interactionMode={interactionMode} 
         isFreezeMode={isFreezeMode}
         cards={cards} 
         addCard={addCard} 

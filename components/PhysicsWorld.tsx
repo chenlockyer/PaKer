@@ -89,35 +89,60 @@ const GhostCard = ({
   useEffect(() => {
     setPitch(0);
     setRoll(0);
+    // Note: We don't reset Yaw intentionally as it feels better to keep orientation
   }, [rotationMode]);
 
   // Calculate target rotation based on mode + offsets
   const targetRotation = useMemo(() => {
+    // IMPORTANT: YXZ order is used here for intuitive controls (Yaw acts globally, Pitch locally)
     const euler = new THREE.Euler(0, 0, 0, 'YXZ');
     
     let basePitch = 0; // X axis
     let baseRoll = 0;  // Z axis
+    let baseYaw = 0;   // Y axis
 
     switch (rotationMode) {
       case RotationMode.FLAT:
         basePitch = 0;
         break;
-      case RotationMode.VERTICAL_X:
+      case RotationMode.STAND_X: // Landscape
         basePitch = Math.PI / 2; 
         break;
-      case RotationMode.VERTICAL_Z:
+      case RotationMode.STAND_Y: // Landscape + 90 deg yaw
+        basePitch = Math.PI / 2;
+        baseYaw = Math.PI / 2;
+        break;
+      case RotationMode.STAND_Z: // Portrait
         baseRoll = Math.PI / 2; 
         break;
-      case RotationMode.TILTED_LEFT:
-         basePitch = Math.PI / 2 - 0.35; 
+      
+      // Landscape Tilts
+      case RotationMode.TILT_X_FWD:
+         basePitch = Math.PI / 2 - 0.35; // ~20 deg
          break;
-      case RotationMode.TILTED_RIGHT:
+      case RotationMode.TILT_X_BACK:
          basePitch = Math.PI / 2 + 0.35; 
          break;
+      
+      // Portrait Tilts
+      case RotationMode.TILT_Z_LEFT:
+         baseRoll = Math.PI / 2 - 0.35;
+         break;
+      case RotationMode.TILT_Z_RIGHT:
+         baseRoll = Math.PI / 2 + 0.35;
+         break;
+
+      // Steep Roofs
+      case RotationMode.ROOF_FWD:
+        basePitch = Math.PI / 2 - 0.78; // ~45 deg
+        break;
+      case RotationMode.ROOF_BACK:
+        basePitch = Math.PI / 2 + 0.78;
+        break;
     }
 
     euler.x = basePitch + pitch;
-    euler.y = yaw;
+    euler.y = baseYaw + yaw;
     euler.z = baseRoll + roll;
 
     return euler;
@@ -179,7 +204,14 @@ const GhostCard = ({
       if ((e.target as HTMLElement).tagName !== 'CANVAS') return;
 
       if (meshRef.current) {
-        onPlace(position, targetRotation);
+        // Fix: GhostCard uses YXZ for intuitive controls, but Physics Body uses XYZ (Default).
+        // We must convert the rotation to XYZ order before placing to ensure WYSYWYG.
+        // Otherwise, complex rotations like Stand Y (X=90, Y=90) will result in different orientations
+        // when applied as XYZ vs YXZ.
+        const quat = new THREE.Quaternion().setFromEuler(targetRotation);
+        const standardEuler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
+
+        onPlace(position, standardEuler);
       }
     };
     window.addEventListener('click', handleClick);

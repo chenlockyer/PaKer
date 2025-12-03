@@ -15,8 +15,12 @@ const CARD_THICKNESS = 0.02; // Slightly thicker than reality for physics stabil
 
 const Card: React.FC<CardProps> = ({ data }) => {
   // Physics Body
+  // FIX: Always initialize as 'Dynamic' (mass > 0) so the engine registers it as a movable body.
+  // We will immediately override this in the useEffect if it needs to be locked.
+  // This prevents the issue where 'Static' bodies (mass 0) fail to become 'Dynamic' later.
   const [ref, api] = useBox(() => ({
-    mass: data.locked ? 0 : 0.1, // 0 = Static, >0 = Dynamic
+    mass: 0.1, 
+    type: 'Dynamic',
     position: data.position,
     rotation: data.rotation,
     args: [CARD_WIDTH, CARD_THICKNESS, CARD_HEIGHT],
@@ -30,18 +34,20 @@ const Card: React.FC<CardProps> = ({ data }) => {
 
   // Monitor locked state to switch physics behavior
   useEffect(() => {
+    // We use a small timeout or just direct execution to ensure this runs after init
     if (data.locked) {
-      // Make Static
+      // Make Static-like
       api.mass.set(0);
       api.velocity.set(0, 0, 0);
       api.angularVelocity.set(0, 0, 0);
     } else {
       // Make Dynamic
       api.mass.set(0.1);
-      // Apply a tiny velocity to force the physics engine to re-evaluate the body type and wake it up
-      // This fixes the bug where cards placed while locked stay locked
-      api.velocity.set(0, 0.05, 0); 
       api.wakeUp();
+      
+      // Optional: Apply a tiny, imperceptible nudge to guarantee the solver picks it up
+      // if it was sleeping deep.
+      api.velocity.set(0, 0.01, 0);
     }
   }, [data.locked, api]);
 

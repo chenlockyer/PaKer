@@ -11,10 +11,15 @@ export interface CardData {
 
 export enum RotationMode {
   FLAT = 'FLAT',
-  VERTICAL_X = 'VERTICAL_X',
-  VERTICAL_Z = 'VERTICAL_Z',
-  TILTED_LEFT = 'TILTED_LEFT',
-  TILTED_RIGHT = 'TILTED_RIGHT'
+  STAND_X = 'STAND_X',      // Standard Landscape
+  STAND_Y = 'STAND_Y',      // Standard Landscape + 90 deg Yaw
+  STAND_Z = 'STAND_Z',      // Portrait
+  TILT_X_FWD = 'TILT_X_FWD',
+  TILT_X_BACK = 'TILT_X_BACK',
+  TILT_Z_LEFT = 'TILT_Z_LEFT',
+  TILT_Z_RIGHT = 'TILT_Z_RIGHT',
+  ROOF_FWD = 'ROOF_FWD',    // Steep 45 deg
+  ROOF_BACK = 'ROOF_BACK'   // Steep 45 deg
 }
 
 export enum InteractionMode {

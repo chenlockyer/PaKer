@@ -23,6 +23,20 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onClear,
   cardCount 
 }) => {
+  
+  const presets = [
+      { mode: RotationMode.FLAT, label: 'Flat', icon: '▀', key: '1' },
+      { mode: RotationMode.STAND_X, label: 'Stand X', icon: '▮', key: '2' },
+      { mode: RotationMode.STAND_Y, label: 'Stand Y', icon: '▬', key: '3' },
+      { mode: RotationMode.STAND_Z, label: 'Stand Z', icon: '▎', key: '4' },
+      { mode: RotationMode.TILT_X_FWD, label: 'Lean Fwd', icon: '◢', key: '5' },
+      { mode: RotationMode.TILT_X_BACK, label: 'Lean Back', icon: '◣', key: '6' },
+      { mode: RotationMode.TILT_Z_LEFT, label: 'Lean Left', icon: '◤', key: '7' },
+      { mode: RotationMode.TILT_Z_RIGHT, label: 'Lean Right', icon: '◥', key: '8' },
+      { mode: RotationMode.ROOF_FWD, label: 'Roof Fwd', icon: '▲', key: '9' },
+      { mode: RotationMode.ROOF_BACK, label: 'Roof Back', icon: '▼', key: '0' },
+  ];
+
   return (
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-10 flex flex-col justify-between p-6">
       
@@ -77,32 +91,26 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         <div className="flex gap-6 items-end">
             {/* Placement Modes (Only visible in Quick Mode) */}
             {interactionMode === InteractionMode.QUICK && (
-              <div className="bg-black/60 backdrop-blur-md p-4 rounded-xl border border-gray-700 flex flex-col items-center gap-3">
-              <span className="text-gray-300 text-xs uppercase tracking-widest self-start ml-1">Presets</span>
-              <div className="flex gap-2">
-                  {[
-                  { mode: RotationMode.FLAT, label: 'Flat', icon: '▀', key: '1' },
-                  { mode: RotationMode.VERTICAL_X, label: 'Stand X', icon: '▮', key: '2' },
-                  { mode: RotationMode.VERTICAL_Z, label: 'Stand Z', icon: '▎', key: '3' },
-                  { mode: RotationMode.TILTED_LEFT, label: 'Tilt /', icon: '/', key: '4' },
-                  { mode: RotationMode.TILTED_RIGHT, label: 'Tilt \\', icon: '\\', key: '5' },
-                  ].map((opt) => (
-                  <button
-                      key={opt.mode}
-                      onClick={() => setMode(opt.mode)}
-                      className={`
-                      px-3 py-2 rounded-lg font-medium transition-all flex flex-col items-center min-w-[70px] relative
-                      ${currentMode === opt.mode 
-                          ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-105' 
-                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}
-                      `}
-                  >
-                      <span className="absolute top-1 right-2 text-[9px] opacity-50 font-mono">{opt.key}</span>
-                      <span className="text-lg mb-1 mt-1">{opt.icon}</span>
-                      <span className="text-[10px]">{opt.label}</span>
-                  </button>
-                  ))}
-              </div>
+              <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-gray-700 flex flex-col gap-2">
+                <span className="text-gray-300 text-xs uppercase tracking-widest self-start ml-1">Presets</span>
+                <div className="grid grid-cols-5 gap-2">
+                    {presets.map((opt) => (
+                    <button
+                        key={opt.mode}
+                        onClick={() => setMode(opt.mode)}
+                        className={`
+                        p-2 rounded-lg font-medium transition-all flex flex-col items-center w-[60px] relative
+                        ${currentMode === opt.mode 
+                            ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-105 z-10' 
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}
+                        `}
+                    >
+                        <span className="absolute top-0.5 right-1.5 text-[8px] opacity-50 font-mono">{opt.key}</span>
+                        <span className="text-lg leading-none mt-1 mb-1">{opt.icon}</span>
+                        <span className="text-[9px] leading-tight text-center">{opt.label}</span>
+                    </button>
+                    ))}
+                </div>
               </div>
             )}
 
@@ -120,10 +128,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                  </div>
                  <div className="text-xs text-gray-500">Drag handles to adjust</div>
                  <button 
-                   id="precision-place-btn" // Used to trigger from outside if needed, or just visual cue
+                   id="precision-place-btn" 
                    className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 active:transform active:scale-95 transition-all"
                    onClick={() => {
-                     // Dispatch custom event for the canvas to pick up
                      window.dispatchEvent(new CustomEvent('trigger-precision-place'));
                    }}
                  >
