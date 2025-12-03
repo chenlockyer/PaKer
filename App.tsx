@@ -1,4 +1,4 @@
-
+/// <reference lib="dom" />
 import React, { useState, useCallback, useEffect } from 'react';
 import GameScene from './components/GameScene';
 import UIOverlay from './components/UIOverlay';
@@ -11,6 +11,7 @@ const App: React.FC = () => {
   const [isFreezeMode, setIsFreezeMode] = useState(false);
   const [cards, setCards] = useState<CardData[]>([]);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
+  const [lang, setLang] = useState<'en' | 'zh'>('zh');
 
   const addCard = useCallback((card: CardData) => {
     // When adding a card, ensure it follows the current freeze mode
@@ -105,6 +106,8 @@ const App: React.FC = () => {
         setIsFreezeMode={() => toggleFreezeMode()}
         onClear={clearCards}
         cardCount={cards.length}
+        lang={lang}
+        setLang={setLang}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-
+/// <reference lib="dom" />
 import React from 'react';
 import { RotationMode, InteractionMode, PointerMode } from '../types';
 
@@ -13,7 +13,92 @@ interface UIOverlayProps {
   setIsFreezeMode: (val: boolean) => void;
   onClear: () => void;
   cardCount: number;
+  lang: 'en' | 'zh';
+  setLang: (lang: 'en' | 'zh') => void;
 }
+
+const translations = {
+  en: {
+     title: "House of Cards",
+     subtitle: "Physics Construction Simulator",
+     cardsPlaced: "Cards Placed",
+     clearTable: "Clear Table",
+     quickPlace: "Quick Place",
+     precision: "Precision (Blender)",
+     place: "Place",
+     move: "Move",
+     delete: "Delete",
+     presets: "Presets",
+     timeStopped: "Time Stopped",
+     physicsActive: "Physics Active",
+     resume: "RESUME",
+     freeze: "FREEZE",
+     controls: "Controls",
+     togglePrecision: "Toggle Precision",
+     rotateYaw: "Rotate (Yaw)",
+     tiltPitch: "Tilt (Pitch)",
+     rollZ: "Roll (Z-Axis)",
+     dragMove: "Drag blue cards to move them.",
+     clickDelete: "Click red cards to delete.",
+     resetRot: "Reset Rot",
+     precisionTool: "Precision Tool",
+     translate: "Translate",
+     rotate: "Rotate",
+     placeCard: "PLACE CARD",
+     flat: "Flat",
+     standX: "Stand X",
+     standY: "Stand Y",
+     standZ: "Stand Z",
+     leanFwd: "Lean Fwd",
+     leanBack: "Lean Back",
+     leanLeft: "Lean Left",
+     leanRight: "Lean Right",
+     roofFwd: "Roof Fwd",
+     roofBack: "Roof Back",
+     pressL: "Press 'L'",
+     pressEnter: "ENTER"
+  },
+  zh: {
+     title: "纸牌屋 3D",
+     subtitle: "物理搭建模拟器",
+     cardsPlaced: "已放置",
+     clearTable: "清空桌面",
+     quickPlace: "快速放置",
+     precision: "精准模式 (Blender)",
+     place: "放置",
+     move: "移动",
+     delete: "删除",
+     presets: "旋转预设",
+     timeStopped: "时间静止",
+     physicsActive: "物理生效",
+     resume: "恢复时间",
+     freeze: "时间暂停",
+     controls: "操作指南",
+     togglePrecision: "切换精准模式",
+     rotateYaw: "水平旋转 (Yaw)",
+     tiltPitch: "倾斜 (Pitch)",
+     rollZ: "翻滚 (Roll)",
+     dragMove: "拖拽蓝色卡牌以移动",
+     clickDelete: "点击红色卡牌以删除",
+     resetRot: "重置旋转",
+     precisionTool: "精准工具",
+     translate: "平移",
+     rotate: "旋转",
+     placeCard: "确认放置",
+     flat: "平放",
+     standX: "横立",
+     standY: "侧立",
+     standZ: "竖立",
+     leanFwd: "前倾",
+     leanBack: "后倾",
+     leanLeft: "左倾",
+     leanRight: "右倾",
+     roofFwd: "前屋顶",
+     roofBack: "后屋顶",
+     pressL: "按 'L' 键",
+     pressEnter: "回车"
+  }
+};
 
 const UIOverlay: React.FC<UIOverlayProps> = ({ 
   currentMode, 
@@ -25,20 +110,23 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   isFreezeMode,
   setIsFreezeMode,
   onClear,
-  cardCount 
+  cardCount,
+  lang,
+  setLang
 }) => {
-  
+  const t = translations[lang];
+
   const presets = [
-      { mode: RotationMode.FLAT, label: 'Flat', icon: '▀', key: '1' },
-      { mode: RotationMode.STAND_X, label: 'Stand X', icon: '▮', key: '2' },
-      { mode: RotationMode.STAND_Y, label: 'Stand Y', icon: '▬', key: '3' },
-      { mode: RotationMode.STAND_Z, label: 'Stand Z', icon: '▎', key: '4' },
-      { mode: RotationMode.TILT_X_FWD, label: 'Lean Fwd', icon: '◢', key: '5' },
-      { mode: RotationMode.TILT_X_BACK, label: 'Lean Back', icon: '◣', key: '6' },
-      { mode: RotationMode.TILT_Z_LEFT, label: 'Lean Left', icon: '◤', key: '7' },
-      { mode: RotationMode.TILT_Z_RIGHT, label: 'Lean Right', icon: '◥', key: '8' },
-      { mode: RotationMode.ROOF_FWD, label: 'Roof Fwd', icon: '▲', key: '9' },
-      { mode: RotationMode.ROOF_BACK, label: 'Roof Back', icon: '▼', key: '0' },
+      { mode: RotationMode.FLAT, label: t.flat, icon: '▀', key: '1' },
+      { mode: RotationMode.STAND_X, label: t.standX, icon: '▮', key: '2' },
+      { mode: RotationMode.STAND_Y, label: t.standY, icon: '▬', key: '3' },
+      { mode: RotationMode.STAND_Z, label: t.standZ, icon: '▎', key: '4' },
+      { mode: RotationMode.TILT_X_FWD, label: t.leanFwd, icon: '◢', key: '5' },
+      { mode: RotationMode.TILT_X_BACK, label: t.leanBack, icon: '◣', key: '6' },
+      { mode: RotationMode.TILT_Z_LEFT, label: t.leanLeft, icon: '◤', key: '7' },
+      { mode: RotationMode.TILT_Z_RIGHT, label: t.leanRight, icon: '◥', key: '8' },
+      { mode: RotationMode.ROOF_FWD, label: t.roofFwd, icon: '▲', key: '9' },
+      { mode: RotationMode.ROOF_BACK, label: t.roofBack, icon: '▼', key: '0' },
   ];
 
   const showPlaceControls = pointerMode === PointerMode.PLACE || pointerMode === PointerMode.MOVE;
@@ -49,8 +137,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
       {/* Header */}
       <div className="flex justify-between items-start pointer-events-auto">
         <div>
-          <h1 className="text-4xl font-bold text-white drop-shadow-lg">House of Cards</h1>
-          <p className="text-gray-300 text-sm mt-1">Physics Construction Simulator</p>
+          <h1 className="text-4xl font-bold text-white drop-shadow-lg">{t.title}</h1>
+          <p className="text-gray-300 text-sm mt-1">{t.subtitle}</p>
           
           {/* Mode Toggle (Quick/Precision) - Only for Place Mode */}
           {pointerMode === PointerMode.PLACE && (
@@ -59,21 +147,30 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 onClick={() => setInteractionMode(InteractionMode.QUICK)}
                 className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${interactionMode === InteractionMode.QUICK ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
               >
-                Quick Place
+                {t.quickPlace}
               </button>
               <button 
                 onClick={() => setInteractionMode(InteractionMode.PRECISION)}
                 className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${interactionMode === InteractionMode.PRECISION ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'}`}
               >
-                Precision (Blender)
+                {t.precision}
               </button>
             </div>
           )}
         </div>
         
         <div className="flex flex-col gap-2 items-end">
+           <div className="flex gap-2 mb-1">
+             <button 
+                onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
+             >
+                {lang === 'zh' ? 'EN' : '中文'}
+             </button>
+           </div>
+           
            <div className="bg-black/50 backdrop-blur-md p-4 rounded-lg border border-gray-600 text-right">
-             <div className="text-white text-xs uppercase tracking-wider">Cards Placed</div>
+             <div className="text-white text-xs uppercase tracking-wider">{t.cardsPlaced}</div>
              <div className="text-3xl font-mono text-blue-400">{cardCount}</div>
            </div>
            
@@ -81,7 +178,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
              onClick={onClear}
              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-bold transition-colors shadow-lg"
            >
-             Clear Table
+             {t.clearTable}
            </button>
         </div>
       </div>
@@ -100,19 +197,19 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
              onClick={() => setPointerMode(PointerMode.PLACE)}
              className={`px-6 py-3 rounded-xl font-bold text-sm uppercase transition-all flex items-center gap-2 ${pointerMode === PointerMode.PLACE ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
            >
-             <span className="text-lg">✚</span> Place
+             <span className="text-lg">✚</span> {t.place}
            </button>
            <button
              onClick={() => setPointerMode(PointerMode.MOVE)}
              className={`px-6 py-3 rounded-xl font-bold text-sm uppercase transition-all flex items-center gap-2 ${pointerMode === PointerMode.MOVE ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
            >
-             <span className="text-lg">✋</span> Move
+             <span className="text-lg">✋</span> {t.move}
            </button>
            <button
              onClick={() => setPointerMode(PointerMode.DELETE)}
              className={`px-6 py-3 rounded-xl font-bold text-sm uppercase transition-all flex items-center gap-2 ${pointerMode === PointerMode.DELETE ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
            >
-             <span className="text-lg">✕</span> Delete
+             <span className="text-lg">✕</span> {t.delete}
            </button>
         </div>
       </div>
@@ -125,7 +222,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             {/* Presets - Visible in Place or Move Mode */}
             {showPlaceControls && interactionMode === InteractionMode.QUICK && (
               <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-gray-700 flex flex-col gap-2">
-                <span className="text-gray-300 text-xs uppercase tracking-widest self-start ml-1">Presets</span>
+                <span className="text-gray-300 text-xs uppercase tracking-widest self-start ml-1">{t.presets}</span>
                 <div className="grid grid-cols-5 gap-2">
                     {presets.map((opt) => (
                     <button
@@ -150,13 +247,13 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             {/* Precision Controls */}
             {pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.PRECISION && (
                <div className="bg-black/60 backdrop-blur-md p-4 rounded-xl border border-amber-600/50 flex flex-col gap-3 shadow-[0_0_30px_rgba(217,119,6,0.15)]">
-                 <span className="text-amber-400 text-xs uppercase tracking-widest font-bold">Precision Tool</span>
+                 <span className="text-amber-400 text-xs uppercase tracking-widest font-bold">{t.precisionTool}</span>
                  <div className="flex items-center gap-4 text-gray-300 text-sm">
                     <div className="flex gap-2">
-                      <span className="bg-gray-700 px-2 py-1 rounded text-white font-mono">T</span> Translate
+                      <span className="bg-gray-700 px-2 py-1 rounded text-white font-mono">T</span> {t.translate}
                     </div>
                     <div className="flex gap-2">
-                      <span className="bg-gray-700 px-2 py-1 rounded text-white font-mono">R</span> Rotate
+                      <span className="bg-gray-700 px-2 py-1 rounded text-white font-mono">R</span> {t.rotate}
                     </div>
                  </div>
                  <button 
@@ -166,8 +263,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                      window.dispatchEvent(new CustomEvent('trigger-precision-place'));
                    }}
                  >
-                   <span>PLACE CARD</span>
-                   <span className="bg-black/20 px-2 py-0.5 rounded text-[10px] font-mono">ENTER</span>
+                   <span>{t.placeCard}</span>
+                   <span className="bg-black/20 px-2 py-0.5 rounded text-[10px] font-mono">{t.pressEnter}</span>
                  </button>
                </div>
             )}
@@ -187,37 +284,37 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 </span>
                 <div className="flex flex-col items-start">
                     <span className={`uppercase tracking-wider text-[10px] mb-1 ${isFreezeMode ? 'text-cyan-300' : 'text-gray-500'}`}>
-                        {isFreezeMode ? 'Time Stopped' : 'Physics Active'}
+                        {isFreezeMode ? t.timeStopped : t.physicsActive}
                     </span>
                     <span className="text-lg tracking-tight">
-                        {isFreezeMode ? 'RESUME' : 'FREEZE'}
+                        {isFreezeMode ? t.resume : t.freeze}
                     </span>
-                    <span className="text-[10px] font-mono opacity-50 mt-1">Press 'L'</span>
+                    <span className="text-[10px] font-mono opacity-50 mt-1">{t.pressL}</span>
                 </div>
             </button>
         </div>
 
         {/* Controls Guide */}
         <div className="bg-black/60 backdrop-blur-md p-4 rounded-xl border border-gray-700 ml-4">
-          <span className="text-gray-300 text-xs uppercase tracking-widest mb-2 block">Controls</span>
+          <span className="text-gray-300 text-xs uppercase tracking-widest mb-2 block">{t.controls}</span>
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-300">
             <div className="flex justify-between">
-              <span>Toggle Precision</span>
+              <span>{t.togglePrecision}</span>
               <span className="font-mono text-white bg-gray-700 px-1 rounded">TAB</span>
             </div>
             
             {showPlaceControls && interactionMode === InteractionMode.QUICK && (
               <>
                 <div className="flex justify-between">
-                  <span>Rotate (Yaw)</span>
+                  <span>{t.rotateYaw}</span>
                   <span className="font-mono text-white bg-gray-700 px-1 rounded">Q / E</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Tilt (Pitch)</span>
+                  <span>{t.tiltPitch}</span>
                   <span className="font-mono text-white bg-gray-700 px-1 rounded">R / F</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Roll (Z-Axis)</span>
+                  <span>{t.rollZ}</span>
                   <span className="font-mono text-white bg-gray-700 px-1 rounded">Z / X</span>
                 </div>
               </>
@@ -225,18 +322,18 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
             {pointerMode === PointerMode.MOVE && (
                 <div className="col-span-2 text-blue-400 text-xs py-1">
-                   Drag blue cards to move them.
+                   {t.dragMove}
                 </div>
             )}
             
             {pointerMode === PointerMode.DELETE && (
                 <div className="col-span-2 text-red-400 text-xs py-1">
-                   Click red cards to delete.
+                   {t.clickDelete}
                 </div>
             )}
 
             <div className="flex justify-between">
-              <span>Reset Rot</span>
+              <span>{t.resetRot}</span>
               <span className="font-mono text-white bg-gray-700 px-1 rounded">SPACE</span>
             </div>
           </div>

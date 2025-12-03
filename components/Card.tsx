@@ -1,4 +1,4 @@
-
+/// <reference lib="dom" />
 import React, { useMemo, useEffect, useState } from 'react';
 import { useBox } from '@react-three/cannon';
 import * as THREE from 'three';
