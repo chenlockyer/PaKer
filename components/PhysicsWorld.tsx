@@ -25,15 +25,15 @@ interface PhysicsWorldProps {
 }
 
 // The Floor component
-const Floor = () => {
-  const [ref] = usePlane(() => ({
+const Floor = ({ meshRef }: { meshRef: React.RefObject<THREE.Mesh> }) => {
+  usePlane(() => ({
     rotation: [-Math.PI / 2, 0, 0],
     position: [0, 0, 0],
     material: { friction: 1, restitution: 0 }
-  }));
+  }), meshRef);
 
   return (
-    <mesh ref={ref as any} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+    <mesh ref={meshRef} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[100, 100]} />
       <shadowMaterial opacity={0.3} />
       <gridHelper args={[100, 100, 0x444444, 0x222222]} rotation={[-Math.PI / 2, 0, 0]} />
@@ -46,14 +46,18 @@ const GhostCard = ({
   rotationMode, 
   isFreezeMode,
   onPlace,
-  dragMode = false // If true, we place on mouse UP, not click
+  floorRef,
+  cardsGroupRef,
+  dragMode = false 
 }: { 
   rotationMode: RotationMode; 
   isFreezeMode: boolean;
   onPlace: (pos: THREE.Vector3, rot: THREE.Euler) => void;
+  floorRef: React.RefObject<THREE.Mesh>;
+  cardsGroupRef: React.RefObject<THREE.Group>;
   dragMode?: boolean;
 }) => {
-  const { camera, raycaster, scene } = useThree();
+  const { camera, raycaster } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
   const [position, setPosition] = useState(new THREE.Vector3(0, 0, 0));
   
@@ -102,7 +106,7 @@ const GhostCard = ({
     };
   }, []);
 
-  // Reset pitch/roll when mode changes (only if not dragging to preserve flow? simple is best)
+  // Reset pitch/roll when mode changes
   useEffect(() => {
     setPitch(0);
     setRoll(0);
@@ -137,7 +141,13 @@ const GhostCard = ({
 
   useFrame(({ mouse }) => {
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
+    
+    // OPTIMIZATION: Only intersect with floor and card meshes, not the whole scene
+    const targets: THREE.Object3D[] = [];
+    if (floorRef.current) targets.push(floorRef.current);
+    if (cardsGroupRef.current) targets.push(cardsGroupRef.current);
+
+    const intersects = raycaster.intersectObjects(targets, true);
     
     // Ignore self and hidden cards
     const hit = intersects.find(i => 
@@ -324,6 +334,10 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   
   // Use prop state instead of local state
   const draggingCardData = useMemo(() => cards.find(c => c.id === draggingCardId) || null, [cards, draggingCardId]);
+  
+  // Refs for optimized raycasting
+  const floorRef = useRef<THREE.Mesh>(null);
+  const cardsGroupRef = useRef<THREE.Group>(null);
 
   // Handle creating new card
   const handlePlaceNew = (pos: THREE.Vector3, rot: THREE.Euler) => {
@@ -365,23 +379,25 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       <ambientLight intensity={0.5} />
       <directionalLight position={[10, 20, 10]} intensity={1} castShadow shadow-mapSize={[2048, 2048]} />
       
-      <Floor />
+      <Floor meshRef={floorRef} />
       
-      {cards.map((card) => {
-        // Hide the card if it is currently being dragged
-        const isDragging = draggingCardData?.id === card.id;
-        
-        return (
-          <Card 
-            key={card.id} 
-            data={card} 
-            pointerMode={pointerMode}
-            onRemove={() => removeCard(card.id)}
-            onDragStart={() => onCardDragStart(card)}
-            isDragging={isDragging}
-          />
-        );
-      })}
+      <group ref={cardsGroupRef}>
+        {cards.map((card) => {
+          // Hide the card if it is currently being dragged
+          const isDragging = draggingCardData?.id === card.id;
+          
+          return (
+            <Card 
+              key={card.id} 
+              data={card} 
+              pointerMode={pointerMode}
+              onRemove={() => removeCard(card.id)}
+              onDragStart={() => onCardDragStart(card)}
+              isDragging={isDragging}
+            />
+          );
+        })}
+      </group>
 
       {/* GHOST FOR NEW CARDS */}
       {showNewCardGhost && (
@@ -390,6 +406,8 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
               rotationMode={rotationMode} 
               isFreezeMode={isFreezeMode}
               onPlace={handlePlaceNew} 
+              floorRef={floorRef}
+              cardsGroupRef={cardsGroupRef}
           />
         ) : (
           <PrecisionGhost 
@@ -406,6 +424,8 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
             isFreezeMode={isFreezeMode}
             onPlace={handlePlaceMoved}
             dragMode={true} // Triggers on mouse up
+            floorRef={floorRef}
+            cardsGroupRef={cardsGroupRef}
         />
       )}
       

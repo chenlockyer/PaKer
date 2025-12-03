@@ -85,6 +85,7 @@ const Card: React.FC<CardProps> = ({
       api.mass.set(0);
       api.velocity.set(0, 0, 0);
       api.angularVelocity.set(0, 0, 0);
+      api.sleep(); // Disable collision checks to save performance
     } else {
       // Unfreeze: Make dynamic, wake up
       api.mass.set(0.1);

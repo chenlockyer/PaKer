@@ -1,7 +1,7 @@
 
 import React, { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Sky, Environment } from '@react-three/drei';
+import { OrbitControls, Sky, Environment, Stats } from '@react-three/drei';
 import PhysicsWorld from './PhysicsWorld';
 import { CardData, RotationMode, InteractionMode, PointerMode } from '../types';
 
@@ -33,6 +33,7 @@ const GameScene: React.FC<GameSceneProps> = ({
   return (
     <div className="w-full h-full absolute top-0 left-0 z-0">
       <Canvas shadows camera={{ position: [0, 8, 12], fov: 45 }}>
+        <Stats />
         <Suspense fallback={null}>
           <Sky sunPosition={[100, 20, 100]} />
           <Environment preset="city" />

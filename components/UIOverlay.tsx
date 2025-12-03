@@ -279,7 +279,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                         : 'bg-gray-800/80 border-gray-600 text-gray-300 hover:bg-gray-700'}
                 `}
             >
-                <span className={`text-4xl ${isFreezeMode ? 'animate-pulse' : ''}`}>
+                <span className="text-4xl">
                     {isFreezeMode ? '⏸' : '▶'}
                 </span>
                 <div className="flex flex-col items-start">
