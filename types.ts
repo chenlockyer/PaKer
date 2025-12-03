@@ -9,17 +9,12 @@ export interface CardData {
   locked: boolean;
 }
 
-export enum RotationMode {
-  FLAT = 'FLAT',
-  STAND_X = 'STAND_X',      // Standard Landscape
-  STAND_Y = 'STAND_Y',      // Standard Landscape + 90 deg Yaw
-  STAND_Z = 'STAND_Z',      // Portrait
-  TILT_X_FWD = 'TILT_X_FWD',
-  TILT_X_BACK = 'TILT_X_BACK',
-  TILT_Z_LEFT = 'TILT_Z_LEFT',
-  TILT_Z_RIGHT = 'TILT_Z_RIGHT',
-  ROOF_FWD = 'ROOF_FWD',    // Steep 45 deg
-  ROOF_BACK = 'ROOF_BACK'   // Steep 45 deg
+export interface RotationPreset {
+  id: string;
+  name: string; // Can be a translation key or raw text
+  icon: string;
+  shortcut: string;
+  rotation: [number, number, number]; // Euler Angles [x, y, z]
 }
 
 export enum InteractionMode {

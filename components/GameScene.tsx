@@ -3,10 +3,10 @@ import React, { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Sky, Environment, Stats } from '@react-three/drei';
 import PhysicsWorld from './PhysicsWorld';
-import { CardData, RotationMode, InteractionMode, PointerMode } from '../types';
+import { CardData, RotationPreset, InteractionMode, PointerMode } from '../types';
 
 interface GameSceneProps {
-  rotationMode: RotationMode;
+  rotationPreset: RotationPreset;
   interactionMode: InteractionMode;
   pointerMode: PointerMode;
   isFreezeMode: boolean;
@@ -19,7 +19,7 @@ interface GameSceneProps {
 }
 
 const GameScene: React.FC<GameSceneProps> = ({ 
-  rotationMode, 
+  rotationPreset, 
   interactionMode, 
   pointerMode,
   isFreezeMode, 
@@ -39,7 +39,7 @@ const GameScene: React.FC<GameSceneProps> = ({
           <Environment preset="city" />
           
           <PhysicsWorld 
-            rotationMode={rotationMode} 
+            rotationPreset={rotationPreset} 
             interactionMode={interactionMode}
             pointerMode={pointerMode}
             isFreezeMode={isFreezeMode}

@@ -1,10 +1,16 @@
+
 /// <reference lib="dom" />
-import React from 'react';
-import { RotationMode, InteractionMode, PointerMode } from '../types';
+import React, { useState } from 'react';
+import { RotationPreset, InteractionMode, PointerMode } from '../types';
 
 interface UIOverlayProps {
-  currentMode: RotationMode;
-  setMode: (mode: RotationMode) => void;
+  presets: RotationPreset[];
+  currentPresetId: string;
+  setPresetId: (id: string) => void;
+  onAddPreset: () => void;
+  onUpdatePreset: (preset: RotationPreset) => void;
+  onDeletePreset: (id: string) => void;
+  onResetPresets: () => void;
   interactionMode: InteractionMode;
   setInteractionMode: (mode: InteractionMode) => void;
   pointerMode: PointerMode;
@@ -12,6 +18,8 @@ interface UIOverlayProps {
   isFreezeMode: boolean;
   setIsFreezeMode: (val: boolean) => void;
   onClear: () => void;
+  onSave: () => void;
+  onLoad: () => void;
   cardCount: number;
   lang: 'en' | 'zh';
   setLang: (lang: 'en' | 'zh') => void;
@@ -23,6 +31,8 @@ const translations = {
      subtitle: "Physics Construction Simulator",
      cardsPlaced: "Cards Placed",
      clearTable: "Clear Table",
+     save: "Save",
+     load: "Load",
      quickPlace: "Quick Place",
      precision: "Precision (Blender)",
      place: "Place",
@@ -45,6 +55,15 @@ const translations = {
      translate: "Translate",
      rotate: "Rotate",
      placeCard: "PLACE CARD",
+     pressL: "Press 'L'",
+     pressEnter: "ENTER",
+     settings: "Settings",
+     presetEditor: "Preset Editor",
+     add: "Add",
+     reset: "Reset",
+     name: "Name",
+     shortcut: "Key",
+     icon: "Icon",
      flat: "Flat",
      standX: "Stand X",
      standY: "Stand Y",
@@ -55,14 +74,14 @@ const translations = {
      leanRight: "Lean Right",
      roofFwd: "Roof Fwd",
      roofBack: "Roof Back",
-     pressL: "Press 'L'",
-     pressEnter: "ENTER"
   },
   zh: {
      title: "纸牌屋 3D",
      subtitle: "物理搭建模拟器",
      cardsPlaced: "已放置",
      clearTable: "清空桌面",
+     save: "存档",
+     load: "读档",
      quickPlace: "快速放置",
      precision: "精准模式 (Blender)",
      place: "放置",
@@ -85,6 +104,15 @@ const translations = {
      translate: "平移",
      rotate: "旋转",
      placeCard: "确认放置",
+     pressL: "按 'L' 键",
+     pressEnter: "回车",
+     settings: "设置",
+     presetEditor: "预设编辑器",
+     add: "新建",
+     reset: "重置",
+     name: "名称",
+     shortcut: "快捷键",
+     icon: "图标",
      flat: "平放",
      standX: "横立",
      standY: "侧立",
@@ -95,14 +123,17 @@ const translations = {
      leanRight: "右倾",
      roofFwd: "前屋顶",
      roofBack: "后屋顶",
-     pressL: "按 'L' 键",
-     pressEnter: "回车"
   }
 };
 
 const UIOverlay: React.FC<UIOverlayProps> = ({ 
-  currentMode, 
-  setMode, 
+  presets,
+  currentPresetId,
+  setPresetId,
+  onAddPreset,
+  onUpdatePreset,
+  onDeletePreset,
+  onResetPresets,
   interactionMode,
   setInteractionMode,
   pointerMode,
@@ -110,26 +141,32 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   isFreezeMode,
   setIsFreezeMode,
   onClear,
+  onSave,
+  onLoad,
   cardCount,
   lang,
   setLang
 }) => {
   const t = translations[lang];
-
-  const presets = [
-      { mode: RotationMode.FLAT, label: t.flat, icon: '▀', key: '1' },
-      { mode: RotationMode.STAND_X, label: t.standX, icon: '▮', key: '2' },
-      { mode: RotationMode.STAND_Y, label: t.standY, icon: '▬', key: '3' },
-      { mode: RotationMode.STAND_Z, label: t.standZ, icon: '▎', key: '4' },
-      { mode: RotationMode.TILT_X_FWD, label: t.leanFwd, icon: '◢', key: '5' },
-      { mode: RotationMode.TILT_X_BACK, label: t.leanBack, icon: '◣', key: '6' },
-      { mode: RotationMode.TILT_Z_LEFT, label: t.leanLeft, icon: '◤', key: '7' },
-      { mode: RotationMode.TILT_Z_RIGHT, label: t.leanRight, icon: '◥', key: '8' },
-      { mode: RotationMode.ROOF_FWD, label: t.roofFwd, icon: '▲', key: '9' },
-      { mode: RotationMode.ROOF_BACK, label: t.roofBack, icon: '▼', key: '0' },
-  ];
+  const [showSettings, setShowSettings] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const showPlaceControls = pointerMode === PointerMode.PLACE || pointerMode === PointerMode.MOVE;
+
+  // Editor Handlers
+  const editingPreset = editingId ? presets.find(p => p.id === editingId) : null;
+  const updateEditingValue = (field: keyof RotationPreset, value: any) => {
+    if (editingPreset) {
+      onUpdatePreset({ ...editingPreset, [field]: value });
+    }
+  };
+  const updateRotation = (axisIndex: number, degrees: number) => {
+    if (editingPreset) {
+      const newRot = [...editingPreset.rotation] as [number, number, number];
+      newRot[axisIndex] = (degrees * Math.PI) / 180;
+      onUpdatePreset({ ...editingPreset, rotation: newRot });
+    }
+  };
 
   return (
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-10 flex flex-col justify-between p-6">
@@ -140,7 +177,6 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           <h1 className="text-4xl font-bold text-white drop-shadow-lg">{t.title}</h1>
           <p className="text-gray-300 text-sm mt-1">{t.subtitle}</p>
           
-          {/* Mode Toggle (Quick/Precision) - Only for Place Mode */}
           {pointerMode === PointerMode.PLACE && (
             <div className="mt-4 bg-black/60 backdrop-blur rounded-lg p-1 inline-flex border border-gray-700">
               <button 
@@ -161,6 +197,18 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         
         <div className="flex flex-col gap-2 items-end">
            <div className="flex gap-2 mb-1">
+             <button 
+                onClick={onSave}
+                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
+             >
+                {t.save}
+             </button>
+             <button 
+                onClick={onLoad}
+                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
+             >
+                {t.load}
+             </button>
              <button 
                 onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
                 className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
@@ -183,14 +231,14 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         </div>
       </div>
 
-      {/* Center Notification for Precision Mode */}
+      {/* Center Notification */}
       {pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.PRECISION && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none text-center opacity-30">
           <div className="text-amber-400 border-2 border-amber-400 rounded-full w-12 h-12 flex items-center justify-center text-2xl mx-auto mb-2">+</div>
         </div>
       )}
 
-      {/* MAIN POINTER MODE TOOLBAR (Bottom Center) */}
+      {/* Bottom Toolbar */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto z-50">
         <div className="bg-black/80 backdrop-blur-xl p-1.5 rounded-2xl border border-gray-600 flex gap-1 shadow-2xl">
            <button
@@ -215,36 +263,47 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
       </div>
 
 
-      {/* Bottom Sections (Side Controls) */}
-      <div className="flex justify-between items-end w-full pointer-events-auto mb-16"> {/* mb-16 to clear center toolbar */}
+      {/* Bottom Side Controls */}
+      <div className="flex justify-between items-end w-full pointer-events-auto mb-16">
         
         <div className="flex gap-6 items-end">
-            {/* Presets - Visible in Place or Move Mode */}
+            {/* Presets */}
             {showPlaceControls && interactionMode === InteractionMode.QUICK && (
-              <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-gray-700 flex flex-col gap-2">
-                <span className="text-gray-300 text-xs uppercase tracking-widest self-start ml-1">{t.presets}</span>
+              <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-gray-700 flex flex-col gap-2 relative">
+                <div className="flex justify-between items-center">
+                    <span className="text-gray-300 text-xs uppercase tracking-widest ml-1">{t.presets}</span>
+                    <button 
+                        onClick={() => setShowSettings(true)}
+                        className="text-gray-400 hover:text-white"
+                        title={t.settings}
+                    >
+                        ⚙️
+                    </button>
+                </div>
                 <div className="grid grid-cols-5 gap-2">
                     {presets.map((opt) => (
                     <button
-                        key={opt.mode}
-                        onClick={() => setMode(opt.mode)}
+                        key={opt.id}
+                        onClick={() => setPresetId(opt.id)}
                         className={`
-                        p-2 rounded-lg font-medium transition-all flex flex-col items-center w-[60px] relative
-                        ${currentMode === opt.mode 
+                        p-2 rounded-lg font-medium transition-all flex flex-col items-center w-[60px] relative overflow-hidden
+                        ${currentPresetId === opt.id 
                             ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-105 z-10' 
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}
                         `}
                     >
-                        <span className="absolute top-0.5 right-1.5 text-[8px] opacity-50 font-mono">{opt.key}</span>
+                        <span className="absolute top-0.5 right-1.5 text-[8px] opacity-50 font-mono">{opt.shortcut}</span>
                         <span className="text-lg leading-none mt-1 mb-1">{opt.icon}</span>
-                        <span className="text-[9px] leading-tight text-center">{opt.label}</span>
+                        <span className="text-[9px] leading-tight text-center truncate w-full px-1">
+                            {t[opt.name as keyof typeof t] || opt.name}
+                        </span>
                     </button>
                     ))}
                 </div>
               </div>
             )}
 
-            {/* Precision Controls */}
+            {/* Precision UI */}
             {pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.PRECISION && (
                <div className="bg-black/60 backdrop-blur-md p-4 rounded-xl border border-amber-600/50 flex flex-col gap-3 shadow-[0_0_30px_rgba(217,119,6,0.15)]">
                  <span className="text-amber-400 text-xs uppercase tracking-widest font-bold">{t.precisionTool}</span>
@@ -269,7 +328,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                </div>
             )}
 
-            {/* Physics Controls (Time Stop) - Always Visible */}
+            {/* Freeze Button */}
             <button
                 onClick={() => setIsFreezeMode(!isFreezeMode)}
                 className={`
@@ -319,27 +378,127 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 </div>
               </>
             )}
-
-            {pointerMode === PointerMode.MOVE && (
-                <div className="col-span-2 text-blue-400 text-xs py-1">
-                   {t.dragMove}
-                </div>
-            )}
             
-            {pointerMode === PointerMode.DELETE && (
-                <div className="col-span-2 text-red-400 text-xs py-1">
-                   {t.clickDelete}
-                </div>
-            )}
-
             <div className="flex justify-between">
               <span>{t.resetRot}</span>
               <span className="font-mono text-white bg-gray-700 px-1 rounded">SPACE</span>
             </div>
           </div>
         </div>
-
       </div>
+
+      {/* SETTINGS MODAL */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center pointer-events-auto">
+            <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl w-[800px] h-[500px] flex overflow-hidden">
+                {/* Sidebar List */}
+                <div className="w-1/3 bg-gray-900 border-r border-gray-700 flex flex-col">
+                    <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                        <h2 className="text-white font-bold">{t.presets}</h2>
+                        <button onClick={() => {onAddPreset(); setEditingId(null);}} className="text-blue-400 hover:text-blue-300 text-xs uppercase font-bold">{t.add}</button>
+                    </div>
+                    <div className="overflow-y-auto flex-1">
+                        {presets.map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => setEditingId(p.id)}
+                                className={`w-full text-left px-4 py-3 border-b border-gray-800 hover:bg-gray-800 transition-colors flex justify-between items-center ${editingId === p.id ? 'bg-gray-800 border-l-4 border-l-blue-500' : ''}`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl">{p.icon}</span>
+                                    <span className="text-gray-300 text-sm">{t[p.name as keyof typeof t] || p.name}</span>
+                                </div>
+                                <span className="text-gray-600 text-xs font-mono border border-gray-700 px-1 rounded">{p.shortcut}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="p-4 border-t border-gray-700 text-center">
+                         <button onClick={onResetPresets} className="text-red-500 hover:text-red-400 text-xs">{t.reset}</button>
+                    </div>
+                </div>
+
+                {/* Edit Form */}
+                <div className="flex-1 p-8 bg-gray-800 flex flex-col relative">
+                    <button onClick={() => setShowSettings(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
+                    
+                    {editingPreset ? (
+                        <div className="flex flex-col gap-6">
+                            <h3 className="text-xl text-white font-bold mb-2">{t.presetEditor}</h3>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-gray-500 text-xs uppercase mb-1">{t.name}</label>
+                                    <input 
+                                        type="text" 
+                                        value={editingPreset.name} 
+                                        onChange={(e) => updateEditingValue('name', e.target.value)}
+                                        className="bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 w-full focus:border-blue-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-gray-500 text-xs uppercase mb-1">{t.shortcut}</label>
+                                    <input 
+                                        type="text" 
+                                        maxLength={1}
+                                        value={editingPreset.shortcut} 
+                                        onChange={(e) => updateEditingValue('shortcut', e.target.value)}
+                                        className="bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 w-full focus:border-blue-500 outline-none text-center font-mono"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-gray-500 text-xs uppercase mb-1">{t.icon}</label>
+                                    <input 
+                                        type="text" 
+                                        value={editingPreset.icon} 
+                                        onChange={(e) => updateEditingValue('icon', e.target.value)}
+                                        className="bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 w-full focus:border-blue-500 outline-none text-center"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 border-t border-gray-700 pt-6 mt-2">
+                                {[
+                                    { label: 'Rotate X (Pitch)', idx: 0 },
+                                    { label: 'Rotate Y (Yaw)', idx: 1 },
+                                    { label: 'Rotate Z (Roll)', idx: 2 },
+                                ].map((axis) => {
+                                    const deg = Math.round((editingPreset.rotation[axis.idx] * 180) / Math.PI);
+                                    return (
+                                        <div key={axis.idx}>
+                                            <div className="flex justify-between text-gray-400 text-xs mb-1">
+                                                <span>{axis.label}</span>
+                                                <span>{deg}°</span>
+                                            </div>
+                                            <input 
+                                                type="range" 
+                                                min="0" 
+                                                max="360" 
+                                                value={deg} 
+                                                onChange={(e) => updateRotation(axis.idx, parseInt(e.target.value))}
+                                                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <button 
+                                onClick={() => onDeletePreset(editingPreset.id)}
+                                className="mt-auto self-end text-red-500 text-sm hover:underline"
+                            >
+                                {t.delete}
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-gray-500">
+                            Select a preset to edit
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 };

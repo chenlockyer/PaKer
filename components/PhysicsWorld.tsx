@@ -1,3 +1,4 @@
+
 /// <reference lib="dom" />
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Physics, usePlane } from '@react-three/cannon';
@@ -5,14 +6,14 @@ import { useThree, useFrame } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import Card from './Card';
-import { CardData, RotationMode, InteractionMode, PointerMode } from '../types';
+import { CardData, RotationPreset, InteractionMode, PointerMode } from '../types';
 
 const CARD_WIDTH = 2.0;
 const CARD_HEIGHT = 2.8;
 const CARD_THICKNESS = 0.02;
 
 interface PhysicsWorldProps {
-  rotationMode: RotationMode;
+  rotationPreset: RotationPreset;
   interactionMode: InteractionMode;
   pointerMode: PointerMode;
   isFreezeMode: boolean;
@@ -43,14 +44,14 @@ const Floor = ({ meshRef }: { meshRef: React.RefObject<THREE.Mesh> }) => {
 
 // The Ghost Card follows the mouse to show where a card will be placed
 const GhostCard = ({ 
-  rotationMode, 
+  rotationPreset, 
   isFreezeMode,
   onPlace,
   floorRef,
   cardsGroupRef,
   dragMode = false 
 }: { 
-  rotationMode: RotationMode; 
+  rotationPreset: RotationPreset; 
   isFreezeMode: boolean;
   onPlace: (pos: THREE.Vector3, rot: THREE.Euler) => void;
   floorRef: React.RefObject<THREE.Mesh>;
@@ -61,7 +62,7 @@ const GhostCard = ({
   const meshRef = useRef<THREE.Mesh>(null);
   const [position, setPosition] = useState(new THREE.Vector3(0, 0, 0));
   
-  // Custom Rotation Offsets
+  // Custom Rotation Offsets (Manual Tweak)
   const [yaw, setYaw] = useState(0);   
   const [pitch, setPitch] = useState(0); 
   const [roll, setRoll] = useState(0);   
@@ -72,6 +73,7 @@ const GhostCard = ({
   // Handle Input for Rotation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
       const ROT_SPEED = 0.1; // Radians
       switch(e.key.toLowerCase()) {
         case 'q': setYaw(y => y + ROT_SPEED); break;
@@ -106,43 +108,42 @@ const GhostCard = ({
     };
   }, []);
 
-  // Reset pitch/roll when mode changes
+  // Reset offset when preset changes
   useEffect(() => {
     setPitch(0);
     setRoll(0);
-  }, [rotationMode]);
+    setYaw(0);
+  }, [rotationPreset.id]);
 
   const targetRotation = useMemo(() => {
-    const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+    // 1. Create the base rotation from the preset
+    // Note: We use the preset's exact Euler (likely XYZ order)
+    const baseEuler = new THREE.Euler(
+        rotationPreset.rotation[0], 
+        rotationPreset.rotation[1], 
+        rotationPreset.rotation[2], 
+        'XYZ'
+    );
+
+    // 2. Create the User Offset Euler
+    // YXZ is usually more intuitive for object manipulation (Yaw then Pitch)
+    const offsetEuler = new THREE.Euler(pitch, yaw, roll, 'YXZ');
+
+    // 3. Combine them using Quaternions
+    const baseQuat = new THREE.Quaternion().setFromEuler(baseEuler);
+    const offsetQuat = new THREE.Quaternion().setFromEuler(offsetEuler);
     
-    let basePitch = 0; 
-    let baseRoll = 0;  
-    let baseYaw = 0;   
+    // Apply offset relative to the base (Multiply)
+    baseQuat.multiply(offsetQuat);
 
-    switch (rotationMode) {
-      case RotationMode.FLAT: basePitch = 0; break;
-      case RotationMode.STAND_X: basePitch = Math.PI / 2; break;
-      case RotationMode.STAND_Y: basePitch = Math.PI / 2; baseYaw = Math.PI / 2; break;
-      case RotationMode.STAND_Z: baseRoll = Math.PI / 2; break;
-      case RotationMode.TILT_X_FWD: basePitch = Math.PI / 2 - 0.35; break;
-      case RotationMode.TILT_X_BACK: basePitch = Math.PI / 2 + 0.35; break;
-      case RotationMode.TILT_Z_LEFT: baseRoll = Math.PI / 2 - 0.35; break;
-      case RotationMode.TILT_Z_RIGHT: baseRoll = Math.PI / 2 + 0.35; break;
-      case RotationMode.ROOF_FWD: basePitch = Math.PI / 2 - 0.78; break;
-      case RotationMode.ROOF_BACK: basePitch = Math.PI / 2 + 0.78; break;
-    }
-
-    euler.x = basePitch + pitch;
-    euler.y = baseYaw + yaw;
-    euler.z = baseRoll + roll;
-
-    return euler;
-  }, [rotationMode, yaw, pitch, roll]);
+    // 4. Return as Euler for the mesh
+    return new THREE.Euler().setFromQuaternion(baseQuat, 'XYZ');
+  }, [rotationPreset, yaw, pitch, roll]);
 
   useFrame(({ mouse }) => {
     raycaster.setFromCamera(mouse, camera);
     
-    // OPTIMIZATION: Only intersect with floor and card meshes, not the whole scene
+    // OPTIMIZATION: Only intersect with floor and card meshes
     const targets: THREE.Object3D[] = [];
     if (floorRef.current) targets.push(floorRef.current);
     if (cardsGroupRef.current) targets.push(cardsGroupRef.current);
@@ -154,7 +155,7 @@ const GhostCard = ({
       i.object !== meshRef.current && 
       i.object.type === 'Mesh' &&
       (i.object.name !== 'ghost') &&
-      i.object.visible // Ignore hidden cards (dragging source)
+      i.object.visible 
     );
 
     if (hit && hit.face) {
@@ -199,29 +200,22 @@ const GhostCard = ({
   useEffect(() => {
     const triggerPlace = () => {
       if (meshRef.current) {
-        const quat = new THREE.Quaternion().setFromEuler(targetRotation);
-        const standardEuler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
-        onPlace(position, standardEuler);
+        onPlace(position, targetRotation);
       }
     };
 
     if (dragMode) {
-      // For Drag Mode (Moving existing cards), we still place on mouse up
       const handleUp = () => triggerPlace();
       window.addEventListener('pointerup', handleUp);
       return () => window.removeEventListener('pointerup', handleUp);
     } else {
-      // For Quick Mode (New cards), place on click BUT check distance
       const handleClick = (e: MouseEvent) => {
         if ((e.target as HTMLElement).tagName !== 'CANVAS') return;
         
-        // Calculate distance from mousedown to mouseup (click)
         if (clickStartRef.current) {
           const dx = e.clientX - clickStartRef.current.x;
           const dy = e.clientY - clickStartRef.current.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
-          
-          // If moved more than 5 pixels, assume camera orbit, do not place
           if (distance > 5) return; 
         }
 
@@ -320,7 +314,7 @@ const PrecisionGhost = ({
 };
 
 const PhysicsWorld: React.FC<PhysicsWorldProps> = ({ 
-  rotationMode, 
+  rotationPreset, 
   interactionMode, 
   pointerMode,
   isFreezeMode, 
@@ -332,14 +326,11 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   setDraggingCardId
 }) => {
   
-  // Use prop state instead of local state
   const draggingCardData = useMemo(() => cards.find(c => c.id === draggingCardId) || null, [cards, draggingCardId]);
   
-  // Refs for optimized raycasting
   const floorRef = useRef<THREE.Mesh>(null);
   const cardsGroupRef = useRef<THREE.Group>(null);
 
-  // Handle creating new card
   const handlePlaceNew = (pos: THREE.Vector3, rot: THREE.Euler) => {
     const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
     const randomRank = ranks[Math.floor(Math.random() * ranks.length)];
@@ -357,7 +348,6 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     });
   };
 
-  // Handle placing the Dragged Card
   const handlePlaceMoved = (pos: THREE.Vector3, rot: THREE.Euler) => {
     if (draggingCardData) {
       updateCard(draggingCardData.id, [pos.x, pos.y, pos.z], [rot.x, rot.y, rot.z]);
@@ -365,12 +355,10 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     }
   };
 
-  // Triggered when user holds mouse down on a card in MOVE mode
   const onCardDragStart = (card: CardData) => {
     setDraggingCardId(card.id);
   };
 
-  // Determine which Ghost to show
   const showNewCardGhost = pointerMode === PointerMode.PLACE;
   const showMoveCardGhost = pointerMode === PointerMode.MOVE && !!draggingCardData;
 
@@ -383,9 +371,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       
       <group ref={cardsGroupRef}>
         {cards.map((card) => {
-          // Hide the card if it is currently being dragged
           const isDragging = draggingCardData?.id === card.id;
-          
           return (
             <Card 
               key={card.id} 
@@ -403,7 +389,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       {showNewCardGhost && (
         interactionMode === InteractionMode.QUICK ? (
           <GhostCard 
-              rotationMode={rotationMode} 
+              rotationPreset={rotationPreset} 
               isFreezeMode={isFreezeMode}
               onPlace={handlePlaceNew} 
               floorRef={floorRef}
@@ -417,13 +403,13 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
         )
       )}
 
-      {/* GHOST FOR MOVING EXISTING CARDS (Drag Drop) */}
+      {/* GHOST FOR MOVING EXISTING CARDS */}
       {showMoveCardGhost && (
         <GhostCard 
-            rotationMode={rotationMode} // User can still rotate while moving!
+            rotationPreset={rotationPreset}
             isFreezeMode={isFreezeMode}
             onPlace={handlePlaceMoved}
-            dragMode={true} // Triggers on mouse up
+            dragMode={true} 
             floorRef={floorRef}
             cardsGroupRef={cardsGroupRef}
         />
