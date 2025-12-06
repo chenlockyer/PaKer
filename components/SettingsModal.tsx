@@ -1,4 +1,3 @@
-
 /// <reference lib="dom" />
 import React, { useState } from 'react';
 import { RotationPreset } from '../types';
@@ -98,7 +97,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                          <li className="flex justify-between"><span className="text-white">R / F</span> {t.tiltPitch}</li>
                          <li className="flex justify-between"><span className="text-white">Z / X</span> {t.rollZ}</li>
                          <li className="flex justify-between"><span className="text-white">SPACE</span> {t.resetRot}</li>
-                         <li className="flex justify-between"><span className="text-white">Mouse Wheel</span> {t.rotateYaw}</li>
+                         <li className="flex justify-between"><span className="text-white">Shift + Scroll</span> {t.rotateYaw}</li>
                       </ul>
                    </div>
                    <div>

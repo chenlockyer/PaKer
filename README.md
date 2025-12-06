@@ -44,7 +44,7 @@ A physics-based 3D construction sandbox game where you build complex structures 
 *   **Q / E**: Rotate Yaw (水平旋转).
 *   **R / F**: Tilt Pitch (前后倾斜).
 *   **Z / X**: Roll (左右翻滚).
-*   **Scroll Wheel**: Fine-tune Yaw (微调旋转).
+*   **Shift + Scroll**: Fine-tune Yaw (微调旋转).
 
 ### Precision Mode Controls (精准模式控制)
 *   **T**: Translate Tool (平移工具).

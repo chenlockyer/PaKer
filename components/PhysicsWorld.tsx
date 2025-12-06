@@ -86,7 +86,8 @@ const GhostCard = ({
     };
 
     const handleWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) > 10) {
+      // Require Shift key to rotate via scroll, preventing conflict with camera zoom
+      if (e.shiftKey && Math.abs(e.deltaY) > 10) {
         const speed = 0.002;
         setYaw(y => y + e.deltaY * speed);
       }
