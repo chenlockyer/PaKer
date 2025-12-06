@@ -1,8 +1,7 @@
-
 /// <reference lib="dom" />
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Physics, usePlane } from '@react-three/cannon';
-import { useThree, useFrame } from '@react-three/fiber';
+import { useThree, useFrame, ThreeElements } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import Card from './Card';

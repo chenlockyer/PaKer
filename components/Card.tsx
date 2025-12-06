@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 import React, { useMemo, useEffect, useState } from 'react';
 import { useBox } from '@react-three/cannon';
+import { ThreeElements } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CardData, PointerMode } from '../types';
 

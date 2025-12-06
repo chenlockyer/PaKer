@@ -1,16 +1,13 @@
 
 /// <reference lib="dom" />
-import React, { useState } from 'react';
+import React from 'react';
 import { RotationPreset, InteractionMode, PointerMode } from '../types';
+import { translations } from '../utils/translations';
 
 interface UIOverlayProps {
   presets: RotationPreset[];
   currentPresetId: string;
   setPresetId: (id: string) => void;
-  onAddPreset: () => void;
-  onUpdatePreset: (preset: RotationPreset) => void;
-  onDeletePreset: (id: string) => void;
-  onResetPresets: () => void;
   interactionMode: InteractionMode;
   setInteractionMode: (mode: InteractionMode) => void;
   pointerMode: PointerMode;
@@ -22,118 +19,14 @@ interface UIOverlayProps {
   onLoad: () => void;
   cardCount: number;
   lang: 'en' | 'zh';
-  setLang: (lang: 'en' | 'zh') => void;
+  onOpenSettings: () => void;
+  onBackToMenu: () => void;
 }
-
-const translations = {
-  en: {
-     title: "House of Cards",
-     subtitle: "Physics Construction Simulator",
-     cardsPlaced: "Cards Placed",
-     clearTable: "Clear Table",
-     save: "Save",
-     load: "Load",
-     quickPlace: "Quick Place",
-     precision: "Precision (Blender)",
-     place: "Place",
-     move: "Move",
-     delete: "Delete",
-     presets: "Presets",
-     timeStopped: "Time Stopped",
-     physicsActive: "Physics Active",
-     resume: "RESUME",
-     freeze: "FREEZE",
-     controls: "Controls",
-     togglePrecision: "Toggle Precision",
-     rotateYaw: "Rotate (Yaw)",
-     tiltPitch: "Tilt (Pitch)",
-     rollZ: "Roll (Z-Axis)",
-     dragMove: "Drag blue cards to move them.",
-     clickDelete: "Click red cards to delete.",
-     resetRot: "Reset Rot",
-     precisionTool: "Precision Tool",
-     translate: "Translate",
-     rotate: "Rotate",
-     placeCard: "PLACE CARD",
-     pressL: "Press 'L'",
-     pressEnter: "ENTER",
-     settings: "Settings",
-     presetEditor: "Preset Editor",
-     add: "Add",
-     reset: "Reset",
-     name: "Name",
-     shortcut: "Key",
-     icon: "Icon",
-     flat: "Flat",
-     standX: "Stand X",
-     standY: "Stand Y",
-     standZ: "Stand Z",
-     leanFwd: "Lean Fwd",
-     leanBack: "Lean Back",
-     leanLeft: "Lean Left",
-     leanRight: "Lean Right",
-     roofFwd: "Roof Fwd",
-     roofBack: "Roof Back",
-  },
-  zh: {
-     title: "纸牌屋 3D",
-     subtitle: "物理搭建模拟器",
-     cardsPlaced: "已放置",
-     clearTable: "清空桌面",
-     save: "存档",
-     load: "读档",
-     quickPlace: "快速放置",
-     precision: "精准模式 (Blender)",
-     place: "放置",
-     move: "移动",
-     delete: "删除",
-     presets: "旋转预设",
-     timeStopped: "时间静止",
-     physicsActive: "物理生效",
-     resume: "恢复时间",
-     freeze: "时间暂停",
-     controls: "操作指南",
-     togglePrecision: "切换精准模式",
-     rotateYaw: "水平旋转 (Yaw)",
-     tiltPitch: "倾斜 (Pitch)",
-     rollZ: "翻滚 (Roll)",
-     dragMove: "拖拽蓝色卡牌以移动",
-     clickDelete: "点击红色卡牌以删除",
-     resetRot: "重置旋转",
-     precisionTool: "精准工具",
-     translate: "平移",
-     rotate: "旋转",
-     placeCard: "确认放置",
-     pressL: "按 'L' 键",
-     pressEnter: "回车",
-     settings: "设置",
-     presetEditor: "预设编辑器",
-     add: "新建",
-     reset: "重置",
-     name: "名称",
-     shortcut: "快捷键",
-     icon: "图标",
-     flat: "平放",
-     standX: "横立",
-     standY: "侧立",
-     standZ: "竖立",
-     leanFwd: "前倾",
-     leanBack: "后倾",
-     leanLeft: "左倾",
-     leanRight: "右倾",
-     roofFwd: "前屋顶",
-     roofBack: "后屋顶",
-  }
-};
 
 const UIOverlay: React.FC<UIOverlayProps> = ({ 
   presets,
   currentPresetId,
   setPresetId,
-  onAddPreset,
-  onUpdatePreset,
-  onDeletePreset,
-  onResetPresets,
   interactionMode,
   setInteractionMode,
   pointerMode,
@@ -145,28 +38,11 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onLoad,
   cardCount,
   lang,
-  setLang
+  onOpenSettings,
+  onBackToMenu
 }) => {
   const t = translations[lang];
-  const [showSettings, setShowSettings] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
   const showPlaceControls = pointerMode === PointerMode.PLACE || pointerMode === PointerMode.MOVE;
-
-  // Editor Handlers
-  const editingPreset = editingId ? presets.find(p => p.id === editingId) : null;
-  const updateEditingValue = (field: keyof RotationPreset, value: any) => {
-    if (editingPreset) {
-      onUpdatePreset({ ...editingPreset, [field]: value });
-    }
-  };
-  const updateRotation = (axisIndex: number, degrees: number) => {
-    if (editingPreset) {
-      const newRot = [...editingPreset.rotation] as [number, number, number];
-      newRot[axisIndex] = (degrees * Math.PI) / 180;
-      onUpdatePreset({ ...editingPreset, rotation: newRot });
-    }
-  };
 
   return (
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-10 flex flex-col justify-between p-6">
@@ -198,6 +74,12 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         <div className="flex flex-col gap-2 items-end">
            <div className="flex gap-2 mb-1">
              <button 
+                onClick={onBackToMenu}
+                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
+             >
+                {t.backToMenu}
+             </button>
+             <button 
                 onClick={onSave}
                 className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
              >
@@ -208,12 +90,6 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
              >
                 {t.load}
-             </button>
-             <button 
-                onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
-             >
-                {lang === 'zh' ? 'EN' : '中文'}
              </button>
            </div>
            
@@ -273,7 +149,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 <div className="flex justify-between items-center">
                     <span className="text-gray-300 text-xs uppercase tracking-widest ml-1">{t.presets}</span>
                     <button 
-                        onClick={() => setShowSettings(true)}
+                        onClick={onOpenSettings}
                         className="text-gray-400 hover:text-white"
                         title={t.settings}
                     >
@@ -352,153 +228,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                 </div>
             </button>
         </div>
-
-        {/* Controls Guide */}
-        <div className="bg-black/60 backdrop-blur-md p-4 rounded-xl border border-gray-700 ml-4">
-          <span className="text-gray-300 text-xs uppercase tracking-widest mb-2 block">{t.controls}</span>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-300">
-            <div className="flex justify-between">
-              <span>{t.togglePrecision}</span>
-              <span className="font-mono text-white bg-gray-700 px-1 rounded">TAB</span>
-            </div>
-            
-            {showPlaceControls && interactionMode === InteractionMode.QUICK && (
-              <>
-                <div className="flex justify-between">
-                  <span>{t.rotateYaw}</span>
-                  <span className="font-mono text-white bg-gray-700 px-1 rounded">Q / E</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>{t.tiltPitch}</span>
-                  <span className="font-mono text-white bg-gray-700 px-1 rounded">R / F</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>{t.rollZ}</span>
-                  <span className="font-mono text-white bg-gray-700 px-1 rounded">Z / X</span>
-                </div>
-              </>
-            )}
-            
-            <div className="flex justify-between">
-              <span>{t.resetRot}</span>
-              <span className="font-mono text-white bg-gray-700 px-1 rounded">SPACE</span>
-            </div>
-          </div>
-        </div>
       </div>
-
-      {/* SETTINGS MODAL */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center pointer-events-auto">
-            <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl w-[800px] h-[500px] flex overflow-hidden">
-                {/* Sidebar List */}
-                <div className="w-1/3 bg-gray-900 border-r border-gray-700 flex flex-col">
-                    <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-                        <h2 className="text-white font-bold">{t.presets}</h2>
-                        <button onClick={() => {onAddPreset(); setEditingId(null);}} className="text-blue-400 hover:text-blue-300 text-xs uppercase font-bold">{t.add}</button>
-                    </div>
-                    <div className="overflow-y-auto flex-1">
-                        {presets.map(p => (
-                            <button
-                                key={p.id}
-                                onClick={() => setEditingId(p.id)}
-                                className={`w-full text-left px-4 py-3 border-b border-gray-800 hover:bg-gray-800 transition-colors flex justify-between items-center ${editingId === p.id ? 'bg-gray-800 border-l-4 border-l-blue-500' : ''}`}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xl">{p.icon}</span>
-                                    <span className="text-gray-300 text-sm">{t[p.name as keyof typeof t] || p.name}</span>
-                                </div>
-                                <span className="text-gray-600 text-xs font-mono border border-gray-700 px-1 rounded">{p.shortcut}</span>
-                            </button>
-                        ))}
-                    </div>
-                    <div className="p-4 border-t border-gray-700 text-center">
-                         <button onClick={onResetPresets} className="text-red-500 hover:text-red-400 text-xs">{t.reset}</button>
-                    </div>
-                </div>
-
-                {/* Edit Form */}
-                <div className="flex-1 p-8 bg-gray-800 flex flex-col relative">
-                    <button onClick={() => setShowSettings(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
-                    
-                    {editingPreset ? (
-                        <div className="flex flex-col gap-6">
-                            <h3 className="text-xl text-white font-bold mb-2">{t.presetEditor}</h3>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-gray-500 text-xs uppercase mb-1">{t.name}</label>
-                                    <input 
-                                        type="text" 
-                                        value={editingPreset.name} 
-                                        onChange={(e) => updateEditingValue('name', e.target.value)}
-                                        className="bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 w-full focus:border-blue-500 outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-500 text-xs uppercase mb-1">{t.shortcut}</label>
-                                    <input 
-                                        type="text" 
-                                        maxLength={1}
-                                        value={editingPreset.shortcut} 
-                                        onChange={(e) => updateEditingValue('shortcut', e.target.value)}
-                                        className="bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 w-full focus:border-blue-500 outline-none text-center font-mono"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-gray-500 text-xs uppercase mb-1">{t.icon}</label>
-                                    <input 
-                                        type="text" 
-                                        value={editingPreset.icon} 
-                                        onChange={(e) => updateEditingValue('icon', e.target.value)}
-                                        className="bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 w-full focus:border-blue-500 outline-none text-center"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-4 border-t border-gray-700 pt-6 mt-2">
-                                {[
-                                    { label: 'Rotate X (Pitch)', idx: 0 },
-                                    { label: 'Rotate Y (Yaw)', idx: 1 },
-                                    { label: 'Rotate Z (Roll)', idx: 2 },
-                                ].map((axis) => {
-                                    const deg = Math.round((editingPreset.rotation[axis.idx] * 180) / Math.PI);
-                                    return (
-                                        <div key={axis.idx}>
-                                            <div className="flex justify-between text-gray-400 text-xs mb-1">
-                                                <span>{axis.label}</span>
-                                                <span>{deg}°</span>
-                                            </div>
-                                            <input 
-                                                type="range" 
-                                                min="0" 
-                                                max="360" 
-                                                value={deg} 
-                                                onChange={(e) => updateRotation(axis.idx, parseInt(e.target.value))}
-                                                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            <button 
-                                onClick={() => onDeletePreset(editingPreset.id)}
-                                className="mt-auto self-end text-red-500 text-sm hover:underline"
-                            >
-                                {t.delete}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex items-center justify-center text-gray-500">
-                            Select a preset to edit
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-      )}
-
     </div>
   );
 };

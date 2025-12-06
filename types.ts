@@ -27,3 +27,8 @@ export enum PointerMode {
   DELETE = 'DELETE',
   MOVE = 'MOVE'
 }
+
+export enum AppState {
+  MENU = 'MENU',
+  GAME = 'GAME'
+}
