@@ -1,77 +1,99 @@
-# 🃏 House of Cards 3D (纸牌屋 3D)
+# 🃏 PaKer (House of Cards 3D)
 
-A physics-based 3D construction sandbox game where you build complex structures using playing cards. Features realistic physics simulation, multiple control modes, and architectural freedom.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![React](https://img.shields.io/badge/React-19-blue.svg)](https://react.dev/)
+[![Three.js](https://img.shields.io/badge/Three.js-r181-black.svg)](https://threejs.org/)
+[![Vite](https://img.shields.io/badge/Vite-6-646CFF.svg)](https://vitejs.dev/)
 
-一款基于物理的 3D 建造沙盒游戏，你可以使用扑克牌搭建复杂的结构。拥有真实的物理模拟、多种操控模式和极高的建筑自由度。
+**PaKer** 是一款基于物理引擎的 3D 纸牌建筑沙盒游戏。在这里，你可以利用物理规则，用一张张扑克牌构建出令人惊叹的复杂结构，或者在瞬间见证它们的坍塌。
 
-## ✨ Features (特色功能)
+[简体中文](#-简体中文) | [English](#-english)
 
-*   **Realistic Physics (真实物理)**: Powered by `cannon-es`, cards have weight, friction, and collision.
-*   **Three Interaction Modes (三种交互模式)**:
-    *   **Place (放置)**: Build your structure with ghost previews.
-    *   **Move (移动)**: Drag and adjust existing cards (physics temporarily suspended during drag).
-    *   **Delete (删除)**: Click to remove unwanted cards.
-*   **Dual Building Styles (双重建造风格)**:
-    *   **Quick Mode**: Snaps to surfaces, follows mouse cursor.
-    *   **Precision Mode**: Blender-style gizmos (Translate/Rotate) for pixel-perfect positioning.
-*   **Time Control (时间控制)**: Freeze time (`L`) to lock all cards in static space. Build impossible structures floating in air, then unfreeze to let gravity take over.
-*   **Advanced Rotation (高级旋转)**: Full 3-axis control (Yaw, Pitch, Roll) plus 10 instant presets.
-*   **Performance (性能优化)**: Optimized raycasting and physics sleeping mechanisms for smooth performance even with many cards.
+---
 
-## 🎮 Controls (操作指南)
+## 🇨🇳 简体中文
 
-### Global Shortcuts (全局快捷键)
-| Key (按键) | Action (功能) |
+### 📖 项目简介
+
+**PaKer**（纸牌屋 3D）是一个结合了物理模拟与 3D 建模技术的创意实验场。它不仅仅是一个游戏，更是一个探索平衡、结构与重力的数字工具。无论是为了挑战搭建世界最高的纸牌塔，还是为了创造独特的几何艺术，PaKer 都为你提供了极致的操控感。
+
+![游戏演示截图](docs/screenshots/demo.png)
+
+### ✨ 核心特性
+
+*   **🧪 动力学物理模拟**: 核心由 `cannon-es` 驱动。每张纸牌都拥有真实的质量、摩擦系数以及碰撞体，模拟真实世界中的物理反馈。
+*   **⏳ 时间操控艺术**: 
+    *   **时间暂停 (`L`)**: 冻结所有物体的物理状态，在“真空”中进行构思与搭建。
+    *   **恢复物理**: 一键解除冻结，看重力如何决定你结构的命运。
+*   **🛠️ 双重建造系统**:
+    *   **快速模式 (Quick Mode)**: 智能表面吸附，跟随鼠标指引，适合大规模快速成型。
+    *   **精准模式 (Precision Mode)**: 引入专业级 Gizmo 坐标轴控制（平移与旋转），实现毫米级的建筑对齐。
+*   **🔄 深度旋转控制**: 支持 3 轴（偏航、俯仰、翻滚）微调，并内置 10 种快捷旋转预设（快捷键 1-0）。
+*   **� 持久化管理**: 内置存档/读档功能，支持自定义旋转预设，所有的创作和偏好都会同步到 `localStorage`。
+
+### 🎮 操作指南
+
+#### 全局快捷键
+| 按键 | 功能描述 |
 | :--- | :--- |
-| **L** | Toggle Freeze / Time Stop (时间暂停/恢复) |
-| **TAB** | Switch Quick / Precision Mode (切换快速/精准模式) |
-| **Delete / Backspace** | Enter Delete Mode (进入删除模式) |
-| **Esc** | Return to Place Mode (返回放置模式) |
-| **Space** | Reset Rotation Offsets (重置旋转微调) |
+| **L** | **冻结 / 恢复时间** (Toggle Physics) |
+| **TAB** | **切换模式** (快速放置 / 精准编辑) |
+| **Delete** | 进入 **删除模式** |
+| **Esc** | 返回 **放置模式** |
+| **Space** | **重置** 当前旋转旋转偏移量 |
 
-### Rotation Presets (旋转预设)
-| Key | Preset | Key | Preset |
-| :--- | :--- | :--- | :--- |
-| **1** | Flat (平放) | **6** | Lean Back (后倾 ~20°) |
-| **2** | Stand X (横立) | **7** | Lean Left (左倾 ~20°) |
-| **3** | Stand Y (侧立) | **8** | Lean Right (右倾 ~20°) |
-| **4** | Stand Z (竖立) | **9** | Roof Forward (前屋顶 ~45°) |
-| **5** | Lean Fwd (前倾 ~20°) | **0** | Roof Back (后屋顶 ~45°) |
+#### 建造控制
+*   **普通点击**: 放置纸牌
+*   **Q / E**: 水平旋转 (Yaw)
+*   **R / F**: 前后倾斜 (Pitch)
+*   **Z / X**: 左右翻滚 (Roll)
+*   **Shift + 滚轮**: 细粒度旋转微调
+*   **Enter**: (精准模式下) 确认放置
 
-### Quick Place Controls (快速放置控制)
-*   **Mouse Move**: Aim card.
-*   **Left Click**: Place card.
-*   **Q / E**: Rotate Yaw (水平旋转).
-*   **R / F**: Tilt Pitch (前后倾斜).
-*   **Z / X**: Roll (左右翻滚).
-*   **Shift + Scroll**: Fine-tune Yaw (微调旋转).
+#### 旋转预设 (快捷键 1-0)
+*   `1`: 水平平放 | `2`: 横立 | `3`: 侧立 | `4`: 竖立
+*   `5-8`: 各个方向的斜向支撑 (20°)
+*   `9-0`: 屋顶斜角预设 (45°)
 
-### Precision Mode Controls (精准模式控制)
-*   **T**: Translate Tool (平移工具).
-*   **R**: Rotate Tool (旋转工具).
-*   **Enter**: Confirm Placement (确认放置).
-*   **Mouse Drag**: Move Gizmo handles (拖拽坐标轴).
+---
 
-### Management (管理)
-*   **Language**: Toggle EN/中文 via the top-right button.
-*   **Clear Table**: Remove all cards.
+## 🇺🇸 English
 
-## 🛠 Tech Stack
+### 📖 Overview
 
-*   **Framework**: React 19, TypeScript, Tailwind CSS
-*   **3D Engine**: React Three Fiber (Three.js)
-*   **Physics**: React Three Cannon (Cannon-es)
-*   **Helpers**: React Three Drei
-*   **Build Tool**: Vite
+**PaKer** (House of Cards 3D) is a physics-based construction sandbox that merges engineering principles with creative freedom. Build intricate card structures using realistic physics or defy the laws of nature with time-manipulation tools.
 
-## 🚀 Getting Started
+### ✨ Key Features
 
-1.  Clone the repository.
-2.  Install dependencies:
+*   **Realistic Physics**: Cards have volume, mass, and friction, calculation is powered by `cannon-es`.
+*   **Time Control**: Freeze space to build gravity-defying architectures, then unfreeze to let physics take its course.
+*   **Hybrid Workflow**: Switch between effortless **Quick Build** and pixel-perfect **Precision Mode** with industry-standard Gizmos.
+*   **Configurable**: Customize your own rotation presets and save your progress locally.
+
+### 🛠 Tech Stack
+
+- **UI Framework**: React 19 + TypeScript
+- **3D Graphics**: React Three Fiber (Three.js)
+- **Physics**: React Three Cannon
+- **State & Persistence**: React Hooks + LocalStorage
+- **Bundler**: Vite
+
+### 🚀 Getting Started
+
+1.  **Clone** this repository.
+2.  **Install dependencies**:
     ```bash
     npm install
     ```
-3.  Run development server:
+3.  **Start development server**:
     ```bash
     npm run dev
     ```
+
+---
+
+## 🎨 UI & Design
+The interface is designed to be minimal yet powerful, featuring a sleek dark theme, responsive layouts, and a native language toggle (CN/EN) for global accessibility.
+
+## 📄 License
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
