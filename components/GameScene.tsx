@@ -1,9 +1,13 @@
 
-import React, { Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Sky, Environment, Stats } from '@react-three/drei';
+/// <reference types="vite/client" />
+import React, { Suspense, useEffect } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
+import { OrbitControls, Sky, Stats } from '@react-three/drei';
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import PhysicsWorld from './PhysicsWorld';
-import { CardData, RotationPreset, InteractionMode, PointerMode } from '../types';
+import { AppTheme, CardData, CardSize, RotationPreset, InteractionMode, PointerMode } from '../types';
+import { ChallengeTestType } from '../types';
 
 interface GameSceneProps {
   rotationPreset: RotationPreset;
@@ -16,7 +20,70 @@ interface GameSceneProps {
   updateCard: (id: string, pos: [number, number, number], rot: [number, number, number]) => void;
   draggingCardId: string | null;
   setDraggingCardId: (id: string | null) => void;
+  interactionEnabled: boolean;
+  placementEnabled: boolean;
+  windStrength: number;
+  onHeightChange: (height: number) => void;
+  showTargetGuide: boolean;
+  targetHeight: number;
+  cardSize: CardSize;
+  testType: ChallengeTestType;
+  testActive: boolean;
+  weightMass: number;
+  weightDropHeight: number;
+  theme: AppTheme;
 }
+
+class SceneErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('3D scene failed to render', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="scene-fallback">
+          <strong>3D 场景暂时无法渲染</strong>
+          <span>请刷新页面或检查浏览器是否启用了硬件加速。</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const LocalEnvironment = () => {
+  const { gl, scene } = useThree();
+
+  useEffect(() => {
+    const generator = new THREE.PMREMGenerator(gl);
+    generator.compileEquirectangularShader();
+
+    const room = new RoomEnvironment();
+    const environment = generator.fromScene(room, 0.04).texture;
+    const previousEnvironment = scene.environment;
+    scene.environment = environment;
+
+    room.dispose();
+    generator.dispose();
+
+    return () => {
+      scene.environment = previousEnvironment;
+      environment.dispose();
+    };
+  }, [gl, scene]);
+
+  return null;
+};
 
 const GameScene: React.FC<GameSceneProps> = ({ 
   rotationPreset, 
@@ -28,38 +95,69 @@ const GameScene: React.FC<GameSceneProps> = ({
   removeCard,
   updateCard,
   draggingCardId,
-  setDraggingCardId
+  setDraggingCardId,
+  interactionEnabled,
+  placementEnabled,
+  windStrength,
+  onHeightChange,
+  showTargetGuide,
+  targetHeight,
+  cardSize,
+  testType,
+  testActive,
+  weightMass,
+  weightDropHeight,
+  theme
 }) => {
+  const background = theme === 'dark' ? '#171d24' : theme === 'warm' ? '#e9e6df' : '#e4e9ef';
   return (
-    <div className="w-full h-full absolute top-0 left-0 z-0">
-      <Canvas shadows camera={{ position: [0, 8, 12], fov: 45 }}>
-        <Stats />
-        <Suspense fallback={null}>
-          <Sky sunPosition={[100, 20, 100]} />
-          <Environment preset="city" />
-          
-          <PhysicsWorld 
-            rotationPreset={rotationPreset} 
-            interactionMode={interactionMode}
-            pointerMode={pointerMode}
-            isFreezeMode={isFreezeMode}
-            cards={cards} 
-            addCard={addCard} 
-            removeCard={removeCard}
-            updateCard={updateCard}
-            draggingCardId={draggingCardId}
-            setDraggingCardId={setDraggingCardId}
-          />
+    <div className="game-canvas" style={{ background }}>
+      <SceneErrorBoundary>
+        <Canvas
+          shadows
+          dpr={[1, 1.5]}
+          gl={{ powerPreference: 'high-performance', antialias: true }}
+          camera={{ position: [0, 8, 12], fov: 45 }}
+        >
+          {import.meta.env.DEV && <Stats />}
+          <Suspense fallback={null}>
+            <Sky sunPosition={[100, 20, 100]} />
+            <LocalEnvironment />
 
-          <OrbitControls 
-            makeDefault 
-            minPolarAngle={0} 
-            maxPolarAngle={Math.PI / 2 - 0.1} // Prevent going under floor
-            dampingFactor={0.05}
-            enabled={!draggingCardId} // Disable controls when dragging a card!
-          />
-        </Suspense>
-      </Canvas>
+            <PhysicsWorld
+              rotationPreset={rotationPreset}
+              interactionMode={interactionMode}
+              pointerMode={pointerMode}
+              isFreezeMode={isFreezeMode}
+              cards={cards}
+              addCard={addCard}
+              removeCard={removeCard}
+              updateCard={updateCard}
+              draggingCardId={draggingCardId}
+              setDraggingCardId={setDraggingCardId}
+              interactionEnabled={interactionEnabled}
+              placementEnabled={placementEnabled}
+              windStrength={windStrength}
+              onHeightChange={onHeightChange}
+              showTargetGuide={showTargetGuide}
+              targetHeight={targetHeight}
+              cardSize={cardSize}
+              testType={testType}
+              testActive={testActive}
+              weightMass={weightMass}
+              weightDropHeight={weightDropHeight}
+            />
+
+            <OrbitControls
+              makeDefault
+              minPolarAngle={0}
+              maxPolarAngle={Math.PI / 2 - 0.1}
+              dampingFactor={0.05}
+              enabled={!draggingCardId}
+            />
+          </Suspense>
+        </Canvas>
+      </SceneErrorBoundary>
     </div>
   );
 };

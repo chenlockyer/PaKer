@@ -1,15 +1,20 @@
 /// <reference lib="dom" />
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Physics, usePlane } from '@react-three/cannon';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import { Physics, usePlane, useSphere } from '@react-three/cannon';
 import { useThree, useFrame, ThreeElements } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import Card from './Card';
-import { CardData, RotationPreset, InteractionMode, PointerMode } from '../types';
-
-const CARD_WIDTH = 2.0;
-const CARD_HEIGHT = 2.8;
-const CARD_THICKNESS = 0.02;
+import {
+  CARD_DIMENSIONS,
+  CardData,
+  CardSize,
+  RotationPreset,
+  InteractionMode,
+  PointerMode
+} from '../types';
+import { ChallengeTestType } from '../types';
+import { playPlaceSound } from '../services/audioService';
 
 interface PhysicsWorldProps {
   rotationPreset: RotationPreset;
@@ -22,21 +27,141 @@ interface PhysicsWorldProps {
   updateCard: (id: string, pos: [number, number, number], rot: [number, number, number]) => void;
   draggingCardId: string | null;
   setDraggingCardId: (id: string | null) => void;
+  interactionEnabled: boolean;
+  placementEnabled: boolean;
+  windStrength: number;
+  onHeightChange: (height: number) => void;
+  showTargetGuide: boolean;
+  targetHeight: number;
+  cardSize: CardSize;
+  testType: ChallengeTestType;
+  testActive: boolean;
+  weightMass: number;
+  weightDropHeight: number;
 }
 
+const WindVisual = ({ strength }: { strength: number }) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const transform = useMemo(() => new THREE.Object3D(), []);
+  const streaks = useMemo(
+    () => Array.from({ length: 32 }, () => ({
+      x: -12 + Math.random() * 24,
+      y: 0.4 + Math.random() * 7,
+      z: -7 + Math.random() * 14,
+      speed: 6 + Math.random() * 5,
+      length: 0.6 + Math.random() * 1.4,
+    })),
+    []
+  );
+
+  useEffect(() => {
+    if (meshRef.current) {
+      meshRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    }
+  }, []);
+
+  useFrame((_, delta) => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+
+    streaks.forEach((streak, index) => {
+      streak.x += streak.speed * delta * Math.max(0.6, strength * 10);
+      if (streak.x > 12) streak.x = -12;
+      transform.position.set(streak.x, streak.y, streak.z);
+      transform.scale.set(streak.length, 0.025, 0.025);
+      transform.updateMatrix();
+      mesh.setMatrixAt(index, transform.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, streaks.length]} frustumCulled={false}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial color="#67e8f9" transparent opacity={0.42} depthWrite={false} />
+    </instancedMesh>
+  );
+};
+
+const TargetHeightGuide = ({ height }: { height: number }) => (
+  <mesh position={[0, height, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
+    <ringGeometry args={[3.85, 4, 64]} />
+    <meshBasicMaterial
+      color="#fbbf24"
+      transparent
+      opacity={0.38}
+      side={THREE.DoubleSide}
+      depthWrite={false}
+    />
+  </mesh>
+);
+
+const TestWeight = ({ mass, dropHeight }: { mass: number; dropHeight: number }) => {
+  const radius = 0.36;
+  const [ref] = useSphere(() => ({
+    mass,
+    args: [radius],
+    position: [0, dropHeight, 0],
+    linearDamping: 0.02,
+    angularDamping: 0.1,
+    material: {
+      friction: 0.65,
+      restitution: 0.05,
+    },
+  }));
+
+  return (
+    <mesh ref={ref as React.RefObject<THREE.Mesh>} castShadow>
+      <sphereGeometry args={[radius, 24, 16]} />
+      <meshStandardMaterial color="#f97316" metalness={0.55} roughness={0.3} />
+    </mesh>
+  );
+};
+
+const WeightDropPreview = ({ dropHeight }: { dropHeight: number }) => (
+  <group>
+    <mesh position={[0, dropHeight, 0]}>
+      <sphereGeometry args={[0.36, 20, 12]} />
+      <meshBasicMaterial color="#fb923c" wireframe transparent opacity={0.65} />
+    </mesh>
+    <mesh position={[0, dropHeight / 2, 0]}>
+      <cylinderGeometry args={[0.012, 0.012, dropHeight, 8]} />
+      <meshBasicMaterial color="#fb923c" transparent opacity={0.28} depthWrite={false} />
+    </mesh>
+    <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[0.42, 0.5, 32]} />
+      <meshBasicMaterial color="#fb923c" transparent opacity={0.7} side={THREE.DoubleSide} />
+    </mesh>
+  </group>
+);
+
 // The Floor component
-const Floor = ({ meshRef }: { meshRef: React.RefObject<THREE.Mesh> }) => {
+const Floor = ({
+  meshRef,
+  cardSize
+}: {
+  meshRef: React.RefObject<THREE.Mesh>;
+  cardSize: CardSize;
+}) => {
+  const gridCellSize = CARD_DIMENSIONS[cardSize].width / 2;
+  const gridDivisions = 100;
+  const gridSize = gridCellSize * gridDivisions;
+  const gridColor = 0x8492a3;
+
   usePlane(() => ({
     rotation: [-Math.PI / 2, 0, 0],
     position: [0, 0, 0],
-    material: { friction: 1, restitution: 0 }
+    material: { friction: 1.1, restitution: 0 }
   }), meshRef);
 
   return (
     <mesh ref={meshRef} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
       <planeGeometry args={[100, 100]} />
       <shadowMaterial opacity={0.3} />
-      <gridHelper args={[100, 100, 0x444444, 0x222222]} rotation={[-Math.PI / 2, 0, 0]} />
+      <gridHelper
+        args={[gridSize, gridDivisions, gridColor, gridColor]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      />
     </mesh>
   );
 };
@@ -48,7 +173,8 @@ const GhostCard = ({
   onPlace,
   floorRef,
   cardsGroupRef,
-  dragMode = false 
+  dragMode = false,
+  cardSize
 }: { 
   rotationPreset: RotationPreset; 
   isFreezeMode: boolean;
@@ -56,15 +182,43 @@ const GhostCard = ({
   floorRef: React.RefObject<THREE.Mesh>;
   cardsGroupRef: React.RefObject<THREE.Group>;
   dragMode?: boolean;
+  cardSize: CardSize;
 }) => {
   const { camera, raycaster } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
-  const [position, setPosition] = useState(new THREE.Vector3(0, 0, 0));
+  const lastPointerRef = useRef(new THREE.Vector2(Number.NaN, Number.NaN));
+  const lastCameraPositionRef = useRef(new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN));
+  const lastCameraQuaternionRef = useRef(new THREE.Quaternion(Number.NaN, Number.NaN, Number.NaN, Number.NaN));
+  const lastRaycastTimeRef = useRef(Number.NEGATIVE_INFINITY);
+  const rotationDirtyRef = useRef(true);
+  const heightLockRef = useRef({ active: false, height: 0 });
+  const heightLockPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+  const heightLockPointRef = useRef(new THREE.Vector3());
+  const [isHeightLocked, setIsHeightLocked] = useState(false);
+  const dimensions = CARD_DIMENSIONS[cardSize];
   
   // Custom Rotation Offsets (Manual Tweak)
   const [yaw, setYaw] = useState(0);   
   const [pitch, setPitch] = useState(0); 
   const [roll, setRoll] = useState(0);   
+
+  const guideGeometry = useMemo(() => {
+    const halfWidth = dimensions.width / 2;
+    const halfHeight = dimensions.height / 2;
+    const points = [
+      new THREE.Vector3(-halfWidth, 0, 0),
+      new THREE.Vector3(halfWidth, 0, 0),
+      new THREE.Vector3(0, 0, -halfHeight),
+      new THREE.Vector3(0, 0, halfHeight),
+      new THREE.Vector3(-halfWidth, 0, -halfHeight),
+      new THREE.Vector3(halfWidth, 0, halfHeight),
+      new THREE.Vector3(-halfWidth, 0, halfHeight),
+      new THREE.Vector3(halfWidth, 0, -halfHeight),
+    ];
+    return new THREE.BufferGeometry().setFromPoints(points);
+  }, [dimensions.height, dimensions.width]);
+
+  useEffect(() => () => guideGeometry.dispose(), [guideGeometry]);
 
   // Track mouse down position to distinguish between Click and Drag (Camera Orbit)
   const clickStartRef = useRef<{x: number, y: number} | null>(null);
@@ -73,16 +227,44 @@ const GhostCard = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
-      const ROT_SPEED = 0.1; // Radians
-      switch(e.key.toLowerCase()) {
-        case 'q': setYaw(y => y + ROT_SPEED); break;
-        case 'e': setYaw(y => y - ROT_SPEED); break;
-        case 'r': setPitch(p => p - ROT_SPEED); break; 
-        case 'f': setPitch(p => p + ROT_SPEED); break; 
-        case 'z': setRoll(r => r - ROT_SPEED); break; 
-        case 'x': setRoll(r => r + ROT_SPEED); break; 
-        case ' ': setYaw(0); setPitch(0); setRoll(0); break; 
+      if (e.code === 'KeyH') {
+        if (!e.repeat && meshRef.current && !heightLockRef.current.active) {
+          heightLockRef.current = {
+            active: true,
+            height: meshRef.current.position.y
+          };
+          setIsHeightLocked(true);
+        }
+        return;
       }
+
+      const ROT_SPEED = 0.1; // Radians
+      let handled = true;
+      switch(e.code) {
+        case 'KeyQ': setYaw(value => value + ROT_SPEED); break;
+        case 'KeyE': setYaw(value => value - ROT_SPEED); break;
+        case 'KeyR': setPitch(value => value - ROT_SPEED); break;
+        case 'KeyF': setPitch(value => value + ROT_SPEED); break;
+        case 'KeyZ': setRoll(value => value - ROT_SPEED); break;
+        case 'KeyX': setRoll(value => value + ROT_SPEED); break;
+        case 'Space':
+          setYaw(0);
+          setPitch(0);
+          setRoll(0);
+          break;
+        default:
+          handled = false;
+      }
+
+      if (handled) {
+        e.preventDefault();
+      }
+    };
+
+    const releaseHeightLock = (e?: KeyboardEvent) => {
+      if (e && e.code !== 'KeyH') return;
+      heightLockRef.current.active = false;
+      setIsHeightLocked(false);
     };
 
     const handleWheel = (e: WheelEvent) => {
@@ -99,10 +281,14 @@ const GhostCard = ({
     };
 
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', releaseHeightLock);
+    window.addEventListener('blur', releaseHeightLock);
     window.addEventListener('wheel', handleWheel);
     window.addEventListener('pointerdown', handlePointerDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', releaseHeightLock);
+      window.removeEventListener('blur', releaseHeightLock);
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('pointerdown', handlePointerDown);
     };
@@ -113,7 +299,12 @@ const GhostCard = ({
     setPitch(0);
     setRoll(0);
     setYaw(0);
+    rotationDirtyRef.current = true;
   }, [rotationPreset.id]);
+
+  useLayoutEffect(() => {
+    rotationDirtyRef.current = true;
+  }, [yaw, pitch, roll]);
 
   const targetRotation = useMemo(() => {
     // 1. Create the base rotation from the preset
@@ -140,8 +331,45 @@ const GhostCard = ({
     return new THREE.Euler().setFromQuaternion(baseQuat, 'XYZ');
   }, [rotationPreset, yaw, pitch, roll]);
 
-  useFrame(({ mouse }) => {
+  useFrame(({ mouse, clock }) => {
+    const pointerUnchanged = lastPointerRef.current.equals(mouse);
+    const cameraUnchanged =
+      lastCameraPositionRef.current.equals(camera.position) &&
+      lastCameraQuaternionRef.current.equals(camera.quaternion);
+    const timeSinceLastRaycast = clock.elapsedTime - lastRaycastTimeRef.current;
+
+    // While idle, sample at 10 Hz so moving physics bodies still update the
+    // placement target without traversing the whole card group every frame.
+    if (
+      !rotationDirtyRef.current &&
+      pointerUnchanged &&
+      cameraUnchanged &&
+      timeSinceLastRaycast < 0.1
+    ) return;
+
+    lastRaycastTimeRef.current = clock.elapsedTime;
+    lastPointerRef.current.copy(mouse);
+    lastCameraPositionRef.current.copy(camera.position);
+    lastCameraQuaternionRef.current.copy(camera.quaternion);
     raycaster.setFromCamera(mouse, camera);
+
+    if (heightLockRef.current.active) {
+      // While height is locked, ignore every scene surface. Project the
+      // pointer directly onto a horizontal plane through the captured height
+      // so crossing cards or empty gaps cannot make the ghost jump.
+      heightLockPlaneRef.current.constant = -heightLockRef.current.height;
+      const lockedPoint = raycaster.ray.intersectPlane(
+        heightLockPlaneRef.current,
+        heightLockPointRef.current
+      );
+
+      if (lockedPoint && meshRef.current) {
+        meshRef.current.position.copy(lockedPoint);
+        meshRef.current.rotation.copy(targetRotation);
+        rotationDirtyRef.current = false;
+      }
+      return;
+    }
     
     // OPTIMIZATION: Only intersect with floor and card meshes
     const targets: THREE.Object3D[] = [];
@@ -169,9 +397,9 @@ const GhostCard = ({
       const cardYAxis = new THREE.Vector3(0, 1, 0).applyMatrix4(rotationMatrix); 
       const cardZAxis = new THREE.Vector3(0, 0, 1).applyMatrix4(rotationMatrix);
 
-      const halfWidth = CARD_WIDTH / 2;
-      const halfThickness = CARD_THICKNESS / 2;
-      const halfHeight = CARD_HEIGHT / 2;
+      const halfWidth = dimensions.width / 2;
+      const halfThickness = dimensions.thickness / 2;
+      const halfHeight = dimensions.height / 2;
 
       const projectedRadius = 
         Math.abs(cardXAxis.dot(hitNormal)) * halfWidth +
@@ -187,12 +415,12 @@ const GhostCard = ({
         newPos.x = Math.round(newPos.x / SNAP) * SNAP;
         newPos.z = Math.round(newPos.z / SNAP) * SNAP;
       }
-      
+
       if (meshRef.current) {
-        meshRef.current.position.lerp(newPos, 0.5);
+        meshRef.current.position.copy(newPos);
         meshRef.current.rotation.copy(targetRotation);
+        rotationDirtyRef.current = false;
       }
-      setPosition(newPos);
     }
   });
 
@@ -200,7 +428,7 @@ const GhostCard = ({
   useEffect(() => {
     const triggerPlace = () => {
       if (meshRef.current) {
-        onPlace(position, targetRotation);
+        onPlace(meshRef.current.position.clone(), meshRef.current.rotation.clone());
       }
     };
 
@@ -224,18 +452,39 @@ const GhostCard = ({
       window.addEventListener('click', handleClick);
       return () => window.removeEventListener('click', handleClick);
     }
-  }, [position, targetRotation, onPlace, dragMode]);
+  }, [onPlace, dragMode]);
+
+  const ghostColor = isHeightLocked
+    ? 0xa855f7
+    : dragMode
+      ? 0x3b82f6
+      : isFreezeMode
+        ? 0x00ffff
+        : 0x00ff00;
 
   return (
     <mesh ref={meshRef} name="ghost">
-      <boxGeometry args={[CARD_WIDTH, CARD_THICKNESS, CARD_HEIGHT]} />
+      <boxGeometry args={[dimensions.width, dimensions.thickness, dimensions.height]} />
       <meshBasicMaterial 
-        color={dragMode ? 0x3b82f6 : (isFreezeMode ? 0x00ffff : 0x00ff00)} 
+        color={ghostColor}
         opacity={0.5} 
         transparent 
         wireframe 
       />
-      <arrowHelper args={[new THREE.Vector3(0, 0, 1), new THREE.Vector3(0,0,0), 1.5, dragMode ? 0x3b82f6 : (isFreezeMode ? 0x00ffff : 0xffff00)]} />
+      <lineSegments geometry={guideGeometry} renderOrder={3}>
+        <lineBasicMaterial
+          color={ghostColor}
+          transparent
+          opacity={0.9}
+          depthTest={false}
+        />
+      </lineSegments>
+      <arrowHelper args={[
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(0,0,0),
+        1.5,
+        ghostColor
+      ]} />
     </mesh>
   );
 };
@@ -243,16 +492,19 @@ const GhostCard = ({
 // Precision Mode component (Blender-like)
 const PrecisionGhost = ({
   isFreezeMode,
-  onPlace
+  onPlace,
+  cardSize
 }: {
   isFreezeMode: boolean;
   onPlace: (pos: THREE.Vector3, rot: THREE.Euler) => void;
+  cardSize: CardSize;
 }) => {
   const [target, setTarget] = useState<THREE.Object3D | null>(null);
   const [mode, setMode] = useState<'translate' | 'rotate'>('translate');
   const targetRef = useRef<THREE.Object3D | null>(null);
   useEffect(() => { targetRef.current = target; }, [target]);
   const initialPos = useMemo(() => new THREE.Vector3(0, 1.5, 0), []);
+  const dimensions = CARD_DIMENSIONS[cardSize];
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -296,7 +548,7 @@ const PrecisionGhost = ({
         position={initialPos} 
         name="precision-ghost"
       >
-        <boxGeometry args={[CARD_WIDTH, CARD_THICKNESS, CARD_HEIGHT]} />
+        <boxGeometry args={[dimensions.width, dimensions.thickness, dimensions.height]} />
         <meshStandardMaterial 
             color={isFreezeMode ? "#22d3ee" : "#fbbf24"} 
             opacity={0.8} 
@@ -305,7 +557,7 @@ const PrecisionGhost = ({
             emissiveIntensity={0.5}
         />
         <lineSegments>
-            <edgesGeometry args={[new THREE.BoxGeometry(CARD_WIDTH, CARD_THICKNESS, CARD_HEIGHT)]} />
+            <edgesGeometry args={[new THREE.BoxGeometry(dimensions.width, dimensions.thickness, dimensions.height)]} />
             <lineBasicMaterial color="white" />
         </lineSegments>
       </mesh>
@@ -323,13 +575,45 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   removeCard,
   updateCard,
   draggingCardId,
-  setDraggingCardId
+  setDraggingCardId,
+  interactionEnabled,
+  placementEnabled,
+  windStrength,
+  onHeightChange,
+  showTargetGuide,
+  targetHeight,
+  cardSize,
+  testType,
+  testActive,
+  weightMass,
+  weightDropHeight
 }) => {
   
   const draggingCardData = useMemo(() => cards.find(c => c.id === draggingCardId) || null, [cards, draggingCardId]);
   
   const floorRef = useRef<THREE.Mesh>(null);
   const cardsGroupRef = useRef<THREE.Group>(null);
+  const heightSampleTimeRef = useRef(0);
+  const measurementBoxRef = useRef(new THREE.Box3());
+
+  useFrame(({ clock }) => {
+    if (clock.elapsedTime - heightSampleTimeRef.current < 0.1) return;
+    heightSampleTimeRef.current = clock.elapsedTime;
+
+    const group = cardsGroupRef.current;
+    if (!group || group.children.length === 0) {
+      onHeightChange(0);
+      return;
+    }
+
+    group.updateWorldMatrix(true, true);
+    let maximumHeight = 0;
+    for (const child of group.children) {
+      measurementBoxRef.current.setFromObject(child);
+      maximumHeight = Math.max(maximumHeight, measurementBoxRef.current.max.y);
+    }
+    onHeightChange(maximumHeight);
+  });
 
   const handlePlaceNew = (pos: THREE.Vector3, rot: THREE.Euler) => {
     const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -346,6 +630,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       rank: randomRank,
       locked: isFreezeMode
     });
+    playPlaceSound();
   };
 
   const handlePlaceMoved = (pos: THREE.Vector3, rot: THREE.Euler) => {
@@ -359,27 +644,55 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     setDraggingCardId(card.id);
   };
 
-  const showNewCardGhost = pointerMode === PointerMode.PLACE;
-  const showMoveCardGhost = pointerMode === PointerMode.MOVE && !!draggingCardData;
+  const showNewCardGhost = interactionEnabled && placementEnabled && pointerMode === PointerMode.PLACE;
+  const showMoveCardGhost = interactionEnabled && pointerMode === PointerMode.MOVE && !!draggingCardData;
 
   return (
-    <Physics gravity={[0, -9.81, 0]} iterations={20} tolerance={0.0001}>
+    <Physics
+      gravity={[0, -9.81, 0]}
+      iterations={12}
+      tolerance={0.001}
+      allowSleep
+      broadphase="SAP"
+    >
       <ambientLight intensity={0.5} />
-      <directionalLight position={[10, 20, 10]} intensity={1} castShadow shadow-mapSize={[2048, 2048]} />
+      <directionalLight
+        position={[10, 20, 10]}
+        intensity={1}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-near={1}
+        shadow-camera-far={50}
+        shadow-camera-left={-20}
+        shadow-camera-right={20}
+        shadow-camera-top={20}
+        shadow-camera-bottom={-20}
+      />
       
-      <Floor meshRef={floorRef} />
+      <Floor meshRef={floorRef} cardSize={cardSize} />
+      {showTargetGuide && <TargetHeightGuide height={targetHeight} />}
+      {windStrength > 0 && <WindVisual strength={windStrength} />}
+      {testActive && testType === ChallengeTestType.WEIGHT_DROP && (
+        <TestWeight mass={weightMass} dropHeight={weightDropHeight} />
+      )}
+      {!testActive && testType === ChallengeTestType.WEIGHT_DROP && (
+        <WeightDropPreview dropHeight={weightDropHeight} />
+      )}
       
       <group ref={cardsGroupRef}>
         {cards.map((card) => {
           const isDragging = draggingCardData?.id === card.id;
           return (
             <Card 
-              key={card.id} 
+              key={`${card.id}-${cardSize}`}
               data={card} 
               pointerMode={pointerMode}
               onRemove={() => removeCard(card.id)}
               onDragStart={() => onCardDragStart(card)}
               isDragging={isDragging}
+              interactionEnabled={interactionEnabled}
+              windStrength={windStrength}
+              cardSize={cardSize}
             />
           );
         })}
@@ -394,11 +707,13 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
               onPlace={handlePlaceNew} 
               floorRef={floorRef}
               cardsGroupRef={cardsGroupRef}
+              cardSize={cardSize}
           />
         ) : (
           <PrecisionGhost 
               isFreezeMode={isFreezeMode}
               onPlace={handlePlaceNew}
+              cardSize={cardSize}
           />
         )
       )}
@@ -412,6 +727,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
             dragMode={true} 
             floorRef={floorRef}
             cardsGroupRef={cardsGroupRef}
+            cardSize={cardSize}
         />
       )}
       

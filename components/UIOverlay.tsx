@@ -1,8 +1,16 @@
-
 /// <reference lib="dom" />
-import React from 'react';
-import { RotationPreset, InteractionMode, PointerMode } from '../types';
+import React, { useMemo, useState } from 'react';
+import {
+  AppTheme,
+  RotationPreset,
+  InteractionMode,
+  PointerMode,
+  GameMode,
+  ChallengePhase,
+  ChallengeTestType
+} from '../types';
 import { translations } from '../utils/translations';
+import ChallengeHUD from './ChallengeHUD';
 
 interface UIOverlayProps {
   presets: RotationPreset[];
@@ -21,9 +29,49 @@ interface UIOverlayProps {
   lang: 'en' | 'zh';
   onOpenSettings: () => void;
   onBackToMenu: () => void;
+  gameMode: GameMode;
+  challengePhase: ChallengePhase;
+  maxCards: number;
+  minCards: number;
+  levelIndex: number;
+  levelCount: number;
+  levelName: string;
+  levelDescription: string;
+  testType: ChallengeTestType;
+  targetHeight: number;
+  liveHeight: number;
+  countdown: number;
+  testTimeRemaining: number;
+  score: number;
+  stars: number;
+  onStartTest: () => void;
+  onRetryChallenge: () => void;
+  onUndo: () => void;
+  onNextChallenge: () => void;
+  interactionEnabled: boolean;
+  theme: AppTheme;
 }
 
-const UIOverlay: React.FC<UIOverlayProps> = ({ 
+type PresetGroup = 'flat' | 'upright' | 'tilt' | 'custom';
+
+const getPresetGroup = (preset: RotationPreset): PresetGroup => {
+  if (preset.id.startsWith('flat_')) return 'flat';
+  if (preset.id.includes('upright')) return 'upright';
+  if (preset.id.startsWith('short_edge_') || preset.id.startsWith('long_edge_')) return 'tilt';
+  return 'custom';
+};
+
+const getDiagramClass = (preset: RotationPreset) => {
+  if (preset.id.includes('left')) return 'lean-left';
+  if (preset.id.includes('right')) return 'lean-right';
+  if (preset.id.includes('forward')) return 'lean-forward';
+  if (preset.id.includes('backward')) return 'lean-backward';
+  if (preset.id.includes('landscape')) return 'landscape';
+  if (preset.id.includes('portrait')) return 'portrait';
+  return 'custom';
+};
+
+const UIOverlay: React.FC<UIOverlayProps> = ({
   presets,
   currentPresetId,
   setPresetId,
@@ -39,195 +87,227 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   cardCount,
   lang,
   onOpenSettings,
-  onBackToMenu
+  onBackToMenu,
+  gameMode,
+  challengePhase,
+  maxCards,
+  minCards,
+  levelIndex,
+  levelCount,
+  levelName,
+  levelDescription,
+  testType,
+  targetHeight,
+  liveHeight,
+  countdown,
+  testTimeRemaining,
+  score,
+  stars,
+  onStartTest,
+  onRetryChallenge,
+  onUndo,
+  onNextChallenge,
+  interactionEnabled,
 }) => {
   const t = translations[lang];
-  const showPlaceControls = pointerMode === PointerMode.PLACE || pointerMode === PointerMode.MOVE;
+  const [presetOpen, setPresetOpen] = useState(true);
+  const labels = lang === 'zh'
+    ? {
+        project: '纸牌建筑师',
+        challenge: '挑战',
+        free: '自由搭建',
+        quick: '快捷放置',
+        precision: '精确放置',
+        presetTitle: '放置预设',
+        collapse: '收起',
+        expand: '展开预设',
+        flat: '平放',
+        upright: '竖直',
+        tilt: '倾斜 10°',
+        custom: '自定义',
+        place: '放置',
+        move: '移动',
+        remove: '删除',
+        physics: '物理',
+        frozen: '已锁定',
+        active: '运行中',
+        settings: '设置',
+        menu: '主菜单',
+        clear: '清空',
+        cards: '牌数',
+        holdHeight: '按住 H 锁定高度',
+        precisionHint: 'T 移动 · R 旋转 · Enter 放置',
+      }
+    : {
+        project: 'CARD ARCHITECT',
+        challenge: 'Challenge',
+        free: 'Free build',
+        quick: 'Quick',
+        precision: 'Precision',
+        presetTitle: 'PLACEMENT PRESETS',
+        collapse: 'Collapse',
+        expand: 'Open presets',
+        flat: 'Flat',
+        upright: 'Upright',
+        tilt: 'Tilt 10°',
+        custom: 'Custom',
+        place: 'Place',
+        move: 'Move',
+        remove: 'Delete',
+        physics: 'Physics',
+        frozen: 'Locked',
+        active: 'Active',
+        settings: 'Settings',
+        menu: 'Menu',
+        clear: 'Clear',
+        cards: 'Cards',
+        holdHeight: 'Hold H to lock height',
+        precisionHint: 'T translate · R rotate · Enter place',
+      };
+
+  const groupedPresets = useMemo(() => {
+    const groups: Record<PresetGroup, RotationPreset[]> = { flat: [], upright: [], tilt: [], custom: [] };
+    presets.forEach(preset => groups[getPresetGroup(preset)].push(preset));
+    return groups;
+  }, [presets]);
 
   return (
-    <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-10 flex flex-col justify-between p-6">
-      
-      {/* Header */}
-      <div className="flex justify-between items-start pointer-events-auto">
-        <div>
-          <h1 className="text-4xl font-bold text-white drop-shadow-lg">{t.title}</h1>
-          <p className="text-gray-300 text-sm mt-1">{t.subtitle}</p>
-          
-          {pointerMode === PointerMode.PLACE && (
-            <div className="mt-4 bg-black/60 backdrop-blur rounded-lg p-1 inline-flex border border-gray-700">
-              <button 
-                onClick={() => setInteractionMode(InteractionMode.QUICK)}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${interactionMode === InteractionMode.QUICK ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+    <div className="game-ui">
+      <header className="game-topbar">
+        <div className="game-brand">
+          <span className="brand-pip" />
+          <strong>{labels.project}</strong>
+        </div>
+        <div className="game-context">
+          <span className="mode-chip">{gameMode === GameMode.CHALLENGE ? labels.challenge : labels.free}</span>
+          <span className="context-divider" />
+          <strong>{gameMode === GameMode.CHALLENGE ? levelName : labels.free}</strong>
+          <span className="card-counter">{labels.cards} <b>{cardCount}</b>{gameMode === GameMode.CHALLENGE ? ` / ${maxCards}` : ''}</span>
+        </div>
+        <nav className="top-actions">
+          <button onClick={onSave}>{t.save}</button>
+          <button onClick={onLoad}>{t.load}</button>
+          <button onClick={onClear} className="danger-text">{labels.clear}</button>
+          <button onClick={onOpenSettings}>{labels.settings}</button>
+          <button onClick={onBackToMenu}>{labels.menu}</button>
+        </nav>
+      </header>
+
+      {pointerMode !== PointerMode.DELETE && (
+        <aside className={`preset-drawer ${presetOpen ? '' : 'is-collapsed'}`}>
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">{labels.presetTitle}</span>
+              <strong>{t[presets.find(p => p.id === currentPresetId)?.name as keyof typeof t] || presets.find(p => p.id === currentPresetId)?.name}</strong>
+            </div>
+            <button
+              className="panel-toggle"
+              onClick={() => setPresetOpen(value => !value)}
+              aria-label={presetOpen ? labels.collapse : labels.expand}
+            >
+              {presetOpen ? '−' : '+'}
+            </button>
+          </div>
+
+          {presetOpen && interactionMode === InteractionMode.QUICK && (
+            <div className="preset-scroll">
+              {(Object.keys(groupedPresets) as PresetGroup[]).map(group => groupedPresets[group].length > 0 && (
+                <section className="preset-group" key={group}>
+                  <h3>{labels[group]}</h3>
+                  <div className="preset-grid">
+                    {groupedPresets[group].map(preset => (
+                      <button
+                        key={preset.id}
+                        className={`preset-item ${currentPresetId === preset.id ? 'is-selected' : ''}`}
+                        onClick={() => setPresetId(preset.id)}
+                        disabled={!interactionEnabled}
+                        title={t[preset.name as keyof typeof t] || preset.name}
+                      >
+                        <span className={`preset-diagram ${getDiagramClass(preset)}`}><i /></span>
+                        <span className="preset-name">{t[preset.name as keyof typeof t] || preset.name}</span>
+                        {preset.shortcut && <kbd>{preset.shortcut}</kbd>}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+
+          {presetOpen && interactionMode === InteractionMode.PRECISION && (
+            <div className="precision-panel">
+              <span className="preset-diagram precision"><i /></span>
+              <strong>{labels.precision}</strong>
+              <p>{labels.precisionHint}</p>
+              <button
+                className="primary-button"
+                onClick={() => window.dispatchEvent(new CustomEvent('trigger-precision-place'))}
               >
-                {t.quickPlace}
-              </button>
-              <button 
-                onClick={() => setInteractionMode(InteractionMode.PRECISION)}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${interactionMode === InteractionMode.PRECISION ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'}`}
-              >
-                {t.precision}
+                {t.placeCard}
               </button>
             </div>
           )}
-        </div>
-        
-        <div className="flex flex-col gap-2 items-end">
-           <div className="flex gap-2 mb-1">
-             <button 
-                onClick={onBackToMenu}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
-             >
-                {t.backToMenu}
-             </button>
-             <button 
-                onClick={onSave}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
-             >
-                {t.save}
-             </button>
-             <button 
-                onClick={onLoad}
-                className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
-             >
-                {t.load}
-             </button>
-           </div>
-           
-           <div className="bg-black/50 backdrop-blur-md p-4 rounded-lg border border-gray-600 text-right">
-             <div className="text-white text-xs uppercase tracking-wider">{t.cardsPlaced}</div>
-             <div className="text-3xl font-mono text-blue-400">{cardCount}</div>
-           </div>
-           
-           <button 
-             onClick={onClear}
-             className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-bold transition-colors shadow-lg"
-           >
-             {t.clearTable}
-           </button>
-        </div>
-      </div>
 
-      {/* Center Notification */}
-      {pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.PRECISION && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none text-center opacity-30">
-          <div className="text-amber-400 border-2 border-amber-400 rounded-full w-12 h-12 flex items-center justify-center text-2xl mx-auto mb-2">+</div>
-        </div>
+          {presetOpen && <div className="height-hint"><kbd>H</kbd><span>{labels.holdHeight}</span></div>}
+        </aside>
       )}
 
-      {/* Bottom Toolbar */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto z-50">
-        <div className="bg-black/80 backdrop-blur-xl p-1.5 rounded-2xl border border-gray-600 flex gap-1 shadow-2xl">
-           <button
-             onClick={() => setPointerMode(PointerMode.PLACE)}
-             className={`px-6 py-3 rounded-xl font-bold text-sm uppercase transition-all flex items-center gap-2 ${pointerMode === PointerMode.PLACE ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
-           >
-             <span className="text-lg">✚</span> {t.place}
-           </button>
-           <button
-             onClick={() => setPointerMode(PointerMode.MOVE)}
-             className={`px-6 py-3 rounded-xl font-bold text-sm uppercase transition-all flex items-center gap-2 ${pointerMode === PointerMode.MOVE ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
-           >
-             <span className="text-lg">✋</span> {t.move}
-           </button>
-           <button
-             onClick={() => setPointerMode(PointerMode.DELETE)}
-             className={`px-6 py-3 rounded-xl font-bold text-sm uppercase transition-all flex items-center gap-2 ${pointerMode === PointerMode.DELETE ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
-           >
-             <span className="text-lg">✕</span> {t.delete}
-           </button>
-        </div>
+      {gameMode === GameMode.CHALLENGE && (
+        <ChallengeHUD
+          lang={lang}
+          phase={challengePhase}
+          cardCount={cardCount}
+          maxCards={maxCards}
+          minCards={minCards}
+          levelIndex={levelIndex}
+          levelCount={levelCount}
+          levelName={levelName}
+          levelDescription={levelDescription}
+          testType={testType}
+          liveHeight={liveHeight}
+          targetHeight={targetHeight}
+          countdown={countdown}
+          testTimeRemaining={testTimeRemaining}
+          score={score}
+          stars={stars}
+          onStartTest={onStartTest}
+          onRetry={onRetryChallenge}
+          onUndo={onUndo}
+          onNext={onNextChallenge}
+          hasNext={levelIndex < levelCount - 1}
+        />
+      )}
+
+      <div className="placement-mode">
+        <button
+          className={interactionMode === InteractionMode.QUICK ? 'is-active' : ''}
+          onClick={() => setInteractionMode(InteractionMode.QUICK)}
+          disabled={!interactionEnabled}
+        >{labels.quick}<kbd>Tab</kbd></button>
+        <button
+          className={interactionMode === InteractionMode.PRECISION ? 'is-active' : ''}
+          onClick={() => setInteractionMode(InteractionMode.PRECISION)}
+          disabled={!interactionEnabled}
+        >{labels.precision}</button>
       </div>
 
-
-      {/* Bottom Side Controls */}
-      <div className="flex justify-between items-end w-full pointer-events-auto mb-16">
-        
-        <div className="flex gap-6 items-end">
-            {/* Presets */}
-            {showPlaceControls && interactionMode === InteractionMode.QUICK && (
-              <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-gray-700 flex flex-col gap-2 relative">
-                <div className="flex justify-between items-center">
-                    <span className="text-gray-300 text-xs uppercase tracking-widest ml-1">{t.presets}</span>
-                    <button 
-                        onClick={onOpenSettings}
-                        className="text-gray-400 hover:text-white"
-                        title={t.settings}
-                    >
-                        ⚙️
-                    </button>
-                </div>
-                <div className="grid grid-cols-5 gap-2">
-                    {presets.map((opt) => (
-                    <button
-                        key={opt.id}
-                        onClick={() => setPresetId(opt.id)}
-                        className={`
-                        p-2 rounded-lg font-medium transition-all flex flex-col items-center w-[60px] relative overflow-hidden
-                        ${currentPresetId === opt.id 
-                            ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-105 z-10' 
-                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}
-                        `}
-                    >
-                        <span className="absolute top-0.5 right-1.5 text-[8px] opacity-50 font-mono">{opt.shortcut}</span>
-                        <span className="text-lg leading-none mt-1 mb-1">{opt.icon}</span>
-                        <span className="text-[9px] leading-tight text-center truncate w-full px-1">
-                            {t[opt.name as keyof typeof t] || opt.name}
-                        </span>
-                    </button>
-                    ))}
-                </div>
-              </div>
-            )}
-
-            {/* Precision UI */}
-            {pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.PRECISION && (
-               <div className="bg-black/60 backdrop-blur-md p-4 rounded-xl border border-amber-600/50 flex flex-col gap-3 shadow-[0_0_30px_rgba(217,119,6,0.15)]">
-                 <span className="text-amber-400 text-xs uppercase tracking-widest font-bold">{t.precisionTool}</span>
-                 <div className="flex items-center gap-4 text-gray-300 text-sm">
-                    <div className="flex gap-2">
-                      <span className="bg-gray-700 px-2 py-1 rounded text-white font-mono">T</span> {t.translate}
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="bg-gray-700 px-2 py-1 rounded text-white font-mono">R</span> {t.rotate}
-                    </div>
-                 </div>
-                 <button 
-                   id="precision-place-btn" 
-                   className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 active:transform active:scale-95 transition-all"
-                   onClick={() => {
-                     window.dispatchEvent(new CustomEvent('trigger-precision-place'));
-                   }}
-                 >
-                   <span>{t.placeCard}</span>
-                   <span className="bg-black/20 px-2 py-0.5 rounded text-[10px] font-mono">{t.pressEnter}</span>
-                 </button>
-               </div>
-            )}
-
-            {/* Freeze Button */}
-            <button
-                onClick={() => setIsFreezeMode(!isFreezeMode)}
-                className={`
-                    px-6 py-4 rounded-xl font-bold text-sm transition-all border relative shadow-xl flex items-center gap-3 h-[110px]
-                    ${isFreezeMode 
-                        ? 'bg-cyan-900/90 border-cyan-400 text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.4)]' 
-                        : 'bg-gray-800/80 border-gray-600 text-gray-300 hover:bg-gray-700'}
-                `}
-            >
-                <span className="text-4xl">
-                    {isFreezeMode ? '⏸' : '▶'}
-                </span>
-                <div className="flex flex-col items-start">
-                    <span className={`uppercase tracking-wider text-[10px] mb-1 ${isFreezeMode ? 'text-cyan-300' : 'text-gray-500'}`}>
-                        {isFreezeMode ? t.timeStopped : t.physicsActive}
-                    </span>
-                    <span className="text-lg tracking-tight">
-                        {isFreezeMode ? t.resume : t.freeze}
-                    </span>
-                    <span className="text-[10px] font-mono opacity-50 mt-1">{t.pressL}</span>
-                </div>
-            </button>
-        </div>
+      <div className="tool-dock">
+        <button className={pointerMode === PointerMode.PLACE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PLACE)} disabled={!interactionEnabled}>
+          <span className="tool-symbol">+</span><strong>{labels.place}</strong><kbd>Esc</kbd>
+        </button>
+        <button className={pointerMode === PointerMode.MOVE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.MOVE)} disabled={!interactionEnabled}>
+          <span className="tool-symbol move-symbol">↔</span><strong>{labels.move}</strong>
+        </button>
+        <button className={pointerMode === PointerMode.DELETE ? 'is-danger' : ''} onClick={() => setPointerMode(PointerMode.DELETE)} disabled={!interactionEnabled}>
+          <span className="tool-symbol">×</span><strong>{labels.remove}</strong><kbd>Del</kbd>
+        </button>
+        <span className="dock-divider" />
+        <button className={isFreezeMode ? 'is-locked' : ''} onClick={() => setIsFreezeMode(!isFreezeMode)} disabled={!interactionEnabled}>
+          <span className="physics-indicator" />
+          <strong>{labels.physics}</strong>
+          <small>{isFreezeMode ? labels.frozen : labels.active}</small>
+          <kbd>L</kbd>
+        </button>
       </div>
     </div>
   );

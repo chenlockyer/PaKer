@@ -1,79 +1,121 @@
-
 /// <reference lib="dom" />
 import React from 'react';
+import { AppTheme } from '../types';
 import { translations } from '../utils/translations';
 
 interface MainMenuProps {
-  onStart: () => void;
+  onStartChallenge: () => void;
+  onStartFree: () => void;
   onLoad: () => void;
   onSettings: () => void;
   hasSave: boolean;
   lang: 'en' | 'zh';
+  theme: AppTheme;
 }
 
-const MainMenu: React.FC<MainMenuProps> = ({ onStart, onLoad, onSettings, hasSave, lang }) => {
+const CardHouseMark = () => (
+  <div className="menu-card-house" aria-hidden="true">
+    <div className="menu-playing-card menu-card-left"><span>A</span><i>♥</i></div>
+    <div className="menu-playing-card menu-card-right"><span>K</span><i>♠</i></div>
+    <div className="menu-playing-card menu-card-roof"><span>Q</span><i>♦</i></div>
+  </div>
+);
+
+const MainMenu: React.FC<MainMenuProps> = ({
+  onStartChallenge,
+  onStartFree,
+  onLoad,
+  onSettings,
+  hasSave,
+  lang,
+}) => {
   const t = translations[lang];
+  const copy = lang === 'zh'
+    ? {
+        eyebrow: '物理建造游戏',
+        title: '纸牌建筑师',
+        lead: '用真实物理搭起一座纸牌屋，再让风和重物检验它。',
+        challenge: '开始挑战',
+        challengeHint: '循序完成结构目标与稳定性测试',
+        free: '自由搭建',
+        load: '继续上次搭建',
+        settings: '设置',
+        cards: '真实比例纸牌',
+        physics: '实时物理反馈',
+        presets: '14 种建造预设',
+      }
+    : {
+        eyebrow: 'PHYSICS BUILDING GAME',
+        title: 'Card Architect',
+        lead: 'Build with realistic cards, then put the structure through wind and impact tests.',
+        challenge: 'Start Challenge',
+        challengeHint: 'Learn structures through progressive stability trials',
+        free: 'Free Build',
+        load: 'Continue Build',
+        settings: 'Settings',
+        cards: 'Real card proportions',
+        physics: 'Live physics feedback',
+        presets: '14 building presets',
+      };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#0f172a]">
-      {/* Background Decor */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none overflow-hidden">
-          <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-blue-600 rounded-full blur-[128px]"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-red-600 rounded-full blur-[128px]"></div>
-      </div>
+    <main className="menu-screen">
+      <div className="menu-grid" aria-hidden="true" />
+      <section className="menu-hero">
+        <div className="menu-brand">
+          <span className="brand-pip" />
+          <span>HOUSE OF CARDS</span>
+        </div>
+        <div className="menu-copy">
+          <p className="eyebrow">{copy.eyebrow}</p>
+          <h1>{copy.title}</h1>
+          <p className="menu-lead">{copy.lead}</p>
+        </div>
+        <CardHouseMark />
+        <div className="menu-features">
+          <span>{copy.cards}</span>
+          <span>{copy.physics}</span>
+          <span>{copy.presets}</span>
+        </div>
+      </section>
 
-      <div className="relative z-10 flex flex-col items-center gap-12 w-96">
-        <div className="text-center">
-            <h1 className="text-6xl font-black text-white tracking-tighter drop-shadow-2xl mb-2">
-                HOUSE OF <span className="text-blue-500">CARDS</span>
-            </h1>
-            <p className="text-gray-400 text-lg uppercase tracking-widest">{t.subtitle}</p>
+      <section className="menu-actions" aria-label={lang === 'zh' ? '游戏模式' : 'Game modes'}>
+        <div className="menu-actions-header">
+          <span className="section-index">01</span>
+          <div>
+            <p>{lang === 'zh' ? '选择模式' : 'SELECT MODE'}</p>
+            <small>{lang === 'zh' ? '随时可以返回主菜单' : 'You can return here at any time'}</small>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-4 w-full">
-            <button 
-                onClick={onStart}
-                className="w-full py-4 bg-white text-black font-bold text-xl uppercase tracking-wider hover:bg-gray-200 transition-transform hover:scale-105 active:scale-95 shadow-xl rounded-sm"
-            >
-                {t.startGame}
-            </button>
-            
-            <button 
-                onClick={onLoad}
-                disabled={!hasSave}
-                className={`w-full py-4 font-bold text-xl uppercase tracking-wider border-2 transition-all rounded-sm
-                    ${hasSave 
-                        ? 'border-white text-white hover:bg-white/10 hover:scale-105 active:scale-95' 
-                        : 'border-gray-700 text-gray-700 cursor-not-allowed'}
-                `}
-            >
-                {t.continueGame}
-            </button>
-            
-            <button 
-                onClick={onSettings}
-                className="w-full py-4 border-2 border-gray-600 text-gray-400 font-bold text-xl uppercase tracking-wider hover:border-gray-400 hover:text-white transition-colors rounded-sm"
-            >
-                {t.settings}
-            </button>
+        <button className="menu-action menu-action-primary" onClick={onStartChallenge}>
+          <span>
+            <strong>{copy.challenge}</strong>
+            <small>{copy.challengeHint}</small>
+          </span>
+          <b aria-hidden="true">→</b>
+        </button>
+        <button className="menu-action" onClick={onStartFree}>
+          <span>
+            <strong>{copy.free}</strong>
+            <small>{t.freeBuild}</small>
+          </span>
+          <b aria-hidden="true">02</b>
+        </button>
+        <button className="menu-action" onClick={onLoad} disabled={!hasSave}>
+          <span>
+            <strong>{copy.load}</strong>
+            <small>{hasSave ? t.continueGame : (lang === 'zh' ? '暂无存档' : 'No saved build')}</small>
+          </span>
+          <b aria-hidden="true">03</b>
+        </button>
 
-            <button 
-                onClick={() => {
-                   if(confirm(lang === 'zh' ? '确定要退出吗？' : 'Are you sure?')) {
-                     window.location.href = 'about:blank'; 
-                   }
-                }}
-                className="w-full py-4 text-red-900 font-bold text-lg uppercase tracking-wider hover:text-red-500 transition-colors"
-            >
-                {t.exitGame}
-            </button>
+        <div className="menu-secondary">
+          <button className="text-button" onClick={onSettings}>{copy.settings}</button>
+          <span>v1.2</span>
         </div>
-
-        <div className="text-gray-600 text-xs mt-8">
-            {t.credits} • v1.1.0
-        </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 };
 
