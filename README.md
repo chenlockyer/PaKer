@@ -85,10 +85,25 @@
     ```bash
     npm install
     ```
-3.  **Start development server**:
+3.  **Start the desktop development build**:
     ```bash
     npm run dev
     ```
+
+### 🖥️ Desktop Commands
+
+| Command | Purpose |
+| :--- | :--- |
+| `npm run dev` | Start Vite and the Electron desktop window with hot reload |
+| `npm run dev:web` | Start the browser development server only |
+| `npm run build` | Build the production renderer into `dist/` |
+| `npm run desktop` | Build and launch the production desktop app |
+| `npm run pack:win` | Generate an unpacked Windows app in `release/win-unpacked/` |
+| `npm run dist:win` | Generate the Windows installer in `release/` |
+
+The production desktop shell uses context isolation, renderer sandboxing, disabled
+Node integration, denied browser permissions, and restricted external navigation.
+Press `F11` or `Alt + Enter` to toggle fullscreen, and `Esc` to leave fullscreen.
 
 ---
 
