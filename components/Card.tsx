@@ -3,7 +3,7 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { useBox } from '@react-three/cannon';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { CARD_DIMENSIONS, CardData, CardSize, PointerMode } from '../types';
+import { CARD_DIMENSIONS, CardData, CardSize, LiveCardTransform, PointerMode } from '../types';
 import { playCollisionSound } from '../services/audioService';
 
 interface CardProps {
@@ -16,6 +16,7 @@ interface CardProps {
   interactionEnabled?: boolean;
   windStrength?: number;
   cardSize: CardSize;
+  onTransformChange?: (id: string, transform: LiveCardTransform) => void;
 }
 
 const geometryCache = new Map<CardSize, THREE.BoxGeometry>();
@@ -72,7 +73,8 @@ const Card: React.FC<CardProps> = ({
   isDragging = false,
   interactionEnabled = true,
   windStrength = 0,
-  cardSize
+  cardSize,
+  onTransformChange,
 }) => {
   // If dragging, we temporarily remove from physics/visual scene effectively
   // But we can't unmount component entirely or hook ordering changes.
@@ -98,12 +100,28 @@ const Card: React.FC<CardProps> = ({
     },
   }));
   const physicsPositionRef = React.useRef<[number, number, number]>(data.position);
+  const physicsRotationRef = React.useRef<[number, number, number]>(data.rotation);
 
   useEffect(
     () => api.position.subscribe(position => {
       physicsPositionRef.current = position;
+      onTransformChange?.(data.id, {
+        position,
+        rotation: physicsRotationRef.current,
+      });
     }),
-    [api.position]
+    [api.position, data.id, onTransformChange]
+  );
+
+  useEffect(
+    () => api.rotation.subscribe(rotation => {
+      physicsRotationRef.current = rotation;
+      onTransformChange?.(data.id, {
+        position: physicsPositionRef.current,
+        rotation,
+      });
+    }),
+    [api.rotation, data.id, onTransformChange]
   );
 
   useFrame(({ clock }) => {
@@ -258,5 +276,6 @@ export default React.memo(Card, (previous, next) =>
   previous.isDragging === next.isDragging &&
   previous.interactionEnabled === next.interactionEnabled &&
   previous.windStrength === next.windStrength &&
-  previous.cardSize === next.cardSize
+  previous.cardSize === next.cardSize &&
+  previous.onTransformChange === next.onTransformChange
 );

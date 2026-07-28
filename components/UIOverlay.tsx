@@ -26,6 +26,7 @@ interface UIOverlayProps {
   onClear: () => void;
   onSave: () => void;
   onLoad: () => void;
+  onOpenBlueprint: () => void;
   cardCount: number;
   lang: 'en' | 'zh';
   onOpenSettings: () => void;
@@ -86,6 +87,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onClear,
   onSave,
   onLoad,
+  onOpenBlueprint,
   cardCount,
   lang,
   onOpenSettings,
@@ -151,6 +153,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         precisionHint: `${formatBinding('precision.translate')} 移动 · ${formatBinding('precision.rotate')} 旋转 · ${formatBinding('action.confirm')} 放置`,
         controls: '当前操作',
         camera: '右键旋转镜头 · 中键平移 · 滚轮缩放',
+        blueprint: '蓝图',
       }
     : {
         project: 'CARD ARCHITECT',
@@ -179,6 +182,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         precisionHint: `${formatBinding('precision.translate')} translate · ${formatBinding('precision.rotate')} rotate · ${formatBinding('action.confirm')} place`,
         controls: 'CURRENT CONTROLS',
         camera: 'Right drag orbit · Middle drag pan · Wheel zoom',
+        blueprint: 'Blueprint',
       };
 
   const groupedPresets = useMemo(() => {
@@ -201,6 +205,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           <span className="card-counter">{labels.cards} <b>{cardCount}</b>{gameMode === GameMode.CHALLENGE ? ` / ${maxCards}` : ''}</span>
         </div>
         <nav className="top-actions">
+          <button className="blueprint-action" onClick={onOpenBlueprint}>{labels.blueprint}</button>
           <button onClick={onSave}>{t.save}</button>
           <button onClick={onLoad}>{t.load}</button>
           <button onClick={onClear} className="danger-text">{labels.clear}</button>

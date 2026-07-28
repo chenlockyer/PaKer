@@ -9,6 +9,63 @@ export interface CardData {
   locked: boolean;
 }
 
+export interface LiveCardTransform {
+  position: [number, number, number];
+  rotation: [number, number, number];
+}
+
+export type BlueprintCategory =
+  | 'tutorial'
+  | 'architecture'
+  | 'battle'
+  | 'challenge'
+  | 'experiment';
+
+export interface BlueprintCardData {
+  id: string;
+  order: number;
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+  suit: CardData['suit'];
+  rank: string;
+  color: CardData['color'];
+}
+
+export interface BlueprintBounds {
+  min: [number, number, number];
+  max: [number, number, number];
+  size: [number, number, number];
+}
+
+export interface BlueprintSnapshot {
+  capturedAt: string;
+  source: 'live-physics';
+  originWorld: [number, number, number];
+  bounds: BlueprintBounds;
+  cards: BlueprintCardData[];
+}
+
+export interface Blueprint {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  category: BlueprintCategory;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  cardSize: CardSize;
+  cardDimensions: {
+    width: number;
+    height: number;
+    thickness: number;
+  };
+  cardCount: number;
+  coordinateSpace: 'structure-local';
+  snapshot: BlueprintSnapshot;
+}
+
 export interface RotationPreset {
   id: string;
   name: string; // Can be a translation key or raw text

@@ -100,8 +100,8 @@ export const RECOMMENDED_BINDINGS: Record<InputAction, KeyBinding> = {
   'mode.togglePrecision': { code: 'Tab' },
   'card.yawLeft': { code: 'KeyQ' },
   'card.yawRight': { code: 'KeyE' },
-  'card.tiltForward': { code: 'KeyW' },
-  'card.tiltBackward': { code: 'KeyS' },
+  'card.tiltForward': { code: 'KeyS' },
+  'card.tiltBackward': { code: 'KeyW' },
   'card.tiltLeft': { code: 'KeyA' },
   'card.tiltRight': { code: 'KeyD' },
   'card.resetRotation': { code: 'KeyR' },
@@ -155,9 +155,11 @@ export const LEGACY_BINDINGS: Record<InputAction, KeyBinding> = {
 };
 
 const STORAGE_KEY = 'hoc_input_settings_v1';
+const INPUT_SCHEMA_VERSION = 4;
 type Listener = (event: InputActionEvent) => void;
 
 interface StoredInputSettings {
+  version: number;
   profile: InputProfile;
   bindings: Record<InputAction, KeyBinding>;
 }
@@ -185,12 +187,16 @@ const loadSettings = (): StoredInputSettings => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { profile: 'recommended', bindings: cloneBindings(RECOMMENDED_BINDINGS) };
+      return { version: INPUT_SCHEMA_VERSION, profile: 'recommended', bindings: cloneBindings(RECOMMENDED_BINDINGS) };
     }
     const parsed = JSON.parse(raw) as Partial<StoredInputSettings>;
     const profile = parsed.profile ?? 'recommended';
+    if (profile === 'recommended' && parsed.version !== INPUT_SCHEMA_VERSION) {
+      return { version: INPUT_SCHEMA_VERSION, profile, bindings: cloneBindings(RECOMMENDED_BINDINGS) };
+    }
     const defaults = profile === 'legacy' ? LEGACY_BINDINGS : RECOMMENDED_BINDINGS;
     return {
+      version: INPUT_SCHEMA_VERSION,
       profile,
       bindings: {
         ...cloneBindings(defaults),
@@ -198,7 +204,7 @@ const loadSettings = (): StoredInputSettings => {
       },
     };
   } catch {
-    return { profile: 'recommended', bindings: cloneBindings(RECOMMENDED_BINDINGS) };
+    return { version: INPUT_SCHEMA_VERSION, profile: 'recommended', bindings: cloneBindings(RECOMMENDED_BINDINGS) };
   }
 };
 
@@ -272,7 +278,10 @@ export const InputProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     bindingsRef.current = bindings;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ profile, bindings }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: INPUT_SCHEMA_VERSION, profile, bindings }),
+    );
   }, [bindings, profile]);
 
   const releaseAll = useCallback(() => {

@@ -9,6 +9,7 @@ import {
   CARD_DIMENSIONS,
   CardData,
   CardSize,
+  LiveCardTransform,
   RotationPreset,
   InteractionMode,
   PointerMode
@@ -73,6 +74,7 @@ interface PhysicsWorldProps {
   testActive: boolean;
   weightMass: number;
   weightDropHeight: number;
+  onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
 }
 
 const WindVisual = ({ strength }: { strength: number }) => {
@@ -232,10 +234,10 @@ const GhostCard = ({
   const [isHeightLocked, setIsHeightLocked] = useState(false);
   const dimensions = CARD_DIMENSIONS[cardSize];
   
-  // Custom Rotation Offsets (Manual Tweak)
-  const [yaw, setYaw] = useState(0);   
-  const [pitch, setPitch] = useState(0); 
-  const [roll, setRoll] = useState(0);   
+  // Manual adjustment is stored as a quaternion in world space. Keeping
+  // three Euler offsets would make later key presses depend on rotation
+  // order, which causes the controls to drift away from the scene axes.
+  const [manualRotation, setManualRotation] = useState<[number, number, number, number]>([0, 0, 0, 1]);
 
   const guideGeometry = useMemo(() => {
     const halfWidth = dimensions.width / 2;
@@ -261,30 +263,37 @@ const GhostCard = ({
   const rotationStep = (event: InputActionEvent) =>
     THREE.MathUtils.degToRad(event.originalEvent.altKey ? 45 : event.originalEvent.ctrlKey ? 1 : 10);
 
+  const applyWorldRotation = (axis: THREE.Vector3, angle: number) => {
+    setManualRotation(previous => {
+      const current = new THREE.Quaternion(...previous);
+      const delta = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+      delta.multiply(current).normalize();
+      return [delta.x, delta.y, delta.z, delta.w];
+    });
+  };
+
   useRepeatingInputAction('card.yawLeft', event => {
-    setYaw(value => value + rotationStep(event));
+    applyWorldRotation(new THREE.Vector3(0, 1, 0), rotationStep(event));
   });
   useRepeatingInputAction('card.yawRight', event => {
-    setYaw(value => value - rotationStep(event));
+    applyWorldRotation(new THREE.Vector3(0, 1, 0), -rotationStep(event));
   });
   useRepeatingInputAction('card.tiltForward', event => {
-    setPitch(value => value - rotationStep(event));
+    applyWorldRotation(new THREE.Vector3(1, 0, 0), -rotationStep(event));
   });
   useRepeatingInputAction('card.tiltBackward', event => {
-    setPitch(value => value + rotationStep(event));
+    applyWorldRotation(new THREE.Vector3(1, 0, 0), rotationStep(event));
   });
   useRepeatingInputAction('card.tiltLeft', event => {
-    setRoll(value => value - rotationStep(event));
+    applyWorldRotation(new THREE.Vector3(0, 0, 1), -rotationStep(event));
   });
   useRepeatingInputAction('card.tiltRight', event => {
-    setRoll(value => value + rotationStep(event));
+    applyWorldRotation(new THREE.Vector3(0, 0, 1), rotationStep(event));
   });
 
   useInputAction('card.resetRotation', event => {
     if (event.phase !== 'down') return;
-    setYaw(0);
-    setPitch(0);
-    setRoll(0);
+    setManualRotation([0, 0, 0, 1]);
   });
 
   useInputAction('card.lockHeight', event => {
@@ -314,15 +323,13 @@ const GhostCard = ({
 
   // Reset offset when preset changes
   useEffect(() => {
-    setPitch(0);
-    setRoll(0);
-    setYaw(0);
+    setManualRotation([0, 0, 0, 1]);
     rotationDirtyRef.current = true;
   }, [rotationPreset.id]);
 
   useLayoutEffect(() => {
     rotationDirtyRef.current = true;
-  }, [yaw, pitch, roll]);
+  }, [manualRotation]);
 
   const targetRotation = useMemo(() => {
     // 1. Create the base rotation from the preset
@@ -334,20 +341,14 @@ const GhostCard = ({
         'XYZ'
     );
 
-    // 2. Create the User Offset Euler
-    // YXZ is usually more intuitive for object manipulation (Yaw then Pitch)
-    const offsetEuler = new THREE.Euler(pitch, yaw, roll, 'YXZ');
-
-    // 3. Combine them using Quaternions
+    // 2. Combine the preset with the accumulated world-space adjustment.
     const baseQuat = new THREE.Quaternion().setFromEuler(baseEuler);
-    const offsetQuat = new THREE.Quaternion().setFromEuler(offsetEuler);
-    
-    // Apply offset relative to the base (Multiply)
-    baseQuat.multiply(offsetQuat);
+    const worldOffset = new THREE.Quaternion(...manualRotation);
+    worldOffset.multiply(baseQuat);
 
-    // 4. Return as Euler for the mesh
-    return new THREE.Euler().setFromQuaternion(baseQuat, 'XYZ');
-  }, [rotationPreset, yaw, pitch, roll]);
+    // 3. Return as Euler for the mesh.
+    return new THREE.Euler().setFromQuaternion(worldOffset, 'XYZ');
+  }, [manualRotation, rotationPreset]);
 
   useFrame(({ mouse, clock }) => {
     const pointerUnchanged = lastPointerRef.current.equals(mouse);
@@ -603,7 +604,8 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   testType,
   testActive,
   weightMass,
-  weightDropHeight
+  weightDropHeight,
+  onCardTransformChange,
 }) => {
   
   const draggingCardData = useMemo(() => cards.find(c => c.id === draggingCardId) || null, [cards, draggingCardId]);
@@ -714,6 +716,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
               interactionEnabled={interactionEnabled}
               windStrength={windStrength}
               cardSize={cardSize}
+              onTransformChange={onCardTransformChange}
             />
           );
         })}

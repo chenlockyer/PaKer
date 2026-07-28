@@ -5,7 +5,10 @@ import GameScene from './components/GameScene';
 import UIOverlay from './components/UIOverlay';
 import MainMenu from './components/MainMenu';
 import SettingsModal from './components/SettingsModal';
+import BlueprintStudio from './components/BlueprintStudio';
 import {
+  Blueprint,
+  BlueprintSnapshot,
   CardData,
   RotationPreset,
   InteractionMode,
@@ -17,7 +20,8 @@ import {
   ChallengeTestType,
   CardSize,
   AppTheme,
-  CARD_DIMENSIONS
+  CARD_DIMENSIONS,
+  LiveCardTransform,
 } from './types';
 import { translations } from './utils/translations';
 import {
@@ -26,6 +30,13 @@ import {
   playSuccessSound
 } from './services/audioService';
 import { InputAction, useInput, useInputAction } from './input/InputContext';
+import {
+  CreateBlueprintInput,
+  createBlueprint,
+  createBlueprintSnapshot,
+  loadBlueprints,
+  persistBlueprints,
+} from './services/blueprintService';
 
 const DEG_10 = Math.PI / 18;
 const CHALLENGE_LEVELS: ChallengeLevel[] = [
@@ -145,6 +156,7 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.MENU);
   const [gameMode, setGameMode] = useState<GameMode>(GameMode.CHALLENGE);
   const [showSettings, setShowSettings] = useState(false);
+  const [showBlueprintStudio, setShowBlueprintStudio] = useState(false);
   const [lang, setLang] = useState<'en' | 'zh'>('zh');
   const [theme, setTheme] = useState<AppTheme>(() => {
     const savedTheme = localStorage.getItem('hoc_theme');
@@ -180,6 +192,9 @@ const App: React.FC = () => {
   const [pointerMode, setPointerMode] = useState<PointerMode>(PointerMode.PLACE);
   const [isFreezeMode, setIsFreezeMode] = useState(false);
   const [cards, setCards] = useState<CardData[]>([]);
+  const [blueprints, setBlueprints] = useState<Blueprint[]>(loadBlueprints);
+  const [blueprintSnapshot, setBlueprintSnapshot] = useState<BlueprintSnapshot | null>(null);
+  const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
   const undoHistoryRef = useRef<CardData[][]>([]);
   const redoHistoryRef = useRef<CardData[][]>([]);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
@@ -217,6 +232,17 @@ const App: React.FC = () => {
     localStorage.setItem('hoc_theme', theme);
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    persistBlueprints(blueprints);
+  }, [blueprints]);
+
+  useEffect(() => {
+    const activeIds = new Set(cards.map(card => card.id));
+    for (const id of liveCardTransformsRef.current.keys()) {
+      if (!activeIds.has(id)) liveCardTransformsRef.current.delete(id);
+    }
+  }, [cards]);
 
   const currentPreset = presets.find(p => p.id === currentPresetId) || presets[0];
   const currentLevel = CHALLENGE_LEVELS[currentLevelIndex];
@@ -341,6 +367,47 @@ const App: React.FC = () => {
       alert(lang === 'zh' ? '读取存档失败' : 'Failed to load save');
     }
   }, [lang, resetCardHistory]);
+
+  const handleCardTransformChange = useCallback((id: string, transform: LiveCardTransform) => {
+    liveCardTransformsRef.current.set(id, {
+      position: [...transform.position],
+      rotation: [...transform.rotation],
+    });
+  }, []);
+
+  const captureBlueprintSnapshot = useCallback(() => {
+    setBlueprintSnapshot(createBlueprintSnapshot(cards, liveCardTransformsRef.current, cardSize));
+  }, [cardSize, cards]);
+
+  const openBlueprintStudio = useCallback(() => {
+    setBlueprintSnapshot(createBlueprintSnapshot(cards, liveCardTransformsRef.current, cardSize));
+    setShowBlueprintStudio(true);
+  }, [cardSize, cards]);
+
+  const saveBlueprint = useCallback((input: CreateBlueprintInput) => {
+    const blueprint = createBlueprint(input);
+    setBlueprints(previous => [blueprint, ...previous]);
+  }, []);
+
+  const deleteBlueprint = useCallback((id: string) => {
+    setBlueprints(previous => previous.filter(blueprint => blueprint.id !== id));
+  }, []);
+
+  const importBlueprint = useCallback((blueprint: Blueprint) => {
+    setBlueprints(previous => {
+      const hasSameId = previous.some(item => item.id === blueprint.id);
+      const imported = hasSameId
+        ? {
+            ...blueprint,
+            id: `bp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+            name: `${blueprint.name} (${lang === 'zh' ? '导入' : 'Imported'})`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        : blueprint;
+      return [imported, ...previous];
+    });
+  }, [lang]);
 
   const toggleFreezeMode = useCallback((forceVal?: boolean) => {
     setIsFreezeMode(prev => {
@@ -517,8 +584,8 @@ const App: React.FC = () => {
 
   // --- LOGIC: UNIFIED INPUT ---
   useEffect(() => {
-    setInputSuspended(showSettings || appState !== AppState.GAME);
-  }, [appState, setInputSuspended, showSettings]);
+    setInputSuspended(showSettings || showBlueprintStudio || appState !== AppState.GAME);
+  }, [appState, setInputSuspended, showBlueprintStudio, showSettings]);
 
   const cyclePreset = useCallback((direction: -1 | 1) => {
     if (!interactionEnabled || presets.length === 0) return;
@@ -626,6 +693,7 @@ const App: React.FC = () => {
             weightMass={currentLevel.weightMass ?? 0.45}
             weightDropHeight={challengeTargetHeight + (currentLevel.weightDropOffset ?? 4)}
             theme={theme}
+            onCardTransformChange={handleCardTransformChange}
           />
           
           <UIOverlay 
@@ -641,6 +709,7 @@ const App: React.FC = () => {
             onClear={clearCards}
             onSave={saveGame}
             onLoad={loadGame}
+            onOpenBlueprint={openBlueprintStudio}
             cardCount={cards.length}
             lang={lang}
             onOpenSettings={() => setShowSettings(true)}
@@ -686,6 +755,19 @@ const App: React.FC = () => {
         setCardSize={setCardSize}
         theme={theme}
         setTheme={setTheme}
+      />
+
+      <BlueprintStudio
+        isOpen={showBlueprintStudio}
+        lang={lang}
+        cardSize={cardSize}
+        snapshot={blueprintSnapshot}
+        blueprints={blueprints}
+        onRefreshSnapshot={captureBlueprintSnapshot}
+        onSave={saveBlueprint}
+        onDelete={deleteBlueprint}
+        onImport={importBlueprint}
+        onClose={() => setShowBlueprintStudio(false)}
       />
     </div>
   );

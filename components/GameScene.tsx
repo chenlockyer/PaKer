@@ -6,7 +6,7 @@ import { OrbitControls, Sky, Stats } from '@react-three/drei';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import PhysicsWorld from './PhysicsWorld';
-import { AppTheme, CardData, CardSize, RotationPreset, InteractionMode, PointerMode } from '../types';
+import { AppTheme, CardData, CardSize, LiveCardTransform, RotationPreset, InteractionMode, PointerMode } from '../types';
 import { ChallengeTestType } from '../types';
 
 interface GameSceneProps {
@@ -33,6 +33,7 @@ interface GameSceneProps {
   weightMass: number;
   weightDropHeight: number;
   theme: AppTheme;
+  onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
 }
 
 class SceneErrorBoundary extends React.Component<
@@ -109,7 +110,8 @@ const GameScene: React.FC<GameSceneProps> = ({
   testActive,
   weightMass,
   weightDropHeight,
-  theme
+  theme,
+  onCardTransformChange,
 }) => {
   const background = theme === 'dark' ? '#171d24' : theme === 'warm' ? '#e9e6df' : '#e4e9ef';
   return (
@@ -154,6 +156,7 @@ const GameScene: React.FC<GameSceneProps> = ({
               testActive={testActive}
               weightMass={weightMass}
               weightDropHeight={weightDropHeight}
+              onCardTransformChange={onCardTransformChange}
             />
 
             <OrbitControls
