@@ -15,11 +15,46 @@ import {
 } from '../types';
 import { ChallengeTestType } from '../types';
 import { playPlaceSound } from '../services/audioService';
+import {
+  InputAction,
+  InputActionEvent,
+  useInputAction,
+} from '../input/InputContext';
+
+const useRepeatingInputAction = (
+  action: InputAction,
+  callback: (event: InputActionEvent) => void,
+) => {
+  const delayRef = useRef<number | null>(null);
+  const intervalRef = useRef<number | null>(null);
+
+  const stop = () => {
+    if (delayRef.current !== null) window.clearTimeout(delayRef.current);
+    if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
+    delayRef.current = null;
+    intervalRef.current = null;
+  };
+
+  useInputAction(action, event => {
+    if (event.phase === 'up') {
+      stop();
+      return;
+    }
+    callback(event);
+    stop();
+    delayRef.current = window.setTimeout(() => {
+      intervalRef.current = window.setInterval(() => callback(event), 50);
+    }, 220);
+  });
+
+  useEffect(() => stop, []);
+};
 
 interface PhysicsWorldProps {
   rotationPreset: RotationPreset;
   interactionMode: InteractionMode;
   pointerMode: PointerMode;
+  setPointerMode: (mode: PointerMode) => void;
   isFreezeMode: boolean;
   cards: CardData[];
   addCard: (card: CardData) => void;
@@ -223,75 +258,58 @@ const GhostCard = ({
   // Track mouse down position to distinguish between Click and Drag (Camera Orbit)
   const clickStartRef = useRef<{x: number, y: number} | null>(null);
 
-  // Handle Input for Rotation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
-      if (e.code === 'KeyH') {
-        if (!e.repeat && meshRef.current && !heightLockRef.current.active) {
-          heightLockRef.current = {
-            active: true,
-            height: meshRef.current.position.y
-          };
-          setIsHeightLocked(true);
-        }
-        return;
-      }
+  const rotationStep = (event: InputActionEvent) =>
+    THREE.MathUtils.degToRad(event.originalEvent.altKey ? 45 : event.originalEvent.ctrlKey ? 1 : 10);
 
-      const ROT_SPEED = 0.1; // Radians
-      let handled = true;
-      switch(e.code) {
-        case 'KeyQ': setYaw(value => value + ROT_SPEED); break;
-        case 'KeyE': setYaw(value => value - ROT_SPEED); break;
-        case 'KeyR': setPitch(value => value - ROT_SPEED); break;
-        case 'KeyF': setPitch(value => value + ROT_SPEED); break;
-        case 'KeyZ': setRoll(value => value - ROT_SPEED); break;
-        case 'KeyX': setRoll(value => value + ROT_SPEED); break;
-        case 'Space':
-          setYaw(0);
-          setPitch(0);
-          setRoll(0);
-          break;
-        default:
-          handled = false;
-      }
+  useRepeatingInputAction('card.yawLeft', event => {
+    setYaw(value => value + rotationStep(event));
+  });
+  useRepeatingInputAction('card.yawRight', event => {
+    setYaw(value => value - rotationStep(event));
+  });
+  useRepeatingInputAction('card.tiltForward', event => {
+    setPitch(value => value - rotationStep(event));
+  });
+  useRepeatingInputAction('card.tiltBackward', event => {
+    setPitch(value => value + rotationStep(event));
+  });
+  useRepeatingInputAction('card.tiltLeft', event => {
+    setRoll(value => value - rotationStep(event));
+  });
+  useRepeatingInputAction('card.tiltRight', event => {
+    setRoll(value => value + rotationStep(event));
+  });
 
-      if (handled) {
-        e.preventDefault();
-      }
-    };
+  useInputAction('card.resetRotation', event => {
+    if (event.phase !== 'down') return;
+    setYaw(0);
+    setPitch(0);
+    setRoll(0);
+  });
 
-    const releaseHeightLock = (e?: KeyboardEvent) => {
-      if (e && e.code !== 'KeyH') return;
+  useInputAction('card.lockHeight', event => {
+    if (event.phase === 'down' && meshRef.current && !heightLockRef.current.active) {
+      heightLockRef.current = {
+        active: true,
+        height: meshRef.current.position.y,
+      };
+      setIsHeightLocked(true);
+      return;
+    }
+    if (event.phase === 'up') {
       heightLockRef.current.active = false;
       setIsHeightLocked(false);
-    };
+    }
+  });
 
-    const handleWheel = (e: WheelEvent) => {
-      // Require Shift key to rotate via scroll, preventing conflict with camera zoom
-      if (e.shiftKey && Math.abs(e.deltaY) > 10) {
-        const speed = 0.002;
-        setYaw(y => y + e.deltaY * speed);
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button === 0) {
+        clickStartRef.current = { x: event.clientX, y: event.clientY };
       }
     };
-
-    // Track pointer down for drag detection
-    const handlePointerDown = (e: PointerEvent) => {
-      clickStartRef.current = { x: e.clientX, y: e.clientY };
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', releaseHeightLock);
-    window.addEventListener('blur', releaseHeightLock);
-    window.addEventListener('wheel', handleWheel);
     window.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', releaseHeightLock);
-      window.removeEventListener('blur', releaseHeightLock);
-      window.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('pointerdown', handlePointerDown);
-    };
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
   }, []);
 
   // Reset offset when preset changes
@@ -506,28 +524,26 @@ const PrecisionGhost = ({
   const initialPos = useMemo(() => new THREE.Vector3(0, 1.5, 0), []);
   const dimensions = CARD_DIMENSIONS[cardSize];
 
+  useInputAction('precision.translate', event => {
+    if (event.phase === 'down') setMode('translate');
+  });
+  useInputAction('precision.rotate', event => {
+    if (event.phase === 'down') setMode('rotate');
+  });
+  useInputAction('action.confirm', event => {
+    if (event.phase === 'down' && targetRef.current) {
+      onPlace(targetRef.current.position.clone(), targetRef.current.rotation.clone());
+    }
+  });
+
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
-      switch(e.key.toLowerCase()) {
-        case 't': setMode('translate'); break;
-        case 'r': setMode('rotate'); break;
-        case 'enter':
-          if (targetRef.current) {
-             onPlace(targetRef.current.position.clone(), targetRef.current.rotation.clone());
-          }
-          break;
-      }
-    };
     const handleCustomEvent = () => {
          if (targetRef.current) {
              onPlace(targetRef.current.position.clone(), targetRef.current.rotation.clone());
           }
     };
-    window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('trigger-precision-place', handleCustomEvent);
     return () => {
-        window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('trigger-precision-place', handleCustomEvent);
     };
   }, [onPlace]);
@@ -569,6 +585,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   rotationPreset, 
   interactionMode, 
   pointerMode,
+  setPointerMode,
   isFreezeMode, 
   cards, 
   addCard,
@@ -689,6 +706,10 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
               pointerMode={pointerMode}
               onRemove={() => removeCard(card.id)}
               onDragStart={() => onCardDragStart(card)}
+              onQuickMove={() => {
+                setPointerMode(PointerMode.MOVE);
+                onCardDragStart(card);
+              }}
               isDragging={isDragging}
               interactionEnabled={interactionEnabled}
               windStrength={windStrength}

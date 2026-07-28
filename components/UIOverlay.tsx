@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppTheme,
   RotationPreset,
@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { translations } from '../utils/translations';
 import ChallengeHUD from './ChallengeHUD';
+import { useInput, useInputAction } from '../input/InputContext';
 
 interface UIOverlayProps {
   presets: RotationPreset[];
@@ -47,6 +48,7 @@ interface UIOverlayProps {
   onStartTest: () => void;
   onRetryChallenge: () => void;
   onUndo: () => void;
+  onRedo: () => void;
   onNextChallenge: () => void;
   interactionEnabled: boolean;
   theme: AppTheme;
@@ -106,11 +108,21 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onStartTest,
   onRetryChallenge,
   onUndo,
+  onRedo,
   onNextChallenge,
   interactionEnabled,
 }) => {
   const t = translations[lang];
+  const { formatBinding, profile } = useInput();
   const [presetOpen, setPresetOpen] = useState(true);
+  const [showControlCoach, setShowControlCoach] = useState(
+    () => localStorage.getItem('hoc_control_coach_seen_v1') !== '1',
+  );
+  useEffect(() => {
+    const resetCoach = () => setShowControlCoach(true);
+    window.addEventListener('reset-control-coach', resetCoach);
+    return () => window.removeEventListener('reset-control-coach', resetCoach);
+  }, []);
   const labels = lang === 'zh'
     ? {
         project: '纸牌建筑师',
@@ -135,8 +147,10 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         menu: '主菜单',
         clear: '清空',
         cards: '牌数',
-        holdHeight: '按住 H 锁定高度',
-        precisionHint: 'T 移动 · R 旋转 · Enter 放置',
+        holdHeight: `按住 ${formatBinding('card.lockHeight')} 锁定高度`,
+        precisionHint: `${formatBinding('precision.translate')} 移动 · ${formatBinding('precision.rotate')} 旋转 · ${formatBinding('action.confirm')} 放置`,
+        controls: '当前操作',
+        camera: '右键旋转镜头 · 中键平移 · 滚轮缩放',
       }
     : {
         project: 'CARD ARCHITECT',
@@ -161,8 +175,10 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         menu: 'Menu',
         clear: 'Clear',
         cards: 'Cards',
-        holdHeight: 'Hold H to lock height',
-        precisionHint: 'T translate · R rotate · Enter place',
+        holdHeight: `Hold ${formatBinding('card.lockHeight')} to lock height`,
+        precisionHint: `${formatBinding('precision.translate')} translate · ${formatBinding('precision.rotate')} rotate · ${formatBinding('action.confirm')} place`,
+        controls: 'CURRENT CONTROLS',
+        camera: 'Right drag orbit · Middle drag pan · Wheel zoom',
       };
 
   const groupedPresets = useMemo(() => {
@@ -192,6 +208,28 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           <button onClick={onBackToMenu}>{labels.menu}</button>
         </nav>
       </header>
+
+      {showControlCoach && interactionEnabled && (
+        <section className="control-coach">
+          <div>
+            <span className="panel-kicker">{lang === 'zh' ? '新的操作方式' : 'NEW CONTROLS'}</span>
+            <strong>{lang === 'zh' ? '左手调整纸牌，鼠标控制镜头' : 'Left hand adjusts cards; mouse controls the camera'}</strong>
+          </div>
+          <p>
+            <kbd>W S A D Q E</kbd>{lang === 'zh' ? ' 调整姿态' : ' adjust pose'}
+            <kbd>{formatBinding('card.lockHeight')}</kbd>{lang === 'zh' ? ' 锁定高度' : ' lock height'}
+            <kbd>{formatBinding('preset.radial')}</kbd>{lang === 'zh' ? ' 姿态轮盘' : ' preset wheel'}
+          </p>
+          <button
+            onClick={() => {
+              localStorage.setItem('hoc_control_coach_seen_v1', '1');
+              setShowControlCoach(false);
+            }}
+          >
+            {lang === 'zh' ? '知道了' : 'Got it'}
+          </button>
+        </section>
+      )}
 
       {pointerMode !== PointerMode.DELETE && (
         <aside className={`preset-drawer ${presetOpen ? '' : 'is-collapsed'}`}>
@@ -225,7 +263,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                       >
                         <span className={`preset-diagram ${getDiagramClass(preset)}`}><i /></span>
                         <span className="preset-name">{t[preset.name as keyof typeof t] || preset.name}</span>
-                        {preset.shortcut && <kbd>{preset.shortcut}</kbd>}
+                        {profile === 'legacy' && preset.shortcut && <kbd>{preset.shortcut}</kbd>}
                       </button>
                     ))}
                   </div>
@@ -248,9 +286,17 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             </div>
           )}
 
-          {presetOpen && <div className="height-hint"><kbd>H</kbd><span>{labels.holdHeight}</span></div>}
+          {presetOpen && <div className="height-hint"><kbd>{formatBinding('card.lockHeight')}</kbd><span>{labels.holdHeight}</span></div>}
         </aside>
       )}
+
+      <PresetWheel
+        presets={presets}
+        currentPresetId={currentPresetId}
+        setPresetId={setPresetId}
+        interactionEnabled={interactionEnabled && interactionMode === InteractionMode.QUICK}
+        lang={lang}
+      />
 
       {gameMode === GameMode.CHALLENGE && (
         <ChallengeHUD
@@ -283,7 +329,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           className={interactionMode === InteractionMode.QUICK ? 'is-active' : ''}
           onClick={() => setInteractionMode(InteractionMode.QUICK)}
           disabled={!interactionEnabled}
-        >{labels.quick}<kbd>Tab</kbd></button>
+        >{labels.quick}<kbd>{formatBinding('mode.togglePrecision')}</kbd></button>
         <button
           className={interactionMode === InteractionMode.PRECISION ? 'is-active' : ''}
           onClick={() => setInteractionMode(InteractionMode.PRECISION)}
@@ -293,21 +339,137 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
       <div className="tool-dock">
         <button className={pointerMode === PointerMode.PLACE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PLACE)} disabled={!interactionEnabled}>
-          <span className="tool-symbol">+</span><strong>{labels.place}</strong><kbd>Esc</kbd>
+          <span className="tool-symbol">+</span><strong>{labels.place}</strong><kbd>{formatBinding('tool.place')}</kbd>
         </button>
         <button className={pointerMode === PointerMode.MOVE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.MOVE)} disabled={!interactionEnabled}>
-          <span className="tool-symbol move-symbol">↔</span><strong>{labels.move}</strong>
+          <span className="tool-symbol move-symbol">↔</span><strong>{labels.move}</strong><kbd>{formatBinding('tool.move')}</kbd>
         </button>
         <button className={pointerMode === PointerMode.DELETE ? 'is-danger' : ''} onClick={() => setPointerMode(PointerMode.DELETE)} disabled={!interactionEnabled}>
-          <span className="tool-symbol">×</span><strong>{labels.remove}</strong><kbd>Del</kbd>
+          <span className="tool-symbol">×</span><strong>{labels.remove}</strong><kbd>{formatBinding('tool.delete')}</kbd>
         </button>
         <span className="dock-divider" />
         <button className={isFreezeMode ? 'is-locked' : ''} onClick={() => setIsFreezeMode(!isFreezeMode)} disabled={!interactionEnabled}>
           <span className="physics-indicator" />
           <strong>{labels.physics}</strong>
           <small>{isFreezeMode ? labels.frozen : labels.active}</small>
-          <kbd>L</kbd>
+          <kbd>{formatBinding('physics.toggle')}</kbd>
         </button>
+      </div>
+
+      <div className="context-controls" aria-label={labels.controls}>
+        <span>{labels.camera}</span>
+        {pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.QUICK ? (
+          <>
+            <kbd>{formatBinding('preset.radial')}</kbd><span>{lang === 'zh' ? '姿态轮盘' : 'Preset wheel'}</span>
+            <kbd>W S A D Q E</kbd><span>{lang === 'zh' ? '调整姿态' : 'Adjust pose'}</span>
+            <kbd>{formatBinding('card.lockHeight')}</kbd><span>{lang === 'zh' ? '锁定高度' : 'Lock height'}</span>
+          </>
+        ) : interactionMode === InteractionMode.PRECISION ? (
+          <>
+            <kbd>{formatBinding('precision.translate')}</kbd><span>{lang === 'zh' ? '移动轴' : 'Translate'}</span>
+            <kbd>{formatBinding('precision.rotate')}</kbd><span>{lang === 'zh' ? '旋转轴' : 'Rotate'}</span>
+            <kbd>{formatBinding('action.confirm')}</kbd><span>{lang === 'zh' ? '确认' : 'Confirm'}</span>
+          </>
+        ) : (
+          <>
+            <kbd>{formatBinding('history.undo')}</kbd><button onClick={onUndo}>{lang === 'zh' ? '撤销' : 'Undo'}</button>
+            <kbd>{formatBinding('history.redo')}</kbd><button onClick={onRedo}>{lang === 'zh' ? '重做' : 'Redo'}</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const PresetWheel = ({
+  presets,
+  currentPresetId,
+  setPresetId,
+  interactionEnabled,
+  lang,
+}: {
+  presets: RotationPreset[];
+  currentPresetId: string;
+  setPresetId: (id: string) => void;
+  interactionEnabled: boolean;
+  lang: 'en' | 'zh';
+}) => {
+  const t = translations[lang];
+  const { formatBinding } = useInput();
+  const pointerRef = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+  const [center, setCenter] = useState(pointerRef.current);
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useEffect(() => {
+    const trackPointer = (event: PointerEvent) => {
+      pointerRef.current = { x: event.clientX, y: event.clientY };
+      if (!isOpen || presets.length === 0) return;
+      const dx = event.clientX - center.x;
+      const dy = event.clientY - center.y;
+      if (Math.hypot(dx, dy) < 30) {
+        const current = presets.findIndex(preset => preset.id === currentPresetId);
+        setSelectedIndex(Math.max(0, current));
+        return;
+      }
+      const angle = Math.atan2(dy, dx) + Math.PI / 2;
+      const normalized = (angle + Math.PI * 2) % (Math.PI * 2);
+      setSelectedIndex(Math.round(normalized / (Math.PI * 2 / presets.length)) % presets.length);
+    };
+    window.addEventListener('pointermove', trackPointer);
+    return () => window.removeEventListener('pointermove', trackPointer);
+  }, [center, currentPresetId, isOpen, presets]);
+
+  useInputAction('preset.radial', event => {
+    if (!interactionEnabled || presets.length === 0) return;
+    if (event.phase === 'down') {
+      const current = Math.max(0, presets.findIndex(preset => preset.id === currentPresetId));
+      setSelectedIndex(current);
+      const safeMargin = 250;
+      setCenter({
+        x: Math.min(window.innerWidth - safeMargin, Math.max(safeMargin, pointerRef.current.x)),
+        y: Math.min(window.innerHeight - safeMargin, Math.max(safeMargin, pointerRef.current.y)),
+      });
+      setIsOpen(true);
+      return;
+    }
+    if (isOpen) {
+      setPresetId(presets[selectedIndex]?.id ?? currentPresetId);
+      setIsOpen(false);
+    }
+  });
+
+  if (!isOpen) return null;
+
+  const radius = Math.min(190, Math.max(132, presets.length * 10));
+  return (
+    <div className="preset-wheel-layer">
+      <div className="preset-wheel" style={{ left: center.x, top: center.y }}>
+        <div className="preset-wheel-center">
+          <kbd>{formatBinding('preset.radial')}</kbd>
+          <strong>{t[presets[selectedIndex]?.name as keyof typeof t] || presets[selectedIndex]?.name}</strong>
+          <span>{lang === 'zh' ? '松开应用' : 'Release to apply'}</span>
+        </div>
+        {presets.map((preset, index) => {
+          const angle = (Math.PI * 2 * index) / presets.length - Math.PI / 2;
+          return (
+            <button
+              key={preset.id}
+              className={index === selectedIndex ? 'is-selected' : ''}
+              style={{
+                transform: `translate(${Math.cos(angle) * radius}px, ${Math.sin(angle) * radius}px) translate(-50%, -50%)`,
+              }}
+              onPointerEnter={() => setSelectedIndex(index)}
+              onClick={() => {
+                setPresetId(preset.id);
+                setIsOpen(false);
+              }}
+            >
+              <span className={`preset-diagram ${getDiagramClass(preset)}`}><i /></span>
+              <small>{t[preset.name as keyof typeof t] || preset.name}</small>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

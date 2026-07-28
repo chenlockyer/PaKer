@@ -95,7 +95,6 @@ async function createMainWindow() {
     }
 
     if (input.type === 'keyDown' && input.key === 'Escape' && mainWindow?.isFullScreen()) {
-      event.preventDefault();
       mainWindow.setFullScreen(false);
     }
   });

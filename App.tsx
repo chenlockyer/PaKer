@@ -25,6 +25,7 @@ import {
   playFailureSound,
   playSuccessSound
 } from './services/audioService';
+import { InputAction, useInput, useInputAction } from './input/InputContext';
 
 const DEG_10 = Math.PI / 18;
 const CHALLENGE_LEVELS: ChallengeLevel[] = [
@@ -179,6 +180,8 @@ const App: React.FC = () => {
   const [pointerMode, setPointerMode] = useState<PointerMode>(PointerMode.PLACE);
   const [isFreezeMode, setIsFreezeMode] = useState(false);
   const [cards, setCards] = useState<CardData[]>([]);
+  const undoHistoryRef = useRef<CardData[][]>([]);
+  const redoHistoryRef = useRef<CardData[][]>([]);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
   const [challengePhase, setChallengePhase] = useState<ChallengePhase>(ChallengePhase.BUILDING);
@@ -188,6 +191,17 @@ const App: React.FC = () => {
   const [challengeScore, setChallengeScore] = useState(0);
   const [challengeStars, setChallengeStars] = useState(0);
   const liveHeightRef = useRef(0);
+  const { profile: inputProfile, subscribe: subscribeInput, setSuspended: setInputSuspended } = useInput();
+
+  const recordCardHistory = useCallback((snapshot: CardData[]) => {
+    undoHistoryRef.current = [...undoHistoryRef.current.slice(-49), snapshot];
+    redoHistoryRef.current = [];
+  }, []);
+
+  const resetCardHistory = useCallback(() => {
+    undoHistoryRef.current = [];
+    redoHistoryRef.current = [];
+  }, []);
 
   // Persistence for Presets
   useEffect(() => {
@@ -258,24 +272,37 @@ const App: React.FC = () => {
       ) {
         return prev;
       }
+      recordCardHistory(prev);
       return [...prev, newCard];
     });
-  }, [isFreezeMode, gameMode, challengePhase, currentLevel.maxCards]);
+  }, [isFreezeMode, gameMode, challengePhase, currentLevel.maxCards, recordCardHistory]);
 
   const removeCard = useCallback((id: string) => {
-    setCards(prev => prev.filter(c => c.id !== id));
-  }, []);
+    setCards(prev => {
+      const next = prev.filter(c => c.id !== id);
+      if (next.length === prev.length) return prev;
+      recordCardHistory(prev);
+      return next;
+    });
+  }, [recordCardHistory]);
 
   const updateCard = useCallback((id: string, position: [number, number, number], rotation: [number, number, number]) => {
-    setCards(prev => prev.map(c => 
-      c.id === id 
-        ? { ...c, position, rotation, locked: isFreezeMode }
-        : c
-    ));
-  }, [isFreezeMode]);
+    setCards(prev => {
+      if (!prev.some(card => card.id === id)) return prev;
+      recordCardHistory(prev);
+      return prev.map(c =>
+        c.id === id
+          ? { ...c, position, rotation, locked: isFreezeMode }
+          : c
+      );
+    });
+  }, [isFreezeMode, recordCardHistory]);
 
   const clearCards = useCallback(() => {
-    setCards([]);
+    setCards(previous => {
+      if (previous.length > 0) recordCardHistory(previous);
+      return [];
+    });
     liveHeightRef.current = 0;
     setLiveHeight(0);
     if (gameMode === GameMode.CHALLENGE) {
@@ -283,7 +310,7 @@ const App: React.FC = () => {
       setChallengeScore(0);
       setChallengeStars(0);
     }
-  }, [gameMode]);
+  }, [gameMode, recordCardHistory]);
 
   // --- LOGIC: SAVE/LOAD ---
   const saveGame = useCallback(() => {
@@ -302,6 +329,7 @@ const App: React.FC = () => {
         const data = JSON.parse(saved);
         if (data.cards) {
           setCards(data.cards);
+          resetCardHistory();
           setIsFreezeMode(!!data.isFreezeMode);
           alert(lang === 'zh' ? '游戏已读取' : 'Game Loaded');
         }
@@ -312,7 +340,7 @@ const App: React.FC = () => {
       console.error(e);
       alert(lang === 'zh' ? '读取存档失败' : 'Failed to load save');
     }
-  }, [lang]);
+  }, [lang, resetCardHistory]);
 
   const toggleFreezeMode = useCallback((forceVal?: boolean) => {
     setIsFreezeMode(prev => {
@@ -329,6 +357,7 @@ const App: React.FC = () => {
 
   const resetChallengeState = useCallback((testDuration: number) => {
     setCards([]);
+    resetCardHistory();
     setDraggingCardId(null);
     setPointerMode(PointerMode.PLACE);
     setIsFreezeMode(false);
@@ -339,7 +368,7 @@ const App: React.FC = () => {
     setLiveHeight(0);
     setChallengeScore(0);
     setChallengeStars(0);
-  }, []);
+  }, [resetCardHistory]);
 
   const resetChallenge = useCallback(() => {
     resetChallengeState(currentLevel.testDuration);
@@ -361,10 +390,11 @@ const App: React.FC = () => {
   const startFreeBuild = useCallback(() => {
     setGameMode(GameMode.FREE);
     setCards([]);
+    resetCardHistory();
     setIsFreezeMode(false);
     setPointerMode(PointerMode.PLACE);
     setAppState(AppState.GAME);
-  }, []);
+  }, [resetCardHistory]);
 
   const startWindTest = useCallback(() => {
     if (
@@ -390,10 +420,27 @@ const App: React.FC = () => {
     toggleFreezeMode
   ]);
 
-  const undoLastCard = useCallback(() => {
-    if (challengePhase !== ChallengePhase.BUILDING) return;
-    setCards(previous => previous.slice(0, -1));
-  }, [challengePhase]);
+  const undoCards = useCallback(() => {
+    if (gameMode === GameMode.CHALLENGE && challengePhase !== ChallengePhase.BUILDING) return;
+    const previous = undoHistoryRef.current.pop();
+    if (!previous) return;
+    setCards(current => {
+      redoHistoryRef.current = [...redoHistoryRef.current.slice(-49), current];
+      return previous;
+    });
+    setDraggingCardId(null);
+  }, [challengePhase, gameMode]);
+
+  const redoCards = useCallback(() => {
+    if (gameMode === GameMode.CHALLENGE && challengePhase !== ChallengePhase.BUILDING) return;
+    const next = redoHistoryRef.current.pop();
+    if (!next) return;
+    setCards(current => {
+      undoHistoryRef.current = [...undoHistoryRef.current.slice(-49), current];
+      return next;
+    });
+    setDraggingCardId(null);
+  }, [challengePhase, gameMode]);
 
   useEffect(() => {
     if (challengePhase !== ChallengePhase.COUNTDOWN) return;
@@ -468,44 +515,70 @@ const App: React.FC = () => {
     interactionEnabled &&
     (gameMode === GameMode.FREE || cards.length < currentLevel.maxCards);
 
-  // --- LOGIC: INPUT ---
+  // --- LOGIC: UNIFIED INPUT ---
   useEffect(() => {
-    // Only handle global shortcuts in GAME mode
-    if (appState !== AppState.GAME) return;
+    setInputSuspended(showSettings || appState !== AppState.GAME);
+  }, [appState, setInputSuspended, showSettings]);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+  const cyclePreset = useCallback((direction: -1 | 1) => {
+    if (!interactionEnabled || presets.length === 0) return;
+    const currentIndex = Math.max(0, presets.findIndex(preset => preset.id === currentPresetId));
+    const nextIndex = (currentIndex + direction + presets.length) % presets.length;
+    setCurrentPresetId(presets[nextIndex].id);
+  }, [currentPresetId, interactionEnabled, presets]);
 
-      const key = e.key.toLowerCase();
+  useInputAction('tool.place', event => {
+    if (event.phase === 'down' && interactionEnabled) setPointerMode(PointerMode.PLACE);
+  });
+  useInputAction('tool.move', event => {
+    if (event.phase === 'down' && interactionEnabled) setPointerMode(PointerMode.MOVE);
+  });
+  useInputAction('tool.delete', event => {
+    if (event.phase === 'down' && interactionEnabled) setPointerMode(PointerMode.DELETE);
+  });
+  useInputAction('mode.togglePrecision', event => {
+    if (event.phase !== 'down' || !interactionEnabled) return;
+    setInteractionMode(previous =>
+      previous === InteractionMode.QUICK ? InteractionMode.PRECISION : InteractionMode.QUICK,
+    );
+  });
+  useInputAction('physics.toggle', event => {
+    if (event.phase === 'down' && interactionEnabled) toggleFreezeMode();
+  });
+  useInputAction('preset.previous', event => {
+    if (event.phase === 'down') cyclePreset(-1);
+  });
+  useInputAction('preset.next', event => {
+    if (event.phase === 'down') cyclePreset(1);
+  });
+  useInputAction('history.undo', event => {
+    if (event.phase === 'down') undoCards();
+  });
+  useInputAction('history.redo', event => {
+    if (event.phase === 'down') redoCards();
+  });
+  useInputAction('action.cancel', event => {
+    if (event.phase !== 'down') return;
+    setDraggingCardId(null);
+    setPointerMode(PointerMode.PLACE);
+  });
 
-      // Check presets first
-      const matchedPreset = presets.find(p => p.shortcut.toLowerCase() === key);
-      if (matchedPreset) {
-        setCurrentPresetId(matchedPreset.id);
-        return;
-      }
-
-      switch(key) {
-        case 'l':
-          if (interactionEnabled) toggleFreezeMode();
-          break;
-        case 'tab': 
-            e.preventDefault();
-            setInteractionMode(prev => prev === InteractionMode.QUICK ? InteractionMode.PRECISION : InteractionMode.QUICK);
-            break;
-        case 'delete':
-        case 'backspace':
-            setPointerMode(PointerMode.DELETE);
-            break;
-        case 'escape':
-            setPointerMode(PointerMode.PLACE);
-            break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleFreezeMode, presets, appState, interactionEnabled]);
+  useEffect(() => {
+    if (inputProfile !== 'legacy') return;
+    const slotActions: InputAction[] = [
+      'preset.slot1', 'preset.slot2', 'preset.slot3', 'preset.slot4', 'preset.slot5',
+      'preset.slot6', 'preset.slot7', 'preset.slot8', 'preset.slot9', 'preset.slot0',
+    ];
+    const cleanups = slotActions.map((action, index) => {
+      const shortcut = index === 9 ? '0' : String(index + 1);
+      return subscribeInput(action, event => {
+        if (event.phase !== 'down' || !interactionEnabled) return;
+        const matchedPreset = presets.find(preset => preset.shortcut === shortcut);
+        if (matchedPreset) setCurrentPresetId(matchedPreset.id);
+      });
+    });
+    return () => cleanups.forEach(cleanup => cleanup());
+  }, [inputProfile, interactionEnabled, presets, subscribeInput]);
 
   // --- RENDER ---
   return (
@@ -533,6 +606,7 @@ const App: React.FC = () => {
             rotationPreset={currentPreset}
             interactionMode={interactionMode} 
             pointerMode={pointerMode}
+            setPointerMode={setPointerMode}
             isFreezeMode={isFreezeMode}
             cards={cards} 
             addCard={addCard} 
@@ -588,7 +662,8 @@ const App: React.FC = () => {
             stars={challengeStars}
             onStartTest={startWindTest}
             onRetryChallenge={resetChallenge}
-            onUndo={undoLastCard}
+            onUndo={undoCards}
+            onRedo={redoCards}
             onNextChallenge={advanceChallenge}
             interactionEnabled={interactionEnabled}
             theme={theme}

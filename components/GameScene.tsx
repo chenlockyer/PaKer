@@ -13,6 +13,7 @@ interface GameSceneProps {
   rotationPreset: RotationPreset;
   interactionMode: InteractionMode;
   pointerMode: PointerMode;
+  setPointerMode: (mode: PointerMode) => void;
   isFreezeMode: boolean;
   cards: CardData[];
   addCard: (card: CardData) => void;
@@ -89,6 +90,7 @@ const GameScene: React.FC<GameSceneProps> = ({
   rotationPreset, 
   interactionMode, 
   pointerMode,
+  setPointerMode,
   isFreezeMode, 
   cards, 
   addCard,
@@ -111,7 +113,12 @@ const GameScene: React.FC<GameSceneProps> = ({
 }) => {
   const background = theme === 'dark' ? '#171d24' : theme === 'warm' ? '#e9e6df' : '#e4e9ef';
   return (
-    <div className="game-canvas" style={{ background }}>
+    <div
+      className="game-canvas"
+      style={{ background }}
+      onContextMenu={event => event.preventDefault()}
+      onAuxClick={event => event.preventDefault()}
+    >
       <SceneErrorBoundary>
         <Canvas
           shadows
@@ -128,6 +135,7 @@ const GameScene: React.FC<GameSceneProps> = ({
               rotationPreset={rotationPreset}
               interactionMode={interactionMode}
               pointerMode={pointerMode}
+              setPointerMode={setPointerMode}
               isFreezeMode={isFreezeMode}
               cards={cards}
               addCard={addCard}
@@ -154,6 +162,11 @@ const GameScene: React.FC<GameSceneProps> = ({
               maxPolarAngle={Math.PI / 2 - 0.1}
               dampingFactor={0.05}
               enabled={!draggingCardId}
+              mouseButtons={{
+                LEFT: -1 as THREE.MOUSE,
+                MIDDLE: THREE.MOUSE.PAN,
+                RIGHT: THREE.MOUSE.ROTATE,
+              }}
             />
           </Suspense>
         </Canvas>

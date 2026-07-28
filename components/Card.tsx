@@ -11,6 +11,7 @@ interface CardProps {
   pointerMode?: PointerMode;
   onRemove?: () => void;
   onDragStart?: () => void;
+  onQuickMove?: () => void;
   isDragging?: boolean;
   interactionEnabled?: boolean;
   windStrength?: number;
@@ -67,6 +68,7 @@ const Card: React.FC<CardProps> = ({
   pointerMode = PointerMode.PLACE, 
   onRemove,
   onDragStart,
+  onQuickMove,
   isDragging = false,
   interactionEnabled = true,
   windStrength = 0,
@@ -207,6 +209,11 @@ const Card: React.FC<CardProps> = ({
     }
   };
 
+  const handleDoubleClick = (e: any) => {
+    e.stopPropagation();
+    if (interactionEnabled && onQuickMove) onQuickMove();
+  };
+
   // Use the original light-reactive paper material so cards retain depth and
   // do not look like flat, self-illuminated white shapes.
   let emissiveColor = 'black';
@@ -230,6 +237,7 @@ const Card: React.FC<CardProps> = ({
       onPointerOver={handlePointerOver}
       onPointerOut={handlePointerOut}
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       onPointerDown={handlePointerDown}
       visible={!isDragging}
     >
