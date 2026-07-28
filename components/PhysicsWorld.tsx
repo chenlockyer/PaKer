@@ -1,11 +1,14 @@
 /// <reference lib="dom" />
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { Physics, usePlane, useSphere } from '@react-three/cannon';
 import { useThree, useFrame, ThreeElements } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import Card from './Card';
+import BlueprintProjection from './BlueprintProjection';
 import {
+  BlueprintGuideProgress,
+  BlueprintGuideState,
   CARD_DIMENSIONS,
   CardData,
   CardSize,
@@ -75,6 +78,10 @@ interface PhysicsWorldProps {
   weightMass: number;
   weightDropHeight: number;
   onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
+  blueprintGuide: BlueprintGuideState | null;
+  onBlueprintPlaceOrigin: (origin: [number, number, number]) => void;
+  onBlueprintProgress: (progress: BlueprintGuideProgress) => void;
+  onBlueprintStepComplete: (playerCardIds: string[]) => void;
 }
 
 const WindVisual = ({ strength }: { strength: number }) => {
@@ -606,6 +613,10 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   weightMass,
   weightDropHeight,
   onCardTransformChange,
+  blueprintGuide,
+  onBlueprintPlaceOrigin,
+  onBlueprintProgress,
+  onBlueprintStepComplete,
 }) => {
   
   const draggingCardData = useMemo(() => cards.find(c => c.id === draggingCardId) || null, [cards, draggingCardId]);
@@ -614,6 +625,19 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   const cardsGroupRef = useRef<THREE.Group>(null);
   const heightSampleTimeRef = useRef(0);
   const measurementBoxRef = useRef(new THREE.Box3());
+  const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
+
+  useEffect(() => {
+    const activeIds = new Set(cards.map(card => card.id));
+    for (const id of liveCardTransformsRef.current.keys()) {
+      if (!activeIds.has(id)) liveCardTransformsRef.current.delete(id);
+    }
+  }, [cards]);
+
+  const handleCardTransformChange = useCallback((id: string, transform: LiveCardTransform) => {
+    liveCardTransformsRef.current.set(id, transform);
+    onCardTransformChange(id, transform);
+  }, [onCardTransformChange]);
 
   useFrame(({ clock }) => {
     if (clock.elapsedTime - heightSampleTimeRef.current < 0.1) return;
@@ -689,6 +713,16 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       />
       
       <Floor meshRef={floorRef} cardSize={cardSize} />
+      {blueprintGuide && (
+        <BlueprintProjection
+          guide={blueprintGuide}
+          cards={cards}
+          liveTransformsRef={liveCardTransformsRef}
+          onPlaceOrigin={onBlueprintPlaceOrigin}
+          onProgress={onBlueprintProgress}
+          onStepComplete={onBlueprintStepComplete}
+        />
+      )}
       {showTargetGuide && <TargetHeightGuide height={targetHeight} />}
       {windStrength > 0 && <WindVisual strength={windStrength} />}
       {testActive && testType === ChallengeTestType.WEIGHT_DROP && (
@@ -716,7 +750,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
               interactionEnabled={interactionEnabled}
               windStrength={windStrength}
               cardSize={cardSize}
-              onTransformChange={onCardTransformChange}
+              onTransformChange={handleCardTransformChange}
             />
           );
         })}

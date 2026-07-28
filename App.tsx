@@ -8,6 +8,10 @@ import SettingsModal from './components/SettingsModal';
 import BlueprintStudio from './components/BlueprintStudio';
 import {
   Blueprint,
+  BlueprintCameraHint,
+  BlueprintGuideProgress,
+  BlueprintGuideState,
+  BlueprintRecordingState,
   BlueprintSnapshot,
   CardData,
   RotationPreset,
@@ -98,6 +102,17 @@ const CHALLENGE_LEVELS: ChallengeLevel[] = [
   }
 ];
 const PRESET_SCHEMA_VERSION = '5';
+const EMPTY_BLUEPRINT_PROGRESS: BlueprintGuideProgress = {
+  matched: 0,
+  near: 0,
+  total: 0,
+  activeTargetId: null,
+  currentStepMatched: 0,
+  currentStepTotal: 0,
+  currentStepPlayerCardIds: [],
+  feedback: 'missing',
+  complete: false,
+};
 const BUILT_IN_PRESET_IDS = new Set([
   'flat',
   'stand_x',
@@ -194,7 +209,20 @@ const App: React.FC = () => {
   const [cards, setCards] = useState<CardData[]>([]);
   const [blueprints, setBlueprints] = useState<Blueprint[]>(loadBlueprints);
   const [blueprintSnapshot, setBlueprintSnapshot] = useState<BlueprintSnapshot | null>(null);
+  const [blueprintGuide, setBlueprintGuide] = useState<BlueprintGuideState | null>(null);
+  const [blueprintRecording, setBlueprintRecording] = useState<BlueprintRecordingState | null>(null);
+  const [requestedBlueprintEditorId, setRequestedBlueprintEditorId] = useState<string | null>(null);
+  const [blueprintProgress, setBlueprintProgress] = useState<BlueprintGuideProgress>(EMPTY_BLUEPRINT_PROGRESS);
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
+  const blueprintCheckpointRef = useRef<CardData[]>([]);
+  const blueprintCheckpointReadyRef = useRef(false);
+  const blueprintFrozenCardIdsRef = useRef(new Set<string>());
+  const blueprintCheckpointFrozenIdsRef = useRef(new Set<string>());
+  const blueprintCheckpointReleasedStepIdsRef = useRef<string[]>([]);
+  const cameraHintRef = useRef<BlueprintCameraHint>({
+    position: [0, 8, 12],
+    target: [0, 0, 0],
+  });
   const undoHistoryRef = useRef<CardData[][]>([]);
   const redoHistoryRef = useRef<CardData[][]>([]);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
@@ -253,6 +281,17 @@ const App: React.FC = () => {
       currentLevel.heightMultiplier *
       10
     ) / 10;
+  const currentBlueprintStep = blueprintGuide
+    ? [...blueprintGuide.blueprint.steps]
+        .sort((left, right) => left.order - right.order)[blueprintGuide.currentStepIndex]
+    : null;
+
+  useEffect(() => {
+    const recommendedPresetId = currentBlueprintStep?.recommendedPresetId;
+    if (recommendedPresetId && presets.some(preset => preset.id === recommendedPresetId)) {
+      setCurrentPresetId(recommendedPresetId);
+    }
+  }, [currentBlueprintStep?.id, currentBlueprintStep?.recommendedPresetId, presets]);
 
   // --- LOGIC: PRESETS ---
   const addPreset = useCallback(() => {
@@ -290,18 +329,32 @@ const App: React.FC = () => {
 
   // --- LOGIC: CARDS ---
   const addCard = useCallback((card: CardData) => {
-    const newCard = { ...card, locked: isFreezeMode };
+    if (
+      gameMode === GameMode.CHALLENGE &&
+      (challengePhase !== ChallengePhase.BUILDING || cards.length >= currentLevel.maxCards)
+    ) {
+      return;
+    }
+    const lockedByBlueprint = !!currentBlueprintStep?.freezeDuringBuild;
+    const newCard = { ...card, locked: isFreezeMode || lockedByBlueprint };
+    if (lockedByBlueprint && !isFreezeMode) blueprintFrozenCardIdsRef.current.add(card.id);
+    setBlueprintRecording(recording => recording
+      ? { ...recording, recordedCardIds: [...recording.recordedCardIds, card.id] }
+      : null
+    );
     setCards(prev => {
-      if (
-        gameMode === GameMode.CHALLENGE &&
-        (challengePhase !== ChallengePhase.BUILDING || prev.length >= currentLevel.maxCards)
-      ) {
-        return prev;
-      }
       recordCardHistory(prev);
       return [...prev, newCard];
     });
-  }, [isFreezeMode, gameMode, challengePhase, currentLevel.maxCards, recordCardHistory]);
+  }, [
+    challengePhase,
+    cards.length,
+    currentBlueprintStep?.freezeDuringBuild,
+    currentLevel.maxCards,
+    gameMode,
+    isFreezeMode,
+    recordCardHistory,
+  ]);
 
   const removeCard = useCallback((id: string) => {
     setCards(prev => {
@@ -313,16 +366,18 @@ const App: React.FC = () => {
   }, [recordCardHistory]);
 
   const updateCard = useCallback((id: string, position: [number, number, number], rotation: [number, number, number]) => {
+    const lockedByBlueprint = !!currentBlueprintStep?.freezeDuringBuild;
+    if (lockedByBlueprint && !isFreezeMode) blueprintFrozenCardIdsRef.current.add(id);
     setCards(prev => {
       if (!prev.some(card => card.id === id)) return prev;
       recordCardHistory(prev);
       return prev.map(c =>
         c.id === id
-          ? { ...c, position, rotation, locked: isFreezeMode }
+          ? { ...c, position, rotation, locked: isFreezeMode || lockedByBlueprint }
           : c
       );
     });
-  }, [isFreezeMode, recordCardHistory]);
+  }, [currentBlueprintStep?.freezeDuringBuild, isFreezeMode, recordCardHistory]);
 
   const clearCards = useCallback(() => {
     setCards(previous => {
@@ -381,6 +436,7 @@ const App: React.FC = () => {
 
   const openBlueprintStudio = useCallback(() => {
     setBlueprintSnapshot(createBlueprintSnapshot(cards, liveCardTransformsRef.current, cardSize));
+    setRequestedBlueprintEditorId(null);
     setShowBlueprintStudio(true);
   }, [cardSize, cards]);
 
@@ -391,6 +447,7 @@ const App: React.FC = () => {
 
   const deleteBlueprint = useCallback((id: string) => {
     setBlueprints(previous => previous.filter(blueprint => blueprint.id !== id));
+    setBlueprintGuide(previous => previous?.blueprint.id === id ? null : previous);
   }, []);
 
   const importBlueprint = useCallback((blueprint: Blueprint) => {
@@ -408,6 +465,220 @@ const App: React.FC = () => {
       return [imported, ...previous];
     });
   }, [lang]);
+
+  const updateBlueprint = useCallback((blueprint: Blueprint) => {
+    setBlueprints(previous => previous.map(item => item.id === blueprint.id ? blueprint : item));
+    setBlueprintGuide(previous =>
+      previous?.blueprint.id === blueprint.id ? { ...previous, blueprint } : previous
+    );
+  }, []);
+
+  const startBlueprintRecording = useCallback(() => {
+    const releaseIds = new Set(blueprintFrozenCardIdsRef.current);
+    if (releaseIds.size > 0) {
+      setCards(current => current.map(card =>
+        releaseIds.has(card.id) ? { ...card, locked: false } : card
+      ));
+    }
+    blueprintFrozenCardIdsRef.current.clear();
+    setBlueprintGuide(null);
+    setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+    setBlueprintRecording({
+      startedAt: new Date().toISOString(),
+      recordedCardIds: [],
+    });
+    setPointerMode(PointerMode.PLACE);
+    setShowBlueprintStudio(false);
+  }, []);
+
+  const cancelBlueprintRecording = useCallback(() => {
+    setBlueprintRecording(null);
+  }, []);
+
+  const finishBlueprintRecording = useCallback(() => {
+    if (!blueprintRecording) return;
+    const recordedIds = new Set(blueprintRecording.recordedCardIds);
+    const recordedCards = cards.filter(card => recordedIds.has(card.id));
+    const snapshot = createBlueprintSnapshot(
+      recordedCards,
+      liveCardTransformsRef.current,
+      cardSize,
+    );
+    setBlueprintRecording(null);
+    setBlueprintSnapshot(snapshot);
+    if (snapshot.cards.length === 0) {
+      setRequestedBlueprintEditorId(null);
+      setShowBlueprintStudio(true);
+      return;
+    }
+
+    const blueprint = createBlueprint({
+      name: lang === 'zh'
+        ? `未命名录制 ${new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+        : `Recorded build ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+      description: lang === 'zh' ? '由搭建过程录制生成的蓝图草稿' : 'Draft generated from a recorded build',
+      author: localStorage.getItem('hoc_blueprint_author') ?? '',
+      category: 'architecture',
+      tags: [lang === 'zh' ? '录制' : 'recorded'],
+      cardSize,
+      snapshot,
+      status: 'draft',
+    });
+    setBlueprints(previous => [blueprint, ...previous]);
+    setRequestedBlueprintEditorId(blueprint.id);
+    setShowBlueprintStudio(true);
+  }, [blueprintRecording, cardSize, cards, lang]);
+
+  const handleCameraHintChange = useCallback((hint: BlueprintCameraHint) => {
+    cameraHintRef.current = hint;
+  }, []);
+
+  const startBlueprintGuide = useCallback((blueprint: Blueprint) => {
+    setCardSize(blueprint.cardSize);
+    setPointerMode(PointerMode.PLACE);
+    setDraggingCardId(null);
+    setBlueprintGuide({
+      blueprint,
+      origin: [0, 0, 0],
+      yaw: 0,
+      placing: true,
+      visible: true,
+      currentStepIndex: 0,
+      releasedStepIds: [],
+    });
+    setBlueprintProgress({
+      ...EMPTY_BLUEPRINT_PROGRESS,
+      total: blueprint.cardCount,
+      currentStepTotal: blueprint.steps[0]?.cardIds.length ?? blueprint.cardCount,
+      activeTargetId: blueprint.steps[0]?.cardIds[0] ?? blueprint.snapshot.cards[0]?.id ?? null,
+    });
+    blueprintFrozenCardIdsRef.current.clear();
+    blueprintCheckpointReadyRef.current = false;
+    blueprintCheckpointReleasedStepIdsRef.current = [];
+    setShowBlueprintStudio(false);
+  }, []);
+
+  const testBlueprintFromStart = useCallback((blueprint: Blueprint) => {
+    if (cards.length > 0) recordCardHistory(cards);
+    setCards([]);
+    liveCardTransformsRef.current.clear();
+    setIsFreezeMode(false);
+    startBlueprintGuide(blueprint);
+  }, [cards, recordCardHistory, startBlueprintGuide]);
+
+  const placeBlueprintOrigin = useCallback((origin: [number, number, number]) => {
+    blueprintCheckpointRef.current = cards.map(card => {
+      const transform = liveCardTransformsRef.current.get(card.id);
+      return transform
+        ? { ...card, position: [...transform.position], rotation: [...transform.rotation] }
+        : { ...card };
+    });
+    blueprintCheckpointReadyRef.current = true;
+    blueprintCheckpointFrozenIdsRef.current = new Set(blueprintFrozenCardIdsRef.current);
+    blueprintCheckpointReleasedStepIdsRef.current = [...(blueprintGuide?.releasedStepIds ?? [])];
+    setBlueprintGuide(previous => previous ? { ...previous, origin, placing: false } : null);
+  }, [blueprintGuide?.releasedStepIds, cards]);
+
+  const handleBlueprintProgress = useCallback((progress: BlueprintGuideProgress) => {
+    setBlueprintProgress(previous => {
+      const unchanged =
+        previous.matched === progress.matched &&
+        previous.near === progress.near &&
+        previous.total === progress.total &&
+        previous.activeTargetId === progress.activeTargetId &&
+        previous.currentStepMatched === progress.currentStepMatched &&
+        previous.currentStepTotal === progress.currentStepTotal &&
+        previous.feedback === progress.feedback &&
+        previous.complete === progress.complete &&
+        previous.currentStepPlayerCardIds.join('|') === progress.currentStepPlayerCardIds.join('|');
+      return unchanged ? previous : progress;
+    });
+  }, []);
+
+  const completeBlueprintStep = useCallback(() => {
+    if (!blueprintGuide) return;
+    const orderedSteps = [...blueprintGuide.blueprint.steps]
+      .sort((left, right) => left.order - right.order);
+    const step = orderedSteps[blueprintGuide.currentStepIndex];
+
+    if (step?.releasePhysicsAfterStep && !blueprintGuide.releasedStepIds.includes(step.id)) {
+      const releaseIds = new Set(blueprintFrozenCardIdsRef.current);
+      setCards(current => current.map(card =>
+        releaseIds.has(card.id) ? { ...card, locked: false } : card
+      ));
+      blueprintFrozenCardIdsRef.current.clear();
+      setBlueprintGuide(previous => previous ? {
+        ...previous,
+        releasedStepIds: previous.releasedStepIds.includes(step.id)
+          ? previous.releasedStepIds
+          : [...previous.releasedStepIds, step.id],
+      } : null);
+      return;
+    }
+
+    if (blueprintGuide.currentStepIndex >= orderedSteps.length - 1) return;
+
+    blueprintCheckpointRef.current = cards.map(card => {
+      const transform = liveCardTransformsRef.current.get(card.id);
+      return transform
+        ? { ...card, position: [...transform.position], rotation: [...transform.rotation] }
+        : { ...card };
+    });
+    blueprintCheckpointReadyRef.current = true;
+    blueprintCheckpointFrozenIdsRef.current = new Set(blueprintFrozenCardIdsRef.current);
+    blueprintCheckpointReleasedStepIdsRef.current = [...blueprintGuide.releasedStepIds];
+    setBlueprintGuide(previous => previous ? {
+      ...previous,
+      currentStepIndex: Math.min(previous.currentStepIndex + 1, orderedSteps.length - 1),
+    } : null);
+  }, [blueprintGuide, cards]);
+
+  const restoreBlueprintStep = useCallback(() => {
+    if (!blueprintGuide || !blueprintCheckpointReadyRef.current) return;
+    blueprintFrozenCardIdsRef.current = new Set(blueprintCheckpointFrozenIdsRef.current);
+    setCards(current => {
+      recordCardHistory(current);
+      return blueprintCheckpointRef.current.map(card => ({ ...card }));
+    });
+    setBlueprintGuide(previous => previous ? {
+      ...previous,
+      releasedStepIds: [...blueprintCheckpointReleasedStepIdsRef.current],
+    } : null);
+    setDraggingCardId(null);
+  }, [blueprintGuide, recordCardHistory]);
+
+  const rotateBlueprintGuide = useCallback((direction: -1 | 1) => {
+    setBlueprintGuide(previous => previous ? {
+      ...previous,
+      yaw: previous.yaw + direction * Math.PI / 2,
+    } : null);
+  }, []);
+
+  const relocateBlueprintGuide = useCallback(() => {
+    setPointerMode(PointerMode.PLACE);
+    setDraggingCardId(null);
+    setBlueprintGuide(previous => previous ? { ...previous, placing: true, visible: true } : null);
+  }, []);
+
+  const toggleBlueprintGuide = useCallback(() => {
+    setBlueprintGuide(previous => previous ? { ...previous, visible: !previous.visible } : null);
+  }, []);
+
+  const stopBlueprintGuide = useCallback(() => {
+    const releaseIds = new Set(blueprintFrozenCardIdsRef.current);
+    if (releaseIds.size > 0) {
+      setCards(current => current.map(card =>
+        releaseIds.has(card.id) ? { ...card, locked: false } : card
+      ));
+    }
+    setBlueprintGuide(null);
+    setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+    blueprintCheckpointRef.current = [];
+    blueprintCheckpointReadyRef.current = false;
+    blueprintCheckpointFrozenIdsRef.current.clear();
+    blueprintCheckpointReleasedStepIdsRef.current = [];
+    blueprintFrozenCardIdsRef.current.clear();
+  }, []);
 
   const toggleFreezeMode = useCallback((forceVal?: boolean) => {
     setIsFreezeMode(prev => {
@@ -580,6 +851,7 @@ const App: React.FC = () => {
       : 0;
   const placementEnabled =
     interactionEnabled &&
+    !blueprintGuide?.placing &&
     (gameMode === GameMode.FREE || cards.length < currentLevel.maxCards);
 
   // --- LOGIC: UNIFIED INPUT ---
@@ -694,6 +966,11 @@ const App: React.FC = () => {
             weightDropHeight={challengeTargetHeight + (currentLevel.weightDropOffset ?? 4)}
             theme={theme}
             onCardTransformChange={handleCardTransformChange}
+            blueprintGuide={blueprintGuide}
+            onBlueprintPlaceOrigin={placeBlueprintOrigin}
+            onBlueprintProgress={handleBlueprintProgress}
+            onBlueprintStepComplete={completeBlueprintStep}
+            onCameraHintChange={handleCameraHintChange}
           />
           
           <UIOverlay 
@@ -710,6 +987,16 @@ const App: React.FC = () => {
             onSave={saveGame}
             onLoad={loadGame}
             onOpenBlueprint={openBlueprintStudio}
+            blueprintGuide={blueprintGuide}
+            blueprintProgress={blueprintProgress}
+            onRotateBlueprint={rotateBlueprintGuide}
+            onRelocateBlueprint={relocateBlueprintGuide}
+            onToggleBlueprint={toggleBlueprintGuide}
+            onStopBlueprint={stopBlueprintGuide}
+            onRestoreBlueprintStep={restoreBlueprintStep}
+            blueprintRecording={blueprintRecording}
+            onFinishBlueprintRecording={finishBlueprintRecording}
+            onCancelBlueprintRecording={cancelBlueprintRecording}
             cardCount={cards.length}
             lang={lang}
             onOpenSettings={() => setShowSettings(true)}
@@ -763,10 +1050,18 @@ const App: React.FC = () => {
         cardSize={cardSize}
         snapshot={blueprintSnapshot}
         blueprints={blueprints}
+        presets={presets}
+        currentCameraHint={cameraHintRef.current}
         onRefreshSnapshot={captureBlueprintSnapshot}
         onSave={saveBlueprint}
         onDelete={deleteBlueprint}
         onImport={importBlueprint}
+        onUse={startBlueprintGuide}
+        onTest={testBlueprintFromStart}
+        onUpdate={updateBlueprint}
+        onStartRecording={startBlueprintRecording}
+        requestedEditorBlueprintId={requestedBlueprintEditorId}
+        onEditorRequestHandled={() => setRequestedBlueprintEditorId(null)}
         onClose={() => setShowBlueprintStudio(false)}
       />
     </div>

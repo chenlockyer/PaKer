@@ -1,12 +1,23 @@
 
 /// <reference types="vite/client" />
 import React, { Suspense, useEffect } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Sky, Stats } from '@react-three/drei';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import PhysicsWorld from './PhysicsWorld';
-import { AppTheme, CardData, CardSize, LiveCardTransform, RotationPreset, InteractionMode, PointerMode } from '../types';
+import {
+  AppTheme,
+  BlueprintGuideProgress,
+  BlueprintGuideState,
+  BlueprintCameraHint,
+  CardData,
+  CardSize,
+  LiveCardTransform,
+  RotationPreset,
+  InteractionMode,
+  PointerMode,
+} from '../types';
 import { ChallengeTestType } from '../types';
 
 interface GameSceneProps {
@@ -34,6 +45,11 @@ interface GameSceneProps {
   weightDropHeight: number;
   theme: AppTheme;
   onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
+  blueprintGuide: BlueprintGuideState | null;
+  onBlueprintPlaceOrigin: (origin: [number, number, number]) => void;
+  onBlueprintProgress: (progress: BlueprintGuideProgress) => void;
+  onBlueprintStepComplete: (playerCardIds: string[]) => void;
+  onCameraHintChange: (hint: BlueprintCameraHint) => void;
 }
 
 class SceneErrorBoundary extends React.Component<
@@ -87,6 +103,63 @@ const LocalEnvironment = () => {
   return null;
 };
 
+const CameraBridge = ({
+  guide,
+  onCameraHintChange,
+}: {
+  guide: BlueprintGuideState | null;
+  onCameraHintChange: (hint: BlueprintCameraHint) => void;
+}) => {
+  const { camera, controls } = useThree();
+  const sampleTimeRef = React.useRef(0);
+  const lastStepRef = React.useRef<string | null>(null);
+
+  useFrame(({ clock }) => {
+    const orderedSteps = guide
+      ? [...guide.blueprint.steps].sort((left, right) => left.order - right.order)
+      : [];
+    const activeStep = guide ? orderedSteps[guide.currentStepIndex] : undefined;
+    const cameraHintKey = activeStep && guide
+      ? `${activeStep.id}:${guide.origin.join(',')}:${guide.yaw}`
+      : null;
+
+    if (activeStep?.cameraHint && cameraHintKey && lastStepRef.current !== cameraHintKey) {
+      const orbitControls = controls as { target?: THREE.Vector3; update?: () => void } | null;
+      if (orbitControls?.target) {
+        const yaw = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 1, 0),
+          guide?.yaw ?? 0,
+        );
+        const origin = new THREE.Vector3(...(guide?.origin ?? [0, 0, 0]));
+        const cameraPosition = new THREE.Vector3(...activeStep.cameraHint.position)
+          .applyQuaternion(yaw)
+          .add(origin);
+        const cameraTarget = new THREE.Vector3(...activeStep.cameraHint.target)
+          .applyQuaternion(yaw)
+          .add(origin);
+        camera.position.copy(cameraPosition);
+        orbitControls.target.copy(cameraTarget);
+        orbitControls.update?.();
+        lastStepRef.current = cameraHintKey;
+      }
+    } else if (!activeStep) {
+      lastStepRef.current = null;
+    }
+
+    if (clock.elapsedTime - sampleTimeRef.current < 0.25) return;
+    sampleTimeRef.current = clock.elapsedTime;
+    const orbitTarget = (controls as { target?: THREE.Vector3 } | null)?.target;
+    onCameraHintChange({
+      position: [camera.position.x, camera.position.y, camera.position.z],
+      target: orbitTarget
+        ? [orbitTarget.x, orbitTarget.y, orbitTarget.z]
+        : [0, 0, 0],
+    });
+  });
+
+  return null;
+};
+
 const GameScene: React.FC<GameSceneProps> = ({ 
   rotationPreset, 
   interactionMode, 
@@ -112,6 +185,11 @@ const GameScene: React.FC<GameSceneProps> = ({
   weightDropHeight,
   theme,
   onCardTransformChange,
+  blueprintGuide,
+  onBlueprintPlaceOrigin,
+  onBlueprintProgress,
+  onBlueprintStepComplete,
+  onCameraHintChange,
 }) => {
   const background = theme === 'dark' ? '#171d24' : theme === 'warm' ? '#e9e6df' : '#e4e9ef';
   return (
@@ -132,6 +210,7 @@ const GameScene: React.FC<GameSceneProps> = ({
           <Suspense fallback={null}>
             <Sky sunPosition={[100, 20, 100]} />
             <LocalEnvironment />
+            <CameraBridge guide={blueprintGuide} onCameraHintChange={onCameraHintChange} />
 
             <PhysicsWorld
               rotationPreset={rotationPreset}
@@ -157,6 +236,10 @@ const GameScene: React.FC<GameSceneProps> = ({
               weightMass={weightMass}
               weightDropHeight={weightDropHeight}
               onCardTransformChange={onCardTransformChange}
+              blueprintGuide={blueprintGuide}
+              onBlueprintPlaceOrigin={onBlueprintPlaceOrigin}
+              onBlueprintProgress={onBlueprintProgress}
+              onBlueprintStepComplete={onBlueprintStepComplete}
             />
 
             <OrbitControls

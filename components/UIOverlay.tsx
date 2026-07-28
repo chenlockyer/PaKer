@@ -2,6 +2,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppTheme,
+  BlueprintGuideProgress,
+  BlueprintGuideState,
+  BlueprintRecordingState,
   RotationPreset,
   InteractionMode,
   PointerMode,
@@ -27,6 +30,16 @@ interface UIOverlayProps {
   onSave: () => void;
   onLoad: () => void;
   onOpenBlueprint: () => void;
+  blueprintGuide: BlueprintGuideState | null;
+  blueprintProgress: BlueprintGuideProgress;
+  onRotateBlueprint: (direction: -1 | 1) => void;
+  onRelocateBlueprint: () => void;
+  onToggleBlueprint: () => void;
+  onStopBlueprint: () => void;
+  onRestoreBlueprintStep: () => void;
+  blueprintRecording: BlueprintRecordingState | null;
+  onFinishBlueprintRecording: () => void;
+  onCancelBlueprintRecording: () => void;
   cardCount: number;
   lang: 'en' | 'zh';
   onOpenSettings: () => void;
@@ -88,6 +101,16 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onSave,
   onLoad,
   onOpenBlueprint,
+  blueprintGuide,
+  blueprintProgress,
+  onRotateBlueprint,
+  onRelocateBlueprint,
+  onToggleBlueprint,
+  onStopBlueprint,
+  onRestoreBlueprintStep,
+  blueprintRecording,
+  onFinishBlueprintRecording,
+  onCancelBlueprintRecording,
   cardCount,
   lang,
   onOpenSettings,
@@ -154,6 +177,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         controls: '当前操作',
         camera: '右键旋转镜头 · 中键平移 · 滚轮缩放',
         blueprint: '蓝图',
+        blueprintGuide: '蓝图搭建',
       }
     : {
         project: 'CARD ARCHITECT',
@@ -183,6 +207,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         controls: 'CURRENT CONTROLS',
         camera: 'Right drag orbit · Middle drag pan · Wheel zoom',
         blueprint: 'Blueprint',
+        blueprintGuide: 'BLUEPRINT BUILD',
       };
 
   const groupedPresets = useMemo(() => {
@@ -190,6 +215,12 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
     presets.forEach(preset => groups[getPresetGroup(preset)].push(preset));
     return groups;
   }, [presets]);
+  const blueprintSteps = blueprintGuide
+    ? [...blueprintGuide.blueprint.steps].sort((left, right) => left.order - right.order)
+    : [];
+  const activeBlueprintStep = blueprintGuide
+    ? blueprintSteps[blueprintGuide.currentStepIndex]
+    : null;
 
   return (
     <div className="game-ui">
@@ -233,6 +264,21 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           >
             {lang === 'zh' ? '知道了' : 'Got it'}
           </button>
+        </section>
+      )}
+
+      {blueprintRecording && (
+        <section className="blueprint-recording-bar">
+          <span className="record-dot" />
+          <div>
+            <strong>{lang === 'zh' ? '正在录制蓝图搭建' : 'Recording blueprint build'}</strong>
+            <small>
+              {blueprintRecording.recordedCardIds.length}
+              {lang === 'zh' ? ' 张新牌已记录；完成后将自动生成步骤' : ' new cards recorded; steps will be generated automatically'}
+            </small>
+          </div>
+          <button onClick={onCancelBlueprintRecording}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
+          <button className="primary-button" onClick={onFinishBlueprintRecording}>{lang === 'zh' ? '完成录制' : 'Finish'}</button>
         </section>
       )}
 
@@ -327,6 +373,124 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           onNext={onNextChallenge}
           hasNext={levelIndex < levelCount - 1}
         />
+      )}
+
+      {blueprintGuide && (
+        <aside className={`blueprint-guide-panel ${gameMode === GameMode.CHALLENGE ? 'with-challenge' : ''}`}>
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">{labels.blueprintGuide}</span>
+              <strong>{blueprintGuide.blueprint.name}</strong>
+            </div>
+            <button
+              className="panel-toggle"
+              onClick={onToggleBlueprint}
+              aria-label={blueprintGuide.visible
+                ? (lang === 'zh' ? '隐藏投影' : 'Hide projection')
+                : (lang === 'zh' ? '显示投影' : 'Show projection')}
+            >
+              {blueprintGuide.visible ? '−' : '+'}
+            </button>
+          </div>
+
+          {activeBlueprintStep && (
+            <div className="blueprint-step-copy">
+              <span>
+                {lang === 'zh' ? '步骤' : 'Step'} {blueprintGuide.currentStepIndex + 1} / {blueprintSteps.length}
+              </span>
+              <strong>{activeBlueprintStep.title}</strong>
+              {activeBlueprintStep.description && <p>{activeBlueprintStep.description}</p>}
+              {activeBlueprintStep.recommendedPresetId && (
+                <small>
+                  {lang === 'zh' ? '推荐预设：' : 'Recommended preset: '}
+                  {t[presets.find(preset => preset.id === activeBlueprintStep.recommendedPresetId)?.name as keyof typeof t]
+                    || presets.find(preset => preset.id === activeBlueprintStep.recommendedPresetId)?.name
+                    || activeBlueprintStep.recommendedPresetId}
+                </small>
+              )}
+            </div>
+          )}
+
+          {blueprintGuide.placing ? (
+            <div className="blueprint-placement-callout">
+              <span className="blueprint-anchor-symbol">⌖</span>
+              <div>
+                <strong>{lang === 'zh' ? '选择蓝图原点' : 'Choose blueprint origin'}</strong>
+                <p>{lang === 'zh' ? '移动鼠标预览，点击地面确定位置' : 'Move to preview, then click the floor to place'}</p>
+              </div>
+            </div>
+          ) : blueprintProgress.complete ? (
+            <div className="blueprint-complete">
+              <span>✓</span>
+              <div>
+                <strong>{lang === 'zh' ? '结构搭建完成' : 'Structure complete'}</strong>
+                <p>{lang === 'zh' ? '所有卡牌均已匹配蓝图目标' : 'Every card matches its blueprint target'}</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="blueprint-progress-summary">
+                <strong>{blueprintProgress.matched}<small> / {blueprintProgress.total}</small></strong>
+                <div>
+                  <span>{lang === 'zh' ? '已准确放置' : 'Cards matched'}</span>
+                  <p>
+                    {blueprintProgress.near > 0
+                      ? (lang === 'zh' ? `${blueprintProgress.near} 张接近目标，请继续微调` : `${blueprintProgress.near} near target`)
+                      : (lang === 'zh' ? '蓝色为当前目标牌' : 'Blue marks the current target')}
+                  </p>
+                </div>
+              </div>
+              <div className="progress-track blueprint-progress-track">
+                <i style={{ width: `${blueprintProgress.total > 0 ? blueprintProgress.matched / blueprintProgress.total * 100 : 0}%` }} />
+              </div>
+            </>
+          )}
+
+          <div className="blueprint-guide-meta">
+            <span>
+              {lang === 'zh' ? '方向' : 'Rotation'}
+              <b>{((Math.round(blueprintGuide.yaw * 180 / Math.PI) % 360) + 360) % 360}°</b>
+            </span>
+            <span>
+              {lang === 'zh' ? '规格' : 'Size'}
+              <b>{blueprintGuide.blueprint.cardSize === 'BRIDGE' ? (lang === 'zh' ? '桥牌' : 'Bridge') : (lang === 'zh' ? '扑克' : 'Poker')}</b>
+            </span>
+          </div>
+
+          {!blueprintGuide.placing && !blueprintProgress.complete && (
+            <div className={`blueprint-feedback is-${blueprintProgress.feedback}`}>
+              <span>
+                {lang === 'zh'
+                  ? ({
+                      correct: '本步骤已匹配，正在验证稳定性',
+                      missing: '请放置蓝色高亮的目标牌',
+                      position: '位置接近，请向目标轮廓微调',
+                      height: '高度不正确，请调整放置层级',
+                      rotation: '位置正确，请继续调整旋转角度',
+                      groundedEdge: '接地边不正确，请切换长边或短边接地',
+                    } as const)[blueprintProgress.feedback]
+                  : ({
+                      correct: 'Step matched; checking stability',
+                      missing: 'Place the blue highlighted target card',
+                      position: 'Close: adjust the card toward the target',
+                      height: 'Height is outside the target tolerance',
+                      rotation: 'Position is good; adjust rotation',
+                      groundedEdge: 'Wrong grounded edge; switch long or short edge',
+                    } as const)[blueprintProgress.feedback]}
+              </span>
+              <button onClick={onRestoreBlueprintStep}>
+                {lang === 'zh' ? '恢复本步骤' : 'Restore step'}
+              </button>
+            </div>
+          )}
+
+          <div className="blueprint-guide-actions">
+            <button onClick={() => onRotateBlueprint(-1)}>↶ <span>{lang === 'zh' ? '左转 90°' : 'Left 90°'}</span></button>
+            <button onClick={() => onRotateBlueprint(1)}>↷ <span>{lang === 'zh' ? '右转 90°' : 'Right 90°'}</span></button>
+            <button onClick={onRelocateBlueprint}>⌖ <span>{lang === 'zh' ? '重新定位' : 'Relocate'}</span></button>
+            <button className="danger-text" onClick={onStopBlueprint}>× <span>{lang === 'zh' ? '结束蓝图' : 'Stop'}</span></button>
+          </div>
+        </aside>
       )}
 
       <div className="placement-mode">

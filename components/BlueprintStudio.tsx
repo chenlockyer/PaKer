@@ -3,15 +3,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import {
   Blueprint,
+  BlueprintCameraHint,
   BlueprintCategory,
   BlueprintSnapshot,
   CardSize,
+  RotationPreset,
 } from '../types';
 import {
   CreateBlueprintInput,
   downloadBlueprint,
   parseBlueprintFile,
 } from '../services/blueprintService';
+import BlueprintEditor from './BlueprintEditor';
 
 interface BlueprintStudioProps {
   isOpen: boolean;
@@ -19,10 +22,18 @@ interface BlueprintStudioProps {
   cardSize: CardSize;
   snapshot: BlueprintSnapshot | null;
   blueprints: Blueprint[];
+  presets: RotationPreset[];
+  currentCameraHint: BlueprintCameraHint;
   onRefreshSnapshot: () => void;
   onSave: (input: CreateBlueprintInput) => void;
   onDelete: (id: string) => void;
   onImport: (blueprint: Blueprint) => void;
+  onUse: (blueprint: Blueprint) => void;
+  onTest: (blueprint: Blueprint) => void;
+  onUpdate: (blueprint: Blueprint) => void;
+  onStartRecording: () => void;
+  requestedEditorBlueprintId: string | null;
+  onEditorRequestHandled: () => void;
   onClose: () => void;
 }
 
@@ -54,6 +65,15 @@ const dateLabel = (iso: string, lang: 'zh' | 'en') => {
   } catch {
     return iso;
   }
+};
+
+const isBlueprintRunnable = (blueprint: Blueprint) => {
+  const assigned = new Set(blueprint.steps.flatMap(step => step.cardIds));
+  return (
+    blueprint.steps.length > 0 &&
+    blueprint.steps.every(step => step.cardIds.length > 0) &&
+    blueprint.snapshot.cards.every(card => assigned.has(card.id))
+  );
 };
 
 const BlueprintPreview = ({
@@ -136,13 +156,22 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
   cardSize,
   snapshot,
   blueprints,
+  presets,
+  currentCameraHint,
   onRefreshSnapshot,
   onSave,
   onDelete,
   onImport,
+  onUse,
+  onTest,
+  onUpdate,
+  onStartRecording,
+  requestedEditorBlueprintId,
+  onEditorRequestHandled,
   onClose,
 }) => {
-  const [tab, setTab] = useState<'create' | 'library'>('create');
+  const [tab, setTab] = useState<'create' | 'library' | 'edit'>('create');
+  const [editingBlueprintId, setEditingBlueprintId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [author, setAuthor] = useState(() => localStorage.getItem('hoc_blueprint_author') ?? '');
@@ -155,6 +184,13 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
     if (!isOpen) return;
     setNotice('');
   }, [isOpen, snapshot?.capturedAt]);
+
+  useEffect(() => {
+    if (!isOpen || !requestedEditorBlueprintId) return;
+    setEditingBlueprintId(requestedEditorBlueprintId);
+    setTab('edit');
+    onEditorRequestHandled();
+  }, [isOpen, onEditorRequestHandled, requestedEditorBlueprintId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -172,6 +208,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
         title: '蓝图工作台',
         subtitle: '从物理世界捕获卡牌的当前状态',
         create: '创建蓝图',
+        record: '录制搭建过程',
         library: `蓝图库 ${blueprints.length}`,
         structure: '当前结构',
         live: '实时物理快照',
@@ -196,7 +233,9 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
         emptyLibrary: '蓝图库还是空的',
         emptyHint: '从当前建筑创建第一份蓝图，之后可以导出并分享给其他玩家。',
         export: '导出',
+        use: '开始搭建',
         remove: '删除',
+        edit: '编辑步骤',
         import: '导入蓝图',
         imported: '蓝图已导入',
         invalidImport: '导入失败：文件不是有效的 PaKer 蓝图',
@@ -207,6 +246,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
         title: 'Blueprint Studio',
         subtitle: 'Capture the cards as they exist in the physics world now',
         create: 'Create',
+        record: 'Record build',
         library: `Library ${blueprints.length}`,
         structure: 'Current structure',
         live: 'Live physics snapshot',
@@ -231,7 +271,9 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
         emptyLibrary: 'Your blueprint library is empty',
         emptyHint: 'Create one from the current structure, then export it to share.',
         export: 'Export',
+        use: 'Build',
         remove: 'Delete',
+        edit: 'Edit steps',
         import: 'Import blueprint',
         imported: 'Blueprint imported',
         invalidImport: 'Import failed: this is not a valid PaKer blueprint',
@@ -278,6 +320,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
   const sizeText = snapshot
     ? snapshot.bounds.size.map(value => value.toFixed(2)).join(' × ')
     : '—';
+  const editingBlueprint = blueprints.find(blueprint => blueprint.id === editingBlueprintId) ?? null;
 
   return (
     <div className="modal-layer blueprint-layer" role="dialog" aria-modal="true">
@@ -297,6 +340,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
           <button className={tab === 'library' ? 'is-active' : ''} onClick={() => setTab('library')}>
             {copy.library}
           </button>
+          {tab === 'edit' && <button className="is-active">{lang === 'zh' ? '步骤编辑器' : 'Step editor'}</button>}
           <button className="blueprint-import" onClick={() => importRef.current?.click()}>
             {copy.import}
           </button>
@@ -305,7 +349,17 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
 
         {notice && <div className="blueprint-notice">{notice}</div>}
 
-        {tab === 'create' ? (
+        {tab === 'edit' && editingBlueprint ? (
+          <BlueprintEditor
+            blueprint={editingBlueprint}
+            presets={presets}
+            lang={lang}
+            currentCameraHint={currentCameraHint}
+            onChange={onUpdate}
+            onTest={onTest}
+            onBack={() => setTab('library')}
+          />
+        ) : tab === 'create' ? (
           <div className="blueprint-create">
             <section className="blueprint-capture-panel">
               <div className="blueprint-section-heading">
@@ -362,6 +416,11 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
               <button className="primary-button blueprint-save" disabled={!snapshot || snapshot.cards.length === 0}>
                 {copy.save}
               </button>
+              <button type="button" className="blueprint-record-button" onClick={onStartRecording}>
+                <span className="record-dot" />
+                <strong>{copy.record}</strong>
+                <small>{lang === 'zh' ? '逐张记录后续放置的卡牌并自动生成步骤' : 'Record each new card and generate steps automatically'}</small>
+              </button>
             </form>
           </div>
         ) : (
@@ -385,6 +444,11 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
                       <div className="blueprint-card-meta">
                         <span>{blueprint.cardCount} {copy.count}</span>
                         <span>{blueprint.author || (lang === 'zh' ? '匿名' : 'Anonymous')}</span>
+                        <span className={blueprint.status === 'published' ? 'is-published' : ''}>
+                          {blueprint.status === 'published'
+                            ? (lang === 'zh' ? '已发布' : 'Published')
+                            : (lang === 'zh' ? '草稿' : 'Draft')}
+                        </span>
                         <span>{dateLabel(blueprint.createdAt, lang)}</span>
                       </div>
                       {blueprint.tags.length > 0 && (
@@ -392,6 +456,24 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
                       )}
                     </div>
                     <footer>
+                      <button
+                        className="blueprint-use"
+                        onClick={() => onUse(blueprint)}
+                        disabled={!isBlueprintRunnable(blueprint)}
+                        title={!isBlueprintRunnable(blueprint)
+                          ? (lang === 'zh' ? '请先在步骤编辑器中完成卡牌分组' : 'Finish card grouping in the step editor')
+                          : undefined}
+                      >
+                        {copy.use}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingBlueprintId(blueprint.id);
+                          setTab('edit');
+                        }}
+                      >
+                        {copy.edit}
+                      </button>
                       <button onClick={() => downloadBlueprint(blueprint)}>{copy.export}</button>
                       <button
                         className="danger-text"

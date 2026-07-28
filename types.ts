@@ -45,8 +45,35 @@ export interface BlueprintSnapshot {
   cards: BlueprintCardData[];
 }
 
+export interface BlueprintTolerance {
+  horizontal: number;
+  height: number;
+  rotationDegrees: number;
+  nearHorizontal: number;
+  nearHeight: number;
+  nearRotationDegrees: number;
+}
+
+export interface BlueprintCameraHint {
+  position: [number, number, number];
+  target: [number, number, number];
+}
+
+export interface BlueprintStep {
+  id: string;
+  order: number;
+  title: string;
+  description: string;
+  cardIds: string[];
+  freezeDuringBuild: boolean;
+  releasePhysicsAfterStep: boolean;
+  stableSeconds: number;
+  recommendedPresetId?: string;
+  cameraHint?: BlueprintCameraHint;
+}
+
 export interface Blueprint {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   name: string;
   description: string;
@@ -63,7 +90,56 @@ export interface Blueprint {
   };
   cardCount: number;
   coordinateSpace: 'structure-local';
+  status: 'draft' | 'published';
+  tolerances: BlueprintTolerance;
+  steps: BlueprintStep[];
   snapshot: BlueprintSnapshot;
+}
+
+export interface BlueprintGuideState {
+  blueprint: Blueprint;
+  origin: [number, number, number];
+  yaw: number;
+  placing: boolean;
+  visible: boolean;
+  currentStepIndex: number;
+  releasedStepIds: string[];
+}
+
+export type BlueprintMatchStatus = 'matched' | 'near' | 'missing';
+export type BlueprintFeedbackReason =
+  | 'correct'
+  | 'missing'
+  | 'position'
+  | 'height'
+  | 'rotation'
+  | 'groundedEdge';
+
+export interface BlueprintTargetMatch {
+  targetId: string;
+  status: BlueprintMatchStatus;
+  playerCardId: string | null;
+  positionError: number | null;
+  angleErrorDegrees: number | null;
+  groundedEdgeMatch: boolean | null;
+  feedback: BlueprintFeedbackReason;
+}
+
+export interface BlueprintGuideProgress {
+  matched: number;
+  near: number;
+  total: number;
+  activeTargetId: string | null;
+  currentStepMatched: number;
+  currentStepTotal: number;
+  currentStepPlayerCardIds: string[];
+  feedback: BlueprintFeedbackReason;
+  complete: boolean;
+}
+
+export interface BlueprintRecordingState {
+  startedAt: string;
+  recordedCardIds: string[];
 }
 
 export interface RotationPreset {
