@@ -11,6 +11,7 @@ const temporaryDirectory = await mkdtemp(join(tmpdir(), 'paker-blueprint-test-')
 const bundlePath = join(temporaryDirectory, 'blueprint-service.mjs');
   const editorBundlePath = join(temporaryDirectory, 'blueprint-editor.cjs');
   const tutorialBundlePath = join(temporaryDirectory, 'official-tutorials.mjs');
+  const levelBundlePath = join(temporaryDirectory, 'level-service.mjs');
 const require = createRequire(import.meta.url);
 
 try {
@@ -121,6 +122,40 @@ try {
   });
 
   await build({
+    entryPoints: ['services/levelService.ts'],
+    outfile: levelBundlePath,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    logLevel: 'silent',
+  });
+  const levelService = await import(`${pathToFileURL(levelBundlePath).href}?v=${Date.now()}`);
+  const sourceBlueprint = tutorials.OFFICIAL_TUTORIAL_BLUEPRINTS[0];
+  const level = levelService.createLevel({
+    name: 'A-frame level',
+    description: 'Self-contained',
+    author: 'test',
+    origin: 'official',
+    tags: ['test'],
+    blueprint: sourceBlueprint,
+    maxCards: 3,
+    minCards: 2,
+    heightMultiplier: 1,
+    testDuration: 4,
+    testType: 'STABILITY',
+  });
+  assert.notEqual(level.embeddedBlueprint, sourceBlueprint);
+  assert.notEqual(level.embeddedBlueprint.id, sourceBlueprint.id);
+  assert.equal(level.sourceBlueprintId, sourceBlueprint.id);
+  assert.equal(levelService.validateLevel(level).id, level.id);
+  sourceBlueprint.name = 'Source changed';
+  assert.equal(level.embeddedBlueprint.name, '第 1 课：A 字架');
+  assert.throws(() => levelService.validateLevel({
+    ...level,
+    embeddedBlueprint: { ...level.embeddedBlueprint, name: 'Tampered' },
+  }));
+
+  await build({
     stdin: {
       contents: `
         import React from 'react';
@@ -153,7 +188,7 @@ try {
   assert.match(editorMarkup, /卡牌分组/);
   assert.match(editorMarkup, /从头测试/);
 
-  console.log('Blueprint self-test passed: capture, migration, matching, editor, and four official P4 tutorials.');
+  console.log('Blueprint self-test passed: capture, tutorials, embedded level snapshot, checksum, matching, and editor.');
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

@@ -203,6 +203,26 @@ export interface ChallengeLevel {
   weightDropOffset?: number;
 }
 
+export type LevelOrigin = 'official' | 'player';
+
+export interface LevelDefinition extends ChallengeLevel {
+  schemaVersion: 1;
+  origin: LevelOrigin;
+  author: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  status: 'draft' | 'published';
+  sourceBlueprintId: string;
+  embeddedBlueprint: Blueprint;
+  blueprintChecksum: string;
+  scoring: {
+    baseScore: number;
+    unusedCardBonus: number;
+    heightBonus: number;
+  };
+}
+
 export enum CardSize {
   POKER = 'POKER',
   BRIDGE = 'BRIDGE'

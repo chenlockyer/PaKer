@@ -638,6 +638,31 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .tutorial-number { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font-weight: 800; }
 .blueprint-tutorial-card.is-complete .tutorial-number { background: var(--success); color: white; }
 
+.level-layer { z-index: 65; }
+.level-window { width: min(1060px, calc(100vw - 36px)); height: min(820px, calc(100vh - 36px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-raised); box-shadow: var(--shadow-lg); }
+.level-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px; overflow: auto; }
+.level-form section { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.level-form section:nth-of-type(3) { grid-column: 1 / -1; }
+.level-form label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.level-form input, .level-form select, .level-form textarea { width: 100%; min-height: 36px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); color: var(--ink); }
+.level-form textarea { min-height: 82px; resize: vertical; }
+.level-number-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+.level-blueprint-note { padding: 12px; border-left: 3px solid var(--accent); border-radius: 4px; background: var(--accent-soft); }
+.level-blueprint-note p { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.level-save { grid-column: 1 / -1; min-height: 42px; }
+.level-library { display: grid; gap: 10px; padding: 20px; overflow: auto; }
+.level-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.level-card h3 { margin: 4px 0 6px; }
+.level-card p { margin: 0 0 7px; color: var(--muted); font-size: 11px; }
+.level-card small { color: var(--muted); }
+.level-card-actions { display: flex; gap: 6px; }
+@media (max-width: 760px) {
+  .level-form { grid-template-columns: 1fr; }
+  .level-form section:nth-of-type(3) { grid-column: auto; }
+  .level-number-grid { grid-template-columns: 1fr 1fr; }
+  .level-card { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 1080px) {
   .menu-screen { grid-template-columns: 1fr 390px; }
   .menu-card-house { opacity: .7; transform: scale(.8) rotate(-2deg); transform-origin: bottom right; }

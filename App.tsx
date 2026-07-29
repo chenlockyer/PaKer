@@ -6,6 +6,7 @@ import UIOverlay from './components/UIOverlay';
 import MainMenu from './components/MainMenu';
 import SettingsModal from './components/SettingsModal';
 import BlueprintStudio from './components/BlueprintStudio';
+import LevelStudio from './components/LevelStudio';
 import {
   Blueprint,
   BlueprintAssistance,
@@ -27,6 +28,7 @@ import {
   AppTheme,
   CARD_DIMENSIONS,
   LiveCardTransform,
+  LevelDefinition,
 } from './types';
 import { translations } from './utils/translations';
 import {
@@ -48,6 +50,12 @@ import {
   OFFICIAL_TUTORIAL_BLUEPRINTS,
   saveTutorialProgress,
 } from './services/officialBlueprints';
+import {
+  CreateLevelInput,
+  createLevel,
+  loadLevels,
+  persistLevels,
+} from './services/levelService';
 
 const DEG_10 = Math.PI / 18;
 const CHALLENGE_LEVELS: ChallengeLevel[] = [
@@ -179,6 +187,7 @@ const App: React.FC = () => {
   const [gameMode, setGameMode] = useState<GameMode>(GameMode.CHALLENGE);
   const [showSettings, setShowSettings] = useState(false);
   const [showBlueprintStudio, setShowBlueprintStudio] = useState(false);
+  const [showLevelStudio, setShowLevelStudio] = useState(false);
   const [lang, setLang] = useState<'en' | 'zh'>('zh');
   const [theme, setTheme] = useState<AppTheme>(() => {
     const savedTheme = localStorage.getItem('hoc_theme');
@@ -220,6 +229,8 @@ const App: React.FC = () => {
   const [blueprintRecording, setBlueprintRecording] = useState<BlueprintRecordingState | null>(null);
   const [requestedBlueprintEditorId, setRequestedBlueprintEditorId] = useState<string | null>(null);
   const [blueprintProgress, setBlueprintProgress] = useState<BlueprintGuideProgress>(EMPTY_BLUEPRINT_PROGRESS);
+  const [customLevels, setCustomLevels] = useState<LevelDefinition[]>(loadLevels);
+  const [activeCustomLevel, setActiveCustomLevel] = useState<LevelDefinition | null>(null);
   const [completedTutorials, setCompletedTutorials] = useState<Set<string>>(loadTutorialProgress);
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
   const blueprintCheckpointRef = useRef<CardData[]>([]);
@@ -271,6 +282,10 @@ const App: React.FC = () => {
   }, [blueprints]);
 
   useEffect(() => {
+    persistLevels(customLevels);
+  }, [customLevels]);
+
+  useEffect(() => {
     const activeIds = new Set(cards.map(card => card.id));
     for (const id of liveCardTransformsRef.current.keys()) {
       if (!activeIds.has(id)) liveCardTransformsRef.current.delete(id);
@@ -278,7 +293,7 @@ const App: React.FC = () => {
   }, [cards]);
 
   const currentPreset = presets.find(p => p.id === currentPresetId) || presets[0];
-  const currentLevel = CHALLENGE_LEVELS[currentLevelIndex];
+  const currentLevel = activeCustomLevel ?? CHALLENGE_LEVELS[currentLevelIndex];
   const challengeTargetHeight =
     Math.floor(
       CARD_DIMENSIONS[cardSize].width *
@@ -684,6 +699,7 @@ const App: React.FC = () => {
   }, [currentLevel.testDuration, resetChallengeState]);
 
   const startChallenge = useCallback(() => {
+    setActiveCustomLevel(null);
     setGameMode(GameMode.CHALLENGE);
     setCurrentLevelIndex(0);
     resetChallengeState(CHALLENGE_LEVELS[0].testDuration);
@@ -691,10 +707,35 @@ const App: React.FC = () => {
   }, [resetChallengeState]);
 
   const advanceChallenge = useCallback(() => {
+    if (activeCustomLevel) return;
     const nextLevelIndex = Math.min(currentLevelIndex + 1, CHALLENGE_LEVELS.length - 1);
     setCurrentLevelIndex(nextLevelIndex);
     resetChallengeState(CHALLENGE_LEVELS[nextLevelIndex].testDuration);
-  }, [currentLevelIndex, resetChallengeState]);
+  }, [activeCustomLevel, currentLevelIndex, resetChallengeState]);
+
+  const saveCustomLevel = useCallback((input: CreateLevelInput) => {
+    setCustomLevels(previous => [createLevel(input), ...previous]);
+  }, []);
+
+  const importCustomLevel = useCallback((level: LevelDefinition) => {
+    setCustomLevels(previous => {
+      const imported = previous.some(item => item.id === level.id)
+        ? { ...level, id: `level_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}` }
+        : level;
+      return [imported, ...previous];
+    });
+  }, []);
+
+  const playtestCustomLevel = useCallback((level: LevelDefinition) => {
+    setActiveCustomLevel(level);
+    setGameMode(GameMode.CHALLENGE);
+    setCurrentLevelIndex(0);
+    setCardSize(level.embeddedBlueprint.cardSize);
+    resetChallengeState(level.testDuration);
+    setShowLevelStudio(false);
+    setAppState(AppState.GAME);
+    startBlueprintGuide(level.embeddedBlueprint);
+  }, [resetChallengeState, startBlueprintGuide]);
 
   const startFreeBuild = useCallback(() => {
     setGameMode(GameMode.FREE);
@@ -775,10 +816,13 @@ const App: React.FC = () => {
         const survived = liveHeightRef.current >= challengeTargetHeight * 0.72;
         if (survived) {
           const unusedCards = currentLevel.maxCards - cards.length;
+          const scoring = activeCustomLevel
+            ? activeCustomLevel.scoring
+            : { baseScore: currentLevel.testDuration * 50, unusedCardBonus: 50, heightBonus: 100 };
           const score = Math.round(
-            liveHeightRef.current * 100 +
-            unusedCards * 50 +
-            currentLevel.testDuration * 50
+            scoring.baseScore +
+            liveHeightRef.current * scoring.heightBonus +
+            unusedCards * scoring.unusedCardBonus
           );
           const stars =
             1 +
@@ -799,6 +843,7 @@ const App: React.FC = () => {
     challengePhase,
     cards.length,
     challengeTargetHeight,
+    activeCustomLevel,
     currentLevel.maxCards,
     currentLevel.testDuration
   ]);
@@ -827,8 +872,8 @@ const App: React.FC = () => {
 
   // --- LOGIC: UNIFIED INPUT ---
   useEffect(() => {
-    setInputSuspended(showSettings || showBlueprintStudio || appState !== AppState.GAME);
-  }, [appState, setInputSuspended, showBlueprintStudio, showSettings]);
+    setInputSuspended(showSettings || showBlueprintStudio || showLevelStudio || appState !== AppState.GAME);
+  }, [appState, setInputSuspended, showBlueprintStudio, showLevelStudio, showSettings]);
 
   const cyclePreset = useCallback((direction: -1 | 1) => {
     if (!interactionEnabled || presets.length === 0) return;
@@ -904,6 +949,7 @@ const App: React.FC = () => {
               setAppState(AppState.GAME);
            }}
            onSettings={() => setShowSettings(true)}
+           onOpenLevelStudio={() => setShowLevelStudio(true)}
            hasSave={!!localStorage.getItem('hoc_save')}
            lang={lang}
            theme={theme}
@@ -978,7 +1024,7 @@ const App: React.FC = () => {
             maxCards={currentLevel.maxCards}
             minCards={currentLevel.minCards}
             levelIndex={currentLevelIndex}
-            levelCount={CHALLENGE_LEVELS.length}
+            levelCount={activeCustomLevel ? 1 : CHALLENGE_LEVELS.length}
             levelName={currentLevel.name[lang]}
             levelDescription={currentLevel.description[lang]}
             testType={currentLevel.testType}
@@ -1037,6 +1083,17 @@ const App: React.FC = () => {
         requestedEditorBlueprintId={requestedBlueprintEditorId}
         onEditorRequestHandled={() => setRequestedBlueprintEditorId(null)}
         onClose={() => setShowBlueprintStudio(false)}
+      />
+      <LevelStudio
+        isOpen={showLevelStudio}
+        lang={lang}
+        blueprints={[...OFFICIAL_TUTORIAL_BLUEPRINTS, ...blueprints]}
+        levels={customLevels}
+        onSave={saveCustomLevel}
+        onDelete={id => setCustomLevels(previous => previous.filter(level => level.id !== id))}
+        onImport={importCustomLevel}
+        onPlay={playtestCustomLevel}
+        onClose={() => setShowLevelStudio(false)}
       />
     </div>
   );

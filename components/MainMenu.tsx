@@ -8,6 +8,7 @@ interface MainMenuProps {
   onStartFree: () => void;
   onLoad: () => void;
   onSettings: () => void;
+  onOpenLevelStudio: () => void;
   hasSave: boolean;
   lang: 'en' | 'zh';
   theme: AppTheme;
@@ -26,6 +27,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   onStartFree,
   onLoad,
   onSettings,
+  onOpenLevelStudio,
   hasSave,
   lang,
 }) => {
@@ -108,6 +110,13 @@ const MainMenu: React.FC<MainMenuProps> = ({
             <small>{hasSave ? t.continueGame : (lang === 'zh' ? '暂无存档' : 'No saved build')}</small>
           </span>
           <b aria-hidden="true">03</b>
+        </button>
+        <button className="menu-action" onClick={onOpenLevelStudio}>
+          <span>
+            <strong>{lang === 'zh' ? '关卡编辑器' : 'Level Studio'}</strong>
+            <small>{lang === 'zh' ? '创建、测试与导出自定义关卡' : 'Create, playtest, and export levels'}</small>
+          </span>
+          <b aria-hidden="true">04</b>
         </button>
 
         <div className="menu-secondary">
