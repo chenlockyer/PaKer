@@ -655,6 +655,35 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .level-card p { margin: 0 0 7px; color: var(--muted); font-size: 11px; }
 .level-card small { color: var(--muted); }
 .level-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+
+/* Readability pass: the earlier compact UI used 7–9px labels extensively,
+   which becomes tiring at desktop viewing distance. */
+.top-actions button, .challenge-description, .metric-row { font-size: 12px; }
+.mode-chip, .preset-group h3, .height-hint, .precision-panel p { font-size: 11px; }
+.preset-name, .tool-dock strong { font-size: 12px; }
+.tool-dock small, .context-controls, .control-coach p { font-size: 10px; }
+.preset-wheel-center strong, .preset-wheel > button small { font-size: 10px; }
+.blueprint-tabs button, .blueprint-section-heading button { font-size: 11px; }
+.blueprint-form label > span, .blueprint-card footer button { font-size: 11px; }
+.blueprint-record-button strong, .blueprint-card p { font-size: 11px; }
+.blueprint-record-button small, .blueprint-card-meta, .blueprint-tags i { font-size: 10px; }
+.blueprint-editor-toolbar button, .blueprint-timeline-heading button { font-size: 11px; }
+.blueprint-editor-toolbar span, .blueprint-step-list > button small { font-size: 10px; }
+.blueprint-step-list > button strong, .blueprint-step-editor > header button { font-size: 11px; }
+.blueprint-card-grouping > p, .blueprint-editor-fields label > span,
+.blueprint-tolerance-grid label > span, .blueprint-camera-editor button,
+.blueprint-tolerance-editor button, .blueprint-editor-footer button { font-size: 10px; }
+.blueprint-step-copy > span, .blueprint-step-copy small,
+.blueprint-progress-summary p, .blueprint-guide-meta span,
+.blueprint-feedback, .blueprint-feedback button,
+.blueprint-guide-actions button span { font-size: 10px; }
+.blueprint-step-copy strong, .blueprint-placement-callout strong,
+.blueprint-complete strong, .blueprint-progress-summary span { font-size: 12px; }
+.blueprint-step-copy p, .blueprint-placement-callout p,
+.blueprint-complete p, .blueprint-guide-meta b { font-size: 11px; }
+.blueprint-assistance button { font-size: 11px; }
+.level-form label, .level-blueprint-note p, .level-stage-row strong { font-size: 12px; }
+.level-card p, .level-card small, .level-card-actions button { font-size: 12px; }
 @media (max-width: 760px) {
   .level-form { grid-template-columns: 1fr; }
   .level-form section:nth-of-type(3) { grid-column: auto; }

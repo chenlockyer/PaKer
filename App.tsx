@@ -550,7 +550,7 @@ const App: React.FC = () => {
     cameraHintRef.current = hint;
   }, []);
 
-  const startBlueprintGuide = useCallback((blueprint: Blueprint) => {
+  const startBlueprintGuide = useCallback((blueprint: Blueprint, autoPlaceAtCenter = false) => {
     setCardSize(blueprint.cardSize);
     setPointerMode(PointerMode.PLACE);
     setDraggingCardId(null);
@@ -558,7 +558,7 @@ const App: React.FC = () => {
       blueprint,
       origin: [0, 0, 0],
       yaw: 0,
-      placing: true,
+      placing: !autoPlaceAtCenter,
       visible: true,
       currentStepIndex: 0,
       assistance: isOfficialTutorial(blueprint) ? 'full' : 'step',
@@ -569,7 +569,8 @@ const App: React.FC = () => {
       currentStepTotal: blueprint.steps[0]?.cardIds.length ?? blueprint.cardCount,
       activeTargetId: blueprint.steps[0]?.cardIds[0] ?? blueprint.snapshot.cards[0]?.id ?? null,
     });
-    blueprintCheckpointReadyRef.current = false;
+    blueprintCheckpointRef.current = [];
+    blueprintCheckpointReadyRef.current = autoPlaceAtCenter;
     setShowBlueprintStudio(false);
   }, []);
 
@@ -747,7 +748,7 @@ const App: React.FC = () => {
     resetChallengeState(level.testDuration);
     setShowLevelStudio(false);
     setAppState(AppState.GAME);
-    startBlueprintGuide(level.embeddedBlueprint);
+    startBlueprintGuide(level.embeddedBlueprint, true);
   }, [resetChallengeState, startBlueprintGuide]);
 
   const startFreeBuild = useCallback(() => {
