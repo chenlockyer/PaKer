@@ -28,6 +28,26 @@ const getCardGeometry = (cardSize: CardSize) => {
 
   const { width, height, thickness } = CARD_DIMENSIONS[cardSize];
   const geometry = new THREE.BoxGeometry(width, thickness, height);
+
+  // BoxGeometry normally creates one render group per face (six draw calls).
+  // Reorder its index so the four thin edges share one contiguous material
+  // group, leaving one group each for the front and back artwork.
+  const sourceIndex = geometry.index;
+  if (sourceIndex) {
+    const reordered = new Uint16Array(sourceIndex.count);
+    const faceOrder = [0, 1, 4, 5, 2, 3];
+    faceOrder.forEach((face, outputFace) => {
+      for (let index = 0; index < 6; index += 1) {
+        reordered[outputFace * 6 + index] = sourceIndex.getX(face * 6 + index);
+      }
+    });
+    geometry.setIndex(new THREE.BufferAttribute(reordered, 1));
+    geometry.clearGroups();
+    geometry.addGroup(0, 24, 0);
+    geometry.addGroup(24, 6, 1);
+    geometry.addGroup(30, 6, 2);
+  }
+
   geometryCache.set(cardSize, geometry);
   return geometry;
 };
@@ -101,30 +121,31 @@ const Card: React.FC<CardProps> = ({
   }));
   const physicsPositionRef = React.useRef<[number, number, number]>(data.position);
   const physicsRotationRef = React.useRef<[number, number, number]>(data.rotation);
+  const transformSampleTimeRef = React.useRef(0);
 
   useEffect(
     () => api.position.subscribe(position => {
       physicsPositionRef.current = position;
-      onTransformChange?.(data.id, {
-        position,
-        rotation: physicsRotationRef.current,
-      });
     }),
-    [api.position, data.id, onTransformChange]
+    [api.position]
   );
 
   useEffect(
     () => api.rotation.subscribe(rotation => {
       physicsRotationRef.current = rotation;
-      onTransformChange?.(data.id, {
-        position: physicsPositionRef.current,
-        rotation,
-      });
     }),
-    [api.rotation, data.id, onTransformChange]
+    [api.rotation]
   );
 
   useFrame(({ clock }) => {
+    if (clock.elapsedTime - transformSampleTimeRef.current >= 0.05) {
+      transformSampleTimeRef.current = clock.elapsedTime;
+      onTransformChange?.(data.id, {
+        position: physicsPositionRef.current,
+        rotation: physicsRotationRef.current,
+      });
+    }
+
     if (windStrength <= 0 || data.locked || isDragging) return;
 
     const gust = windStrength * (0.8 + Math.sin(clock.elapsedTime * 2.4) * 0.2);
@@ -260,12 +281,9 @@ const Card: React.FC<CardProps> = ({
       visible={!isDragging}
     >
       <primitive object={geometry} attach="geometry" />
-      <meshStandardMaterial map={texture} attach="material-2" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
-      <meshStandardMaterial color="#2563eb" attach="material-3" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
       <meshStandardMaterial color="#f0f0f0" attach="material-0" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
-      <meshStandardMaterial color="#f0f0f0" attach="material-1" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
-      <meshStandardMaterial color="#f0f0f0" attach="material-4" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
-      <meshStandardMaterial color="#f0f0f0" attach="material-5" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
+      <meshStandardMaterial map={texture} attach="material-1" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
+      <meshStandardMaterial color="#2563eb" attach="material-2" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
     </mesh>
   );
 };

@@ -2,7 +2,7 @@
 /// <reference types="vite/client" />
 import React, { Suspense, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Sky, Stats } from '@react-three/drei';
+import { OrbitControls, PerformanceMonitor, Sky, Stats } from '@react-three/drei';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import PhysicsWorld from './PhysicsWorld';
@@ -231,6 +231,15 @@ const GameScene: React.FC<GameSceneProps> = ({
   onCameraHintChange,
 }) => {
   const background = theme === 'dark' ? '#171d24' : theme === 'warm' ? '#e9e6df' : '#e4e9ef';
+  const nativeDpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  const minimumDpr = Math.min(nativeDpr, 0.75);
+  const [renderDpr, setRenderDpr] = React.useState(nativeDpr);
+
+  useEffect(() => {
+    const nextNativeDpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    setRenderDpr(nextNativeDpr);
+  }, []);
+
   return (
     <div
       className="game-canvas"
@@ -241,11 +250,22 @@ const GameScene: React.FC<GameSceneProps> = ({
       <SceneErrorBoundary>
         <Canvas
           shadows
-          dpr={[1, 1.5]}
+          dpr={renderDpr}
           gl={{ powerPreference: 'high-performance', antialias: true }}
           camera={{ position: [0, 8, 12], fov: 45 }}
         >
           {import.meta.env.DEV && <Stats />}
+          <PerformanceMonitor
+            factor={1}
+            step={0.15}
+            bounds={() => [57, 60]}
+            flipflops={5}
+            onChange={({ factor }) => {
+              const nextDpr = minimumDpr + (nativeDpr - minimumDpr) * factor;
+              setRenderDpr(Number(nextDpr.toFixed(2)));
+            }}
+            onFallback={() => setRenderDpr(minimumDpr)}
+          />
           <Suspense fallback={null}>
             <Sky sunPosition={[100, 20, 100]} />
             <LocalEnvironment />
