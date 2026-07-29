@@ -331,7 +331,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             <strong>{lang === 'zh' ? '正在录制蓝图搭建' : 'Recording blueprint build'}</strong>
             <small>
               {blueprintRecording.recordedCardIds.length}
-              {lang === 'zh' ? ' 张新牌已记录；完成后将自动生成步骤' : ' new cards recorded; steps will be generated automatically'}
+              {lang === 'zh'
+                ? ' 张新牌已记录；步骤和推荐预设将自动生成'
+                : ' new cards recorded; steps and recommended presets will be generated automatically'}
             </small>
           </div>
           <button onClick={onCancelBlueprintRecording}>{lang === 'zh' ? '取消' : 'Cancel'}</button>

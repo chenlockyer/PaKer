@@ -58,6 +58,11 @@ try {
   assert.equal(blueprint.steps[0].freezeDuringBuild, false);
   assert.equal(blueprint.steps[0].releasePhysicsAfterStep, false);
 
+  const recordedSteps = service.createRecordedBlueprintSteps(snapshot, {
+    'card-1': 'long_edge_forward_10',
+  });
+  assert.equal(recordedSteps[0].recommendedPresetId, 'long_edge_forward_10');
+
   const guide = {
     blueprint,
     origin: [4, 0, -2],

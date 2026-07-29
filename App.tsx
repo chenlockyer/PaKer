@@ -42,6 +42,7 @@ import {
   CreateBlueprintInput,
   createBlueprint,
   createBlueprintSnapshot,
+  createRecordedBlueprintSteps,
   loadBlueprints,
   persistBlueprints,
 } from './services/blueprintService';
@@ -404,7 +405,14 @@ const App: React.FC = () => {
     }
     const newCard = { ...card, locked: isFreezeMode };
     setBlueprintRecording(recording => recording
-      ? { ...recording, recordedCardIds: [...recording.recordedCardIds, card.id] }
+      ? {
+          ...recording,
+          recordedCardIds: [...recording.recordedCardIds, card.id],
+          presetIdsByCardId: {
+            ...recording.presetIdsByCardId,
+            [card.id]: currentPresetId,
+          },
+        }
       : null
     );
     setCards(prev => {
@@ -415,6 +423,7 @@ const App: React.FC = () => {
     challengePhase,
     cards.length,
     currentLevel.maxCards,
+    currentPresetId,
     gameMode,
     isFreezeMode,
     recordCardHistory,
@@ -541,6 +550,7 @@ const App: React.FC = () => {
     setBlueprintRecording({
       startedAt: new Date().toISOString(),
       recordedCardIds: [],
+      presetIdsByCardId: {},
     });
     setPointerMode(PointerMode.PLACE);
     setShowBlueprintStudio(false);
@@ -578,6 +588,10 @@ const App: React.FC = () => {
       cardSize,
       snapshot,
       status: 'draft',
+      steps: createRecordedBlueprintSteps(
+        snapshot,
+        blueprintRecording.presetIdsByCardId,
+      ),
     });
     setBlueprints(previous => [blueprint, ...previous]);
     setRequestedBlueprintEditorId(blueprint.id);

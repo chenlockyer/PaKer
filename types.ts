@@ -143,6 +143,7 @@ export interface BlueprintGuideProgress {
 export interface BlueprintRecordingState {
   startedAt: string;
   recordedCardIds: string[];
+  presetIdsByCardId: Record<string, string>;
 }
 
 export interface RotationPreset {

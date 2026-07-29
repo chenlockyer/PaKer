@@ -130,6 +130,20 @@ export const createDefaultBlueprintSteps = (
     }))
 );
 
+export const createRecordedBlueprintSteps = (
+  snapshot: BlueprintSnapshot,
+  presetIdsByCardId: Readonly<Record<string, string>>,
+): BlueprintStep[] => (
+  createDefaultBlueprintSteps(snapshot).map(step => {
+    const recommendedPresetId = step.cardIds
+      .map(cardId => presetIdsByCardId[cardId])
+      .find(Boolean);
+    return recommendedPresetId
+      ? { ...step, recommendedPresetId }
+      : step;
+  })
+);
+
 export const createBlueprint = (input: CreateBlueprintInput): Blueprint => {
   const now = new Date().toISOString();
   const dimensions = CARD_DIMENSIONS[input.cardSize];
