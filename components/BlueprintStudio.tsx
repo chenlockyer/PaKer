@@ -6,6 +6,7 @@ import {
   BlueprintCameraHint,
   BlueprintCategory,
   BlueprintSnapshot,
+  CARD_DIMENSIONS,
   CardSize,
   RotationPreset,
 } from '../types';
@@ -78,24 +79,32 @@ const isBlueprintRunnable = (blueprint: Blueprint) => {
 
 const BlueprintPreview = ({
   snapshot,
+  cardDimensions = CARD_DIMENSIONS[CardSize.BRIDGE],
   compact = false,
 }: {
   snapshot: BlueprintSnapshot;
+  cardDimensions?: { width: number; height: number; thickness: number };
   compact?: boolean;
 }) => {
-  const segments = useMemo(() => snapshot.cards.map(card => {
+  const projectedCards = useMemo(() => snapshot.cards.map(card => {
     const quaternion = new THREE.Quaternion(...card.quaternion);
     const center = new THREE.Vector3(...card.position);
-    const longAxis = new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion);
-    const halfLength = 1.4;
+    const halfWidth = new THREE.Vector3(cardDimensions.width / 2, 0, 0)
+      .applyQuaternion(quaternion);
+    const halfHeight = new THREE.Vector3(0, 0, cardDimensions.height / 2)
+      .applyQuaternion(quaternion);
+    const corners = [
+      center.clone().sub(halfWidth).sub(halfHeight),
+      center.clone().add(halfWidth).sub(halfHeight),
+      center.clone().add(halfWidth).add(halfHeight),
+      center.clone().sub(halfWidth).add(halfHeight),
+    ];
     return {
       id: card.id,
       color: card.color === 'red' ? '#c83b49' : '#27313d',
-      start: center.clone().addScaledVector(longAxis, -halfLength),
-      end: center.clone().addScaledVector(longAxis, halfLength),
-      center,
+      corners,
     };
-  }), [snapshot]);
+  }), [cardDimensions.height, cardDimensions.width, snapshot]);
 
   const width = Math.max(snapshot.bounds.size[0], 1);
   const height = Math.max(snapshot.bounds.size[1], 1);
@@ -108,16 +117,15 @@ const BlueprintPreview = ({
         <span>{compact ? '' : 'TOP'}</span>
         <svg viewBox={`${-width / 2 - padding} ${-depth / 2 - padding} ${width + padding * 2} ${depth + padding * 2}`}>
           <g transform="scale(1,-1)">
-            {segments.map(segment => (
-              <line
-                key={segment.id}
-                x1={segment.start.x}
-                y1={segment.start.z}
-                x2={segment.end.x}
-                y2={segment.end.z}
-                stroke={segment.color}
-                strokeWidth={compact ? 0.08 : 0.045}
-                strokeLinecap="round"
+            {projectedCards.map(card => (
+              <polygon
+                key={card.id}
+                points={card.corners.map(point => `${point.x},${point.z}`).join(' ')}
+                fill={card.color}
+                fillOpacity={compact ? 0.16 : 0.12}
+                stroke={card.color}
+                strokeWidth={compact ? 1.8 : 2.2}
+                strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
               />
             ))}
@@ -129,16 +137,15 @@ const BlueprintPreview = ({
           <span>FRONT</span>
           <svg viewBox={`${-width / 2 - padding} ${-padding} ${width + padding * 2} ${height + padding * 2}`}>
             <g transform={`translate(0, ${height}) scale(1,-1)`}>
-              {segments.map(segment => (
-                <line
-                  key={segment.id}
-                  x1={segment.start.x}
-                  y1={segment.start.y}
-                  x2={segment.end.x}
-                  y2={segment.end.y}
-                  stroke={segment.color}
-                  strokeWidth={0.045}
-                  strokeLinecap="round"
+              {projectedCards.map(card => (
+                <polygon
+                  key={card.id}
+                  points={card.corners.map(point => `${point.x},${point.y}`).join(' ')}
+                  fill={card.color}
+                  fillOpacity={0.12}
+                  stroke={card.color}
+                  strokeWidth={2.2}
+                  strokeLinejoin="round"
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
@@ -235,7 +242,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
         export: '导出',
         use: '开始搭建',
         remove: '删除',
-        edit: '编辑步骤',
+        edit: '编辑蓝图',
         import: '导入蓝图',
         imported: '蓝图已导入',
         invalidImport: '导入失败：文件不是有效的 PaKer 蓝图',
@@ -273,7 +280,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
         export: 'Export',
         use: 'Build',
         remove: 'Delete',
-        edit: 'Edit steps',
+        edit: 'Edit blueprint',
         import: 'Import blueprint',
         imported: 'Blueprint imported',
         invalidImport: 'Import failed: this is not a valid PaKer blueprint',
@@ -372,7 +379,10 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
 
               {snapshot && snapshot.cards.length > 0 ? (
                 <>
-                  <BlueprintPreview snapshot={snapshot} />
+                  <BlueprintPreview
+                    snapshot={snapshot}
+                    cardDimensions={CARD_DIMENSIONS[cardSize]}
+                  />
                   <dl className="blueprint-metrics">
                     <div><dt>{copy.count}</dt><dd>{snapshot.cards.length}</dd></div>
                     <div><dt>{copy.size}</dt><dd>{sizeText}</dd></div>
@@ -436,7 +446,11 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
               <div className="blueprint-library-grid">
                 {blueprints.map(blueprint => (
                   <article className="blueprint-card" key={blueprint.id}>
-                    <BlueprintPreview snapshot={blueprint.snapshot} compact />
+                    <BlueprintPreview
+                      snapshot={blueprint.snapshot}
+                      cardDimensions={blueprint.cardDimensions}
+                      compact
+                    />
                     <div className="blueprint-card-body">
                       <span className="panel-kicker">{categoryLabels[blueprint.category][lang]}</span>
                       <h3>{blueprint.name}</h3>

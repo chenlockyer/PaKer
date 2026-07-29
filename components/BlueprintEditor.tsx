@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Blueprint,
   BlueprintCameraHint,
+  BlueprintCategory,
   BlueprintStep,
   RotationPreset,
 } from '../types';
@@ -18,6 +19,13 @@ interface BlueprintEditorProps {
 }
 
 const stepId = () => `step_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+const BLUEPRINT_CATEGORIES: BlueprintCategory[] = [
+  'architecture',
+  'tutorial',
+  'battle',
+  'challenge',
+  'experiment',
+];
 
 const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
   blueprint,
@@ -33,12 +41,17 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
     [blueprint.steps],
   );
   const [selectedStepId, setSelectedStepId] = useState(orderedSteps[0]?.id ?? '');
+  const [tagsText, setTagsText] = useState(blueprint.tags.join(', '));
 
   useEffect(() => {
     if (!orderedSteps.some(step => step.id === selectedStepId)) {
       setSelectedStepId(orderedSteps[0]?.id ?? '');
     }
   }, [orderedSteps, selectedStepId]);
+
+  useEffect(() => {
+    setTagsText(blueprint.tags.join(', '));
+  }, [blueprint.id]);
 
   const selectedStep = orderedSteps.find(step => step.id === selectedStepId) ?? orderedSteps[0];
   const copy = lang === 'zh'
@@ -97,6 +110,30 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
         moveUp: 'Move up',
         moveDown: 'Move down',
         hint: 'Click a card to move it into the selected step. Each card belongs to one step.',
+        blueprintInfo: 'BLUEPRINT INFORMATION',
+        blueprintName: 'Blueprint name',
+        blueprintDescription: 'Blueprint description',
+        author: 'Author',
+        category: 'Category',
+        tags: 'Tags',
+        autoSave: 'Changes are saved automatically',
+        cardSummary: 'Structure',
+      };
+
+  const categoryLabels: Record<BlueprintCategory, string> = lang === 'zh'
+    ? {
+        architecture: '建筑结构',
+        tutorial: '教学蓝图',
+        battle: '对战建筑',
+        challenge: '挑战方案',
+        experiment: '实验结构',
+      }
+    : {
+        architecture: 'Structure',
+        tutorial: 'Tutorial',
+        battle: 'Battle',
+        challenge: 'Challenge',
+        experiment: 'Experiment',
       };
 
   const updateBlueprint = (changes: Partial<Blueprint>) => {
@@ -206,6 +243,7 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
   const selectedIndex = orderedSteps.findIndex(step => step.id === selectedStep.id);
   const assignedCardIds = new Set(orderedSteps.flatMap(step => step.cardIds));
   const canPublish =
+    blueprint.name.trim().length > 0 &&
     orderedSteps.every(step => step.cardIds.length > 0 && step.title.trim().length > 0) &&
     blueprint.snapshot.cards.every(card => assignedCardIds.has(card.id));
 
@@ -273,6 +311,81 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
         </header>
 
         <div className="blueprint-editor-scroll">
+          <section className="blueprint-metadata-editor">
+            <header>
+              <div>
+                <span className="panel-kicker">
+                  {lang === 'zh' ? '蓝图信息' : 'BLUEPRINT INFORMATION'}
+                </span>
+                <strong>{blueprint.name || (lang === 'zh' ? '未命名蓝图' : 'Untitled blueprint')}</strong>
+              </div>
+              <small>{lang === 'zh' ? '修改后自动保存' : 'Changes are saved automatically'}</small>
+            </header>
+            <div className="blueprint-metadata-grid">
+              <label className="is-wide">
+                <span>{lang === 'zh' ? '蓝图名称' : 'Blueprint name'}</span>
+                <input
+                  value={blueprint.name}
+                  onChange={event => updateBlueprint({ name: event.target.value })}
+                  maxLength={60}
+                />
+              </label>
+              <label>
+                <span>{lang === 'zh' ? '作者' : 'Author'}</span>
+                <input
+                  value={blueprint.author}
+                  onChange={event => updateBlueprint({ author: event.target.value })}
+                  maxLength={30}
+                />
+              </label>
+              <label>
+                <span>{lang === 'zh' ? '蓝图类型' : 'Category'}</span>
+                <select
+                  value={blueprint.category}
+                  onChange={event => updateBlueprint({
+                    category: event.target.value as BlueprintCategory,
+                  })}
+                >
+                  {BLUEPRINT_CATEGORIES.map(category => (
+                    <option key={category} value={category}>{categoryLabels[category]}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="is-wide">
+                <span>{lang === 'zh' ? '标签（用逗号分隔）' : 'Tags (comma separated)'}</span>
+                <input
+                  value={tagsText}
+                  onChange={event => {
+                    const value = event.target.value;
+                    setTagsText(value);
+                    updateBlueprint({
+                      tags: value
+                        .split(/[,，]/)
+                        .map(tag => tag.trim())
+                        .filter(Boolean)
+                        .slice(0, 8),
+                    });
+                  }}
+                  maxLength={100}
+                />
+              </label>
+              <label className="is-wide">
+                <span>{lang === 'zh' ? '蓝图说明' : 'Blueprint description'}</span>
+                <textarea
+                  value={blueprint.description}
+                  onChange={event => updateBlueprint({ description: event.target.value })}
+                  maxLength={500}
+                />
+              </label>
+            </div>
+            <div className="blueprint-metadata-readonly">
+              <span>{lang === 'zh' ? '结构信息' : 'Structure'}</span>
+              <b>{blueprint.cardCount} {lang === 'zh' ? '张牌' : 'cards'}</b>
+              <b>{blueprint.cardSize === 'BRIDGE' ? (lang === 'zh' ? '桥牌尺寸' : 'Bridge') : (lang === 'zh' ? '扑克牌尺寸' : 'Poker')}</b>
+              <b>{blueprint.snapshot.bounds.size.map(value => value.toFixed(2)).join(' × ')}</b>
+            </div>
+          </section>
+
           <div className="blueprint-editor-fields">
             <label>
               <span>{copy.title}</span>

@@ -221,6 +221,7 @@ try {
   assert.match(editorMarkup, /步骤时间线/);
   assert.match(editorMarkup, /卡牌分组/);
   assert.match(editorMarkup, /从头测试/);
+  assert.match(editorMarkup, /蓝图信息/);
 
   console.log('Blueprint self-test passed: capture, tutorials, embedded level snapshot, checksum, matching, and editor.');
 } finally {
