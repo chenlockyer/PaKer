@@ -203,6 +203,11 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
         const targetStepIndex = orderedSteps.findIndex(step => step.cardIds.includes(target.id));
         const isFuture = targetStepIndex > guide.currentStepIndex;
         const isActive = target.id === activeTargetId && status !== 'matched';
+        const isCurrentStep = currentStepCardIds.has(target.id);
+        if (
+          (guide.assistance === 'step' && !isCurrentStep) ||
+          (guide.assistance === 'minimal' && !isActive)
+        ) return null;
         const color =
           status === 'matched'
             ? '#2a9b70'

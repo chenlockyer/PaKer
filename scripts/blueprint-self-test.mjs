@@ -9,7 +9,8 @@ import * as THREE from 'three';
 
 const temporaryDirectory = await mkdtemp(join(tmpdir(), 'paker-blueprint-test-'));
 const bundlePath = join(temporaryDirectory, 'blueprint-service.mjs');
-const editorBundlePath = join(temporaryDirectory, 'blueprint-editor.cjs');
+  const editorBundlePath = join(temporaryDirectory, 'blueprint-editor.cjs');
+  const tutorialBundlePath = join(temporaryDirectory, 'official-tutorials.mjs');
 const require = createRequire(import.meta.url);
 
 try {
@@ -97,6 +98,29 @@ try {
   assert.equal(migrated.steps.length, 1);
 
   await build({
+    entryPoints: ['services/officialBlueprints.ts'],
+    outfile: tutorialBundlePath,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    logLevel: 'silent',
+  });
+  const tutorials = await import(`${pathToFileURL(tutorialBundlePath).href}?v=${Date.now()}`);
+  assert.equal(tutorials.OFFICIAL_TUTORIAL_BLUEPRINTS.length, 4);
+  assert.deepEqual(
+    tutorials.OFFICIAL_TUTORIAL_BLUEPRINTS.map(item => item.cardCount),
+    [2, 4, 5, 10],
+  );
+  tutorials.OFFICIAL_TUTORIAL_BLUEPRINTS.forEach((item, index) => {
+    assert.equal(item.id, `official_tutorial_${index + 1}`);
+    assert.equal(item.category, 'tutorial');
+    assert.equal(item.status, 'published');
+    assert.ok(item.steps.every(itemStep => itemStep.cardIds.length > 0));
+    const assigned = new Set(item.steps.flatMap(itemStep => itemStep.cardIds));
+    assert.ok(item.snapshot.cards.every(itemCard => assigned.has(itemCard.id)));
+  });
+
+  await build({
     stdin: {
       contents: `
         import React from 'react';
@@ -129,7 +153,7 @@ try {
   assert.match(editorMarkup, /卡牌分组/);
   assert.match(editorMarkup, /从头测试/);
 
-  console.log('Blueprint self-test passed: live capture, v1 migration, projection, matching, grounded-edge rejection, editor render.');
+  console.log('Blueprint self-test passed: capture, migration, matching, editor, and four official P4 tutorials.');
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

@@ -105,7 +105,10 @@ export interface BlueprintGuideState {
   placing: boolean;
   visible: boolean;
   currentStepIndex: number;
+  assistance: BlueprintAssistance;
 }
+
+export type BlueprintAssistance = 'full' | 'step' | 'minimal';
 
 export type BlueprintMatchStatus = 'matched' | 'near' | 'missing';
 export type BlueprintFeedbackReason =

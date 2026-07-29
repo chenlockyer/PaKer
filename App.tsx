@@ -8,6 +8,7 @@ import SettingsModal from './components/SettingsModal';
 import BlueprintStudio from './components/BlueprintStudio';
 import {
   Blueprint,
+  BlueprintAssistance,
   BlueprintCameraHint,
   BlueprintGuideProgress,
   BlueprintGuideState,
@@ -41,6 +42,12 @@ import {
   loadBlueprints,
   persistBlueprints,
 } from './services/blueprintService';
+import {
+  isOfficialTutorial,
+  loadTutorialProgress,
+  OFFICIAL_TUTORIAL_BLUEPRINTS,
+  saveTutorialProgress,
+} from './services/officialBlueprints';
 
 const DEG_10 = Math.PI / 18;
 const CHALLENGE_LEVELS: ChallengeLevel[] = [
@@ -213,6 +220,7 @@ const App: React.FC = () => {
   const [blueprintRecording, setBlueprintRecording] = useState<BlueprintRecordingState | null>(null);
   const [requestedBlueprintEditorId, setRequestedBlueprintEditorId] = useState<string | null>(null);
   const [blueprintProgress, setBlueprintProgress] = useState<BlueprintGuideProgress>(EMPTY_BLUEPRINT_PROGRESS);
+  const [completedTutorials, setCompletedTutorials] = useState<Set<string>>(loadTutorialProgress);
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
   const blueprintCheckpointRef = useRef<CardData[]>([]);
   const blueprintCheckpointReadyRef = useRef(false);
@@ -529,6 +537,7 @@ const App: React.FC = () => {
       placing: true,
       visible: true,
       currentStepIndex: 0,
+      assistance: isOfficialTutorial(blueprint) ? 'full' : 'step',
     });
     setBlueprintProgress({
       ...EMPTY_BLUEPRINT_PROGRESS,
@@ -573,6 +582,21 @@ const App: React.FC = () => {
         previous.currentStepPlayerCardIds.join('|') === progress.currentStepPlayerCardIds.join('|');
       return unchanged ? previous : progress;
     });
+    if (
+      progress.complete &&
+      blueprintGuide &&
+      isOfficialTutorial(blueprintGuide.blueprint) &&
+      !completedTutorials.has(blueprintGuide.blueprint.id)
+    ) {
+      const next = new Set(completedTutorials).add(blueprintGuide.blueprint.id);
+      saveTutorialProgress(next);
+      setCompletedTutorials(next);
+      playSuccessSound();
+    }
+  }, [blueprintGuide, completedTutorials]);
+
+  const setBlueprintAssistance = useCallback((assistance: BlueprintAssistance) => {
+    setBlueprintGuide(previous => previous ? { ...previous, assistance } : null);
   }, []);
 
   const completeBlueprintStep = useCallback(() => {
@@ -941,6 +965,7 @@ const App: React.FC = () => {
             onToggleBlueprint={toggleBlueprintGuide}
             onStopBlueprint={stopBlueprintGuide}
             onRestoreBlueprintStep={restoreBlueprintStep}
+            onSetBlueprintAssistance={setBlueprintAssistance}
             blueprintRecording={blueprintRecording}
             onFinishBlueprintRecording={finishBlueprintRecording}
             onCancelBlueprintRecording={cancelBlueprintRecording}
@@ -997,6 +1022,8 @@ const App: React.FC = () => {
         cardSize={cardSize}
         snapshot={blueprintSnapshot}
         blueprints={blueprints}
+        officialTutorials={OFFICIAL_TUTORIAL_BLUEPRINTS}
+        completedTutorials={completedTutorials}
         presets={presets}
         currentCameraHint={cameraHintRef.current}
         onRefreshSnapshot={captureBlueprintSnapshot}

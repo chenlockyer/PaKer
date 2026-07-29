@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppTheme,
+  BlueprintAssistance,
   BlueprintGuideProgress,
   BlueprintGuideState,
   BlueprintRecordingState,
@@ -37,6 +38,7 @@ interface UIOverlayProps {
   onToggleBlueprint: () => void;
   onStopBlueprint: () => void;
   onRestoreBlueprintStep: () => void;
+  onSetBlueprintAssistance: (assistance: BlueprintAssistance) => void;
   blueprintRecording: BlueprintRecordingState | null;
   onFinishBlueprintRecording: () => void;
   onCancelBlueprintRecording: () => void;
@@ -108,6 +110,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onToggleBlueprint,
   onStopBlueprint,
   onRestoreBlueprintStep,
+  onSetBlueprintAssistance,
   blueprintRecording,
   onFinishBlueprintRecording,
   onCancelBlueprintRecording,
@@ -410,6 +413,22 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               )}
             </div>
           )}
+
+          <div className="blueprint-assistance" aria-label={lang === 'zh' ? '辅助强度' : 'Assistance level'}>
+            {([
+              ['full', lang === 'zh' ? '完整' : 'Full'],
+              ['step', lang === 'zh' ? '当前步' : 'Step'],
+              ['minimal', lang === 'zh' ? '关键牌' : 'Minimal'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                className={blueprintGuide.assistance === value ? 'is-active' : ''}
+                onClick={() => onSetBlueprintAssistance(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           {blueprintGuide.placing ? (
             <div className="blueprint-placement-callout">

@@ -619,6 +619,24 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .blueprint-guide-actions button span { font-size: 8px; font-weight: 750; }
 .blueprint-guide-actions button:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
 .blueprint-guide-actions button.danger-text:hover { border-color: var(--danger); color: var(--danger); }
+.blueprint-assistance { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 7px; border-top: 1px solid var(--line); }
+.blueprint-assistance button { min-height: 28px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); color: var(--muted); font-size: 9px; font-weight: 750; }
+.blueprint-assistance button.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+
+.blueprint-tutorials { padding: 22px; overflow: auto; }
+.blueprint-tutorial-intro { max-width: 680px; margin-bottom: 18px; }
+.blueprint-tutorial-intro h3 { margin: 5px 0 7px; font-size: 22px; }
+.blueprint-tutorial-intro p { margin: 0; color: var(--muted); line-height: 1.6; }
+.blueprint-tutorial-path { display: grid; gap: 10px; }
+.blueprint-tutorial-card { display: grid; grid-template-columns: 38px 128px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.blueprint-tutorial-card.is-complete { border-color: color-mix(in srgb, var(--success) 55%, var(--line)); }
+.blueprint-tutorial-card.is-locked { opacity: .52; }
+.blueprint-tutorial-card .blueprint-preview { min-height: 74px; }
+.blueprint-tutorial-card h3 { margin: 3px 0 5px; font-size: 15px; }
+.blueprint-tutorial-card p { margin: 0 0 6px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.blueprint-tutorial-card small { color: var(--muted); font-size: 9px; }
+.tutorial-number { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font-weight: 800; }
+.blueprint-tutorial-card.is-complete .tutorial-number { background: var(--success); color: white; }
 
 @media (max-width: 1080px) {
   .menu-screen { grid-template-columns: 1fr 390px; }
