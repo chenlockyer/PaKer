@@ -80,13 +80,45 @@ const getPresetGroup = (preset: RotationPreset): PresetGroup => {
 };
 
 const getDiagramClass = (preset: RotationPreset) => {
-  if (preset.id.includes('left')) return 'lean-left';
-  if (preset.id.includes('right')) return 'lean-right';
-  if (preset.id.includes('forward')) return 'lean-forward';
-  if (preset.id.includes('backward')) return 'lean-backward';
-  if (preset.id.includes('landscape')) return 'landscape';
-  if (preset.id.includes('portrait')) return 'portrait';
-  return 'custom';
+  const classes: string[] = [];
+  if (preset.id.startsWith('flat_')) classes.push('is-flat');
+  else if (preset.id.includes('upright')) classes.push('is-upright');
+  else if (preset.id.startsWith('short_edge_') || preset.id.startsWith('long_edge_')) classes.push('is-tilted');
+  else classes.push('is-custom');
+
+  if (preset.id.startsWith('short_edge_')) classes.push('ground-short');
+  if (preset.id.startsWith('long_edge_')) classes.push('ground-long');
+
+  const portrait =
+    preset.id.includes('portrait') ||
+    preset.id.includes('_left_') ||
+    preset.id.includes('_right_');
+  const landscape =
+    preset.id.includes('landscape') ||
+    preset.id.includes('_forward_') ||
+    preset.id.includes('_backward_');
+  if (portrait) classes.push('face-portrait');
+  if (landscape) classes.push('face-landscape');
+
+  if (preset.id.includes('left')) classes.push('lean-left');
+  if (preset.id.includes('right')) classes.push('lean-right');
+  if (preset.id.includes('forward')) classes.push('lean-forward');
+  if (preset.id.includes('backward')) classes.push('lean-backward');
+  return classes.join(' ');
+};
+
+const PresetDiagram = ({ preset }: { preset: RotationPreset }) => {
+  const direction =
+    preset.id.includes('left') ? '←' :
+    preset.id.includes('right') ? '→' :
+    preset.id.includes('forward') ? '↑' :
+    preset.id.includes('backward') ? '↓' : '';
+  return (
+    <span className={`preset-diagram ${getDiagramClass(preset)}`} aria-hidden="true">
+      <span className="preset-card-glyph"><i /><b /></span>
+      {direction && <em>{direction}</em>}
+    </span>
+  );
 };
 
 const UIOverlay: React.FC<UIOverlayProps> = ({
@@ -315,7 +347,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                         disabled={!interactionEnabled}
                         title={t[preset.name as keyof typeof t] || preset.name}
                       >
-                        <span className={`preset-diagram ${getDiagramClass(preset)}`}><i /></span>
+                        <PresetDiagram preset={preset} />
                         <span className="preset-name">{t[preset.name as keyof typeof t] || preset.name}</span>
                         {profile === 'legacy' && preset.shortcut && <kbd>{preset.shortcut}</kbd>}
                       </button>
@@ -328,7 +360,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
           {presetOpen && interactionMode === InteractionMode.PRECISION && (
             <div className="precision-panel">
-              <span className="preset-diagram precision"><i /></span>
+              <span className="preset-diagram precision"><span className="preset-card-glyph"><i /><b /></span></span>
               <strong>{labels.precision}</strong>
               <p>{labels.precisionHint}</p>
               <button
@@ -653,7 +685,7 @@ const PresetWheel = ({
                 setIsOpen(false);
               }}
             >
-              <span className={`preset-diagram ${getDiagramClass(preset)}`}><i /></span>
+              <PresetDiagram preset={preset} />
               <small>{t[preset.name as keyof typeof t] || preset.name}</small>
             </button>
           );

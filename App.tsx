@@ -1068,8 +1068,6 @@ const App: React.FC = () => {
         cardSize={cardSize}
         snapshot={blueprintSnapshot}
         blueprints={blueprints}
-        officialTutorials={OFFICIAL_TUTORIAL_BLUEPRINTS}
-        completedTutorials={completedTutorials}
         presets={presets}
         currentCameraHint={cameraHintRef.current}
         onRefreshSnapshot={captureBlueprintSnapshot}

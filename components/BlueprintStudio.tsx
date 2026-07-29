@@ -22,8 +22,6 @@ interface BlueprintStudioProps {
   cardSize: CardSize;
   snapshot: BlueprintSnapshot | null;
   blueprints: Blueprint[];
-  officialTutorials: Blueprint[];
-  completedTutorials: ReadonlySet<string>;
   presets: RotationPreset[];
   currentCameraHint: BlueprintCameraHint;
   onRefreshSnapshot: () => void;
@@ -158,8 +156,6 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
   cardSize,
   snapshot,
   blueprints,
-  officialTutorials,
-  completedTutorials,
   presets,
   currentCameraHint,
   onRefreshSnapshot,
@@ -174,7 +170,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
   onEditorRequestHandled,
   onClose,
 }) => {
-  const [tab, setTab] = useState<'tutorial' | 'create' | 'library' | 'edit'>('tutorial');
+  const [tab, setTab] = useState<'create' | 'library' | 'edit'>('create');
   const [editingBlueprintId, setEditingBlueprintId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -338,9 +334,6 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
         </header>
 
         <nav className="blueprint-tabs">
-          <button className={tab === 'tutorial' ? 'is-active' : ''} onClick={() => setTab('tutorial')}>
-            {lang === 'zh' ? '官方教学' : 'Tutorials'}
-          </button>
           <button className={tab === 'create' ? 'is-active' : ''} onClick={() => setTab('create')}>
             {copy.create}
           </button>
@@ -356,57 +349,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
 
         {notice && <div className="blueprint-notice">{notice}</div>}
 
-        {tab === 'tutorial' ? (
-          <div className="blueprint-tutorials">
-            <header className="blueprint-tutorial-intro">
-              <span className="panel-kicker">{lang === 'zh' ? '基础搭建课程' : 'BUILDING BASICS'}</span>
-              <h3>{lang === 'zh' ? '从 A 字架到一层纸牌屋' : 'From A-frame to card house'}</h3>
-              <p>
-                {lang === 'zh'
-                  ? '依次完成四课。引导中可随时切换完整、当前步骤和关键牌三档辅助。'
-                  : 'Complete four lessons in order. Switch between full, current-step, and minimal guidance at any time.'}
-              </p>
-            </header>
-            <div className="blueprint-tutorial-path">
-              {officialTutorials.map((blueprint, index) => {
-                const complete = completedTutorials.has(blueprint.id);
-                const unlocked = index === 0 || completedTutorials.has(officialTutorials[index - 1].id);
-                return (
-                  <article
-                    className={`blueprint-tutorial-card ${complete ? 'is-complete' : ''} ${unlocked ? '' : 'is-locked'}`}
-                    key={blueprint.id}
-                  >
-                    <div className="tutorial-number">{complete ? '✓' : index + 1}</div>
-                    <BlueprintPreview snapshot={blueprint.snapshot} compact />
-                    <div>
-                      <span className="panel-kicker">
-                        {complete
-                          ? (lang === 'zh' ? '已完成' : 'COMPLETED')
-                          : unlocked
-                            ? (lang === 'zh' ? '可开始' : 'AVAILABLE')
-                            : (lang === 'zh' ? '未解锁' : 'LOCKED')}
-                      </span>
-                      <h3>{blueprint.name}</h3>
-                      <p>{blueprint.description}</p>
-                      <small>
-                        {blueprint.cardCount} {lang === 'zh' ? '张牌' : 'cards'} · {blueprint.steps.length} {lang === 'zh' ? '个步骤' : 'steps'}
-                      </small>
-                    </div>
-                    <button
-                      className="primary-button"
-                      disabled={!unlocked}
-                      onClick={() => onTest(blueprint)}
-                    >
-                      {complete
-                        ? (lang === 'zh' ? '再次练习' : 'Practice again')
-                        : (lang === 'zh' ? '开始课程' : 'Start lesson')}
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        ) : tab === 'edit' && editingBlueprint ? (
+        {tab === 'edit' && editingBlueprint ? (
           <BlueprintEditor
             blueprint={editingBlueprint}
             presets={presets}
