@@ -65,6 +65,8 @@ export interface BlueprintStep {
   title: string;
   description: string;
   cardIds: string[];
+  // Retained for schema compatibility. Blueprint runtime never overrides
+  // the scene-wide physics lock state.
   freezeDuringBuild: boolean;
   releasePhysicsAfterStep: boolean;
   stableSeconds: number;
@@ -103,7 +105,6 @@ export interface BlueprintGuideState {
   placing: boolean;
   visible: boolean;
   currentStepIndex: number;
-  releasedStepIds: string[];
 }
 
 export type BlueprintMatchStatus = 'matched' | 'near' | 'missing';

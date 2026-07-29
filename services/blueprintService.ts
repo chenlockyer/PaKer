@@ -125,8 +125,8 @@ export const createDefaultBlueprintSteps = (
       title: `步骤 ${index + 1}`,
       description: '',
       cardIds: [card.id],
-      freezeDuringBuild: true,
-      releasePhysicsAfterStep: index === snapshot.cards.length - 1,
+      freezeDuringBuild: false,
+      releasePhysicsAfterStep: false,
       stableSeconds: 0.35,
     }))
 );

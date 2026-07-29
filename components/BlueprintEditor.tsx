@@ -53,8 +53,7 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
         description: '教学说明',
         recommended: '推荐放置预设',
         noPreset: '不指定',
-        freeze: '搭建本步骤时冻结新牌',
-        release: '完成后释放本组物理',
+        physicsScene: '蓝图不会改变卡牌物理状态；锁定与运行完全跟随场景“物理”开关。',
         stable: '稳定验证时间',
         camera: '镜头提示',
         captureCamera: '记录当前镜头',
@@ -83,8 +82,7 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
         description: 'Instruction',
         recommended: 'Recommended preset',
         noPreset: 'None',
-        freeze: 'Freeze new cards while building this step',
-        release: 'Release group physics after completion',
+        physicsScene: 'Blueprints never override card physics; lock state follows the scene Physics control.',
         stable: 'Stability check',
         camera: 'Camera hint',
         captureCamera: 'Capture current camera',
@@ -123,7 +121,7 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
       title: `${lang === 'zh' ? '步骤' : 'Step'} ${orderedSteps.length + 1}`,
       description: '',
       cardIds: [],
-      freezeDuringBuild: true,
+      freezeDuringBuild: false,
       releasePhysicsAfterStep: false,
       stableSeconds: 0.35,
     };
@@ -233,7 +231,7 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
                 <strong>{step.title}</strong>
                 <small>{step.cardIds.length} {lang === 'zh' ? '张牌' : 'cards'}</small>
               </span>
-              <i>{step.releasePhysicsAfterStep ? 'R' : step.freezeDuringBuild ? 'F' : '·'}</i>
+              <i>·</i>
             </button>
           ))}
         </div>
@@ -309,23 +307,9 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
                 </div>
               </label>
             </div>
-            <div className="blueprint-check-options">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedStep.freezeDuringBuild}
-                  onChange={event => updateStep({ freezeDuringBuild: event.target.checked })}
-                />
-                <span>{copy.freeze}</span>
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedStep.releasePhysicsAfterStep}
-                  onChange={event => updateStep({ releasePhysicsAfterStep: event.target.checked })}
-                />
-                <span>{copy.release}</span>
-              </label>
+            <div className="blueprint-physics-note">
+              <span className="physics-indicator" />
+              <p>{copy.physicsScene}</p>
             </div>
             <section className="blueprint-camera-editor">
               <div>

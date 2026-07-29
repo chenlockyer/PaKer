@@ -53,7 +53,8 @@ try {
   assert.equal(blueprint.schemaVersion, 2);
   assert.equal(blueprint.steps.length, 1);
   assert.equal(blueprint.steps[0].cardIds[0], 'card-1');
-  assert.equal(blueprint.steps[0].releasePhysicsAfterStep, true);
+  assert.equal(blueprint.steps[0].freezeDuringBuild, false);
+  assert.equal(blueprint.steps[0].releasePhysicsAfterStep, false);
 
   const guide = {
     blueprint,

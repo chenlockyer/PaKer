@@ -540,6 +540,9 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .blueprint-check-options label { min-height: 43px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); color: var(--muted); font-size: 9px; }
 .blueprint-check-options input { width: auto; height: auto; accent-color: var(--accent); }
 .blueprint-check-options label > span { margin: 0; text-transform: none; letter-spacing: 0; }
+.blueprint-physics-note { display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); }
+.blueprint-physics-note .physics-indicator { width: 8px; height: 8px; flex: 0 0 auto; margin: 0; }
+.blueprint-physics-note p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .blueprint-camera-editor { display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); }
 .blueprint-camera-editor strong { display: block; margin-top: 5px; font-size: 9px; }
 .blueprint-camera-editor button, .blueprint-tolerance-editor button { padding: 6px 9px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--accent-ink); font-size: 8px; cursor: pointer; }

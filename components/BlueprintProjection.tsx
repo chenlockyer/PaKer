@@ -70,9 +70,6 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
     [guide.blueprint.steps],
   );
   const currentStep = orderedSteps[guide.currentStepIndex];
-  const currentStepReleased = currentStep
-    ? guide.releasedStepIds.includes(currentStep.id)
-    : true;
   const currentStepCardIds = useMemo(
     () => new Set(currentStep?.cardIds ?? worldCards.map(card => card.id)),
     [currentStep, worldCards],
@@ -98,7 +95,6 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
     completedStepRef.current = null;
   }, [
     currentStep?.id,
-    currentStepReleased,
     currentStepCardIds,
     guide.blueprint.cardCount,
     guide.blueprint.id,
@@ -133,7 +129,6 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
       .filter(item => item.status === 'matched' && item.playerCardId)
       .map(item => item.playerCardId as string);
     const finalStep = guide.currentStepIndex >= orderedSteps.length - 1;
-    const releaseSatisfied = !currentStep?.releasePhysicsAfterStep || currentStepReleased;
     const stepComplete = currentMatches.length > 0 && currentStepMatched === currentMatches.length;
     onProgress({
       matched,
@@ -144,7 +139,7 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
       currentStepTotal: currentMatches.length,
       currentStepPlayerCardIds,
       feedback: activeMatch?.feedback ?? 'correct',
-      complete: finalStep && stepComplete && matched === next.length && releaseSatisfied,
+      complete: finalStep && stepComplete && matched === next.length,
     });
 
     if (!stepComplete) {

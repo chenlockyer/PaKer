@@ -216,9 +216,6 @@ const App: React.FC = () => {
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
   const blueprintCheckpointRef = useRef<CardData[]>([]);
   const blueprintCheckpointReadyRef = useRef(false);
-  const blueprintFrozenCardIdsRef = useRef(new Set<string>());
-  const blueprintCheckpointFrozenIdsRef = useRef(new Set<string>());
-  const blueprintCheckpointReleasedStepIdsRef = useRef<string[]>([]);
   const cameraHintRef = useRef<BlueprintCameraHint>({
     position: [0, 8, 12],
     target: [0, 0, 0],
@@ -335,9 +332,7 @@ const App: React.FC = () => {
     ) {
       return;
     }
-    const lockedByBlueprint = !!currentBlueprintStep?.freezeDuringBuild;
-    const newCard = { ...card, locked: isFreezeMode || lockedByBlueprint };
-    if (lockedByBlueprint && !isFreezeMode) blueprintFrozenCardIdsRef.current.add(card.id);
+    const newCard = { ...card, locked: isFreezeMode };
     setBlueprintRecording(recording => recording
       ? { ...recording, recordedCardIds: [...recording.recordedCardIds, card.id] }
       : null
@@ -349,7 +344,6 @@ const App: React.FC = () => {
   }, [
     challengePhase,
     cards.length,
-    currentBlueprintStep?.freezeDuringBuild,
     currentLevel.maxCards,
     gameMode,
     isFreezeMode,
@@ -366,18 +360,16 @@ const App: React.FC = () => {
   }, [recordCardHistory]);
 
   const updateCard = useCallback((id: string, position: [number, number, number], rotation: [number, number, number]) => {
-    const lockedByBlueprint = !!currentBlueprintStep?.freezeDuringBuild;
-    if (lockedByBlueprint && !isFreezeMode) blueprintFrozenCardIdsRef.current.add(id);
     setCards(prev => {
       if (!prev.some(card => card.id === id)) return prev;
       recordCardHistory(prev);
       return prev.map(c =>
         c.id === id
-          ? { ...c, position, rotation, locked: isFreezeMode || lockedByBlueprint }
+          ? { ...c, position, rotation, locked: isFreezeMode }
           : c
       );
     });
-  }, [currentBlueprintStep?.freezeDuringBuild, isFreezeMode, recordCardHistory]);
+  }, [isFreezeMode, recordCardHistory]);
 
   const clearCards = useCallback(() => {
     setCards(previous => {
@@ -474,13 +466,6 @@ const App: React.FC = () => {
   }, []);
 
   const startBlueprintRecording = useCallback(() => {
-    const releaseIds = new Set(blueprintFrozenCardIdsRef.current);
-    if (releaseIds.size > 0) {
-      setCards(current => current.map(card =>
-        releaseIds.has(card.id) ? { ...card, locked: false } : card
-      ));
-    }
-    blueprintFrozenCardIdsRef.current.clear();
     setBlueprintGuide(null);
     setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
     setBlueprintRecording({
@@ -544,7 +529,6 @@ const App: React.FC = () => {
       placing: true,
       visible: true,
       currentStepIndex: 0,
-      releasedStepIds: [],
     });
     setBlueprintProgress({
       ...EMPTY_BLUEPRINT_PROGRESS,
@@ -552,9 +536,7 @@ const App: React.FC = () => {
       currentStepTotal: blueprint.steps[0]?.cardIds.length ?? blueprint.cardCount,
       activeTargetId: blueprint.steps[0]?.cardIds[0] ?? blueprint.snapshot.cards[0]?.id ?? null,
     });
-    blueprintFrozenCardIdsRef.current.clear();
     blueprintCheckpointReadyRef.current = false;
-    blueprintCheckpointReleasedStepIdsRef.current = [];
     setShowBlueprintStudio(false);
   }, []);
 
@@ -574,10 +556,8 @@ const App: React.FC = () => {
         : { ...card };
     });
     blueprintCheckpointReadyRef.current = true;
-    blueprintCheckpointFrozenIdsRef.current = new Set(blueprintFrozenCardIdsRef.current);
-    blueprintCheckpointReleasedStepIdsRef.current = [...(blueprintGuide?.releasedStepIds ?? [])];
     setBlueprintGuide(previous => previous ? { ...previous, origin, placing: false } : null);
-  }, [blueprintGuide?.releasedStepIds, cards]);
+  }, [cards]);
 
   const handleBlueprintProgress = useCallback((progress: BlueprintGuideProgress) => {
     setBlueprintProgress(previous => {
@@ -599,23 +579,6 @@ const App: React.FC = () => {
     if (!blueprintGuide) return;
     const orderedSteps = [...blueprintGuide.blueprint.steps]
       .sort((left, right) => left.order - right.order);
-    const step = orderedSteps[blueprintGuide.currentStepIndex];
-
-    if (step?.releasePhysicsAfterStep && !blueprintGuide.releasedStepIds.includes(step.id)) {
-      const releaseIds = new Set(blueprintFrozenCardIdsRef.current);
-      setCards(current => current.map(card =>
-        releaseIds.has(card.id) ? { ...card, locked: false } : card
-      ));
-      blueprintFrozenCardIdsRef.current.clear();
-      setBlueprintGuide(previous => previous ? {
-        ...previous,
-        releasedStepIds: previous.releasedStepIds.includes(step.id)
-          ? previous.releasedStepIds
-          : [...previous.releasedStepIds, step.id],
-      } : null);
-      return;
-    }
-
     if (blueprintGuide.currentStepIndex >= orderedSteps.length - 1) return;
 
     blueprintCheckpointRef.current = cards.map(card => {
@@ -625,8 +588,6 @@ const App: React.FC = () => {
         : { ...card };
     });
     blueprintCheckpointReadyRef.current = true;
-    blueprintCheckpointFrozenIdsRef.current = new Set(blueprintFrozenCardIdsRef.current);
-    blueprintCheckpointReleasedStepIdsRef.current = [...blueprintGuide.releasedStepIds];
     setBlueprintGuide(previous => previous ? {
       ...previous,
       currentStepIndex: Math.min(previous.currentStepIndex + 1, orderedSteps.length - 1),
@@ -635,17 +596,12 @@ const App: React.FC = () => {
 
   const restoreBlueprintStep = useCallback(() => {
     if (!blueprintGuide || !blueprintCheckpointReadyRef.current) return;
-    blueprintFrozenCardIdsRef.current = new Set(blueprintCheckpointFrozenIdsRef.current);
     setCards(current => {
       recordCardHistory(current);
-      return blueprintCheckpointRef.current.map(card => ({ ...card }));
+      return blueprintCheckpointRef.current.map(card => ({ ...card, locked: isFreezeMode }));
     });
-    setBlueprintGuide(previous => previous ? {
-      ...previous,
-      releasedStepIds: [...blueprintCheckpointReleasedStepIdsRef.current],
-    } : null);
     setDraggingCardId(null);
-  }, [blueprintGuide, recordCardHistory]);
+  }, [blueprintGuide, isFreezeMode, recordCardHistory]);
 
   const rotateBlueprintGuide = useCallback((direction: -1 | 1) => {
     setBlueprintGuide(previous => previous ? {
@@ -665,19 +621,10 @@ const App: React.FC = () => {
   }, []);
 
   const stopBlueprintGuide = useCallback(() => {
-    const releaseIds = new Set(blueprintFrozenCardIdsRef.current);
-    if (releaseIds.size > 0) {
-      setCards(current => current.map(card =>
-        releaseIds.has(card.id) ? { ...card, locked: false } : card
-      ));
-    }
     setBlueprintGuide(null);
     setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
     blueprintCheckpointRef.current = [];
     blueprintCheckpointReadyRef.current = false;
-    blueprintCheckpointFrozenIdsRef.current.clear();
-    blueprintCheckpointReleasedStepIdsRef.current = [];
-    blueprintFrozenCardIdsRef.current.clear();
   }, []);
 
   const toggleFreezeMode = useCallback((forceVal?: boolean) => {
