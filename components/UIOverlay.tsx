@@ -537,7 +537,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               <span>
                 {lang === 'zh'
                   ? ({
-                      correct: '本步骤已匹配，正在验证稳定性',
+                      correct: '本步骤已匹配',
                       missing: '请放置蓝色高亮的目标牌',
                       position: '位置接近，请向目标轮廓微调',
                       height: '高度不正确，请调整放置层级',
@@ -545,7 +545,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                       groundedEdge: '接地边不正确，请切换长边或短边接地',
                     } as const)[blueprintProgress.feedback]
                   : ({
-                      correct: 'Step matched; checking stability',
+                      correct: 'Step matched',
                       missing: 'Place the blue highlighted target card',
                       position: 'Close: adjust the card toward the target',
                       height: 'Height is outside the target tolerance',

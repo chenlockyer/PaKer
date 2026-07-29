@@ -50,7 +50,6 @@ const step = (
   cardIds,
   freezeDuringBuild: false,
   releasePhysicsAfterStep: false,
-  stableSeconds: 0.55,
   recommendedPresetId,
 });
 

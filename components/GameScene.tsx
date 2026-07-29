@@ -113,8 +113,16 @@ const CameraBridge = ({
   const { camera, controls } = useThree();
   const sampleTimeRef = React.useRef(0);
   const lastStepRef = React.useRef<string | null>(null);
+  const transitionRef = React.useRef<{
+    elapsed: number;
+    duration: number;
+    fromPosition: THREE.Vector3;
+    toPosition: THREE.Vector3;
+    fromTarget: THREE.Vector3;
+    toTarget: THREE.Vector3;
+  } | null>(null);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const orderedSteps = guide
       ? [...guide.blueprint.steps].sort((left, right) => left.order - right.order)
       : [];
@@ -123,9 +131,13 @@ const CameraBridge = ({
       ? `${activeStep.id}:${guide.origin.join(',')}:${guide.yaw}`
       : null;
 
-    if (activeStep?.cameraHint && cameraHintKey && lastStepRef.current !== cameraHintKey) {
-      const orbitControls = controls as { target?: THREE.Vector3; update?: () => void } | null;
-      if (orbitControls?.target) {
+    if (activeStep && cameraHintKey && lastStepRef.current !== cameraHintKey) {
+      lastStepRef.current = cameraHintKey;
+      if (!activeStep.cameraHint) {
+        transitionRef.current = null;
+      } else {
+        const orbitControls = controls as { target?: THREE.Vector3; update?: () => void } | null;
+        if (!orbitControls?.target) return;
         const yaw = new THREE.Quaternion().setFromAxisAngle(
           new THREE.Vector3(0, 1, 0),
           guide?.yaw ?? 0,
@@ -137,13 +149,40 @@ const CameraBridge = ({
         const cameraTarget = new THREE.Vector3(...activeStep.cameraHint.target)
           .applyQuaternion(yaw)
           .add(origin);
-        camera.position.copy(cameraPosition);
-        orbitControls.target.copy(cameraTarget);
-        orbitControls.update?.();
-        lastStepRef.current = cameraHintKey;
+        transitionRef.current = {
+          elapsed: 0,
+          duration: 0.8,
+          fromPosition: camera.position.clone(),
+          toPosition: cameraPosition,
+          fromTarget: orbitControls.target.clone(),
+          toTarget: cameraTarget,
+        };
       }
     } else if (!activeStep) {
       lastStepRef.current = null;
+      transitionRef.current = null;
+    }
+
+    const transition = transitionRef.current;
+    const orbitControls = controls as { target?: THREE.Vector3; update?: () => void } | null;
+    if (transition && orbitControls?.target) {
+      transition.elapsed = Math.min(transition.duration, transition.elapsed + delta);
+      const linearProgress = transition.elapsed / transition.duration;
+      const easedProgress = linearProgress < 0.5
+        ? 4 * linearProgress * linearProgress * linearProgress
+        : 1 - Math.pow(-2 * linearProgress + 2, 3) / 2;
+      camera.position.lerpVectors(
+        transition.fromPosition,
+        transition.toPosition,
+        easedProgress,
+      );
+      orbitControls.target.lerpVectors(
+        transition.fromTarget,
+        transition.toTarget,
+        easedProgress,
+      );
+      orbitControls.update?.();
+      if (linearProgress >= 1) transitionRef.current = null;
     }
 
     if (clock.elapsedTime - sampleTimeRef.current < 0.25) return;

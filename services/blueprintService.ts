@@ -127,7 +127,6 @@ export const createDefaultBlueprintSteps = (
       cardIds: [card.id],
       freezeDuringBuild: false,
       releasePhysicsAfterStep: false,
-      stableSeconds: 0.35,
     }))
 );
 
@@ -343,7 +342,7 @@ const validTolerance = (value: unknown): value is BlueprintTolerance => {
 
 const validStep = (value: unknown): value is BlueprintStep => {
   if (!value || typeof value !== 'object') return false;
-  const step = value as Partial<BlueprintStep>;
+  const step = value as Partial<BlueprintStep> & { stableSeconds?: unknown };
   return (
     typeof step.id === 'string' &&
     typeof step.order === 'number' &&
@@ -353,9 +352,10 @@ const validStep = (value: unknown): value is BlueprintStep => {
     step.cardIds.every(id => typeof id === 'string') &&
     typeof step.freezeDuringBuild === 'boolean' &&
     typeof step.releasePhysicsAfterStep === 'boolean' &&
-    typeof step.stableSeconds === 'number' &&
-    Number.isFinite(step.stableSeconds) &&
-    step.stableSeconds >= 0 &&
+    (step.stableSeconds === undefined ||
+      (typeof step.stableSeconds === 'number' &&
+        Number.isFinite(step.stableSeconds) &&
+        step.stableSeconds >= 0)) &&
     (!step.cameraHint ||
       (finiteTuple(step.cameraHint.position, 3) && finiteTuple(step.cameraHint.target, 3)))
   );
@@ -411,7 +411,11 @@ const normalizeBlueprint = (value: unknown): Blueprint | null => {
     candidate.schemaVersion === BLUEPRINT_SCHEMA_VERSION &&
     Array.isArray(candidate.steps) &&
     candidate.steps.every(validStep)
-      ? candidate.steps
+      ? candidate.steps.map(step => {
+          const { stableSeconds: _legacyStableSeconds, ...normalizedStep } =
+            step as BlueprintStep & { stableSeconds?: number };
+          return normalizedStep;
+        })
       : createDefaultBlueprintSteps(candidate.snapshot);
 
   return {

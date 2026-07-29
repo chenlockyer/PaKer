@@ -319,10 +319,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     document.documentElement.style.setProperty('--ui-scale', resolvedUiScale.toFixed(2));
-    document.documentElement.style.setProperty(
-      '--ui-scale-inverse',
-      `${(100 / resolvedUiScale).toFixed(4)}%`,
-    );
   }, [resolvedUiScale]);
 
   useEffect(() => {

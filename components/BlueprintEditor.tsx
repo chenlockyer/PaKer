@@ -54,7 +54,6 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
         recommended: '推荐放置预设',
         noPreset: '不指定',
         physicsScene: '蓝图不会改变卡牌物理状态；锁定与运行完全跟随场景“物理”开关。',
-        stable: '稳定验证时间',
         camera: '镜头提示',
         captureCamera: '记录当前镜头',
         cameraSaved: '已记录',
@@ -83,7 +82,6 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
         recommended: 'Recommended preset',
         noPreset: 'None',
         physicsScene: 'Blueprints never override card physics; lock state follows the scene Physics control.',
-        stable: 'Stability check',
         camera: 'Camera hint',
         captureCamera: 'Capture current camera',
         cameraSaved: 'Captured',
@@ -123,7 +121,6 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
       cardIds: [],
       freezeDuringBuild: false,
       releasePhysicsAfterStep: false,
-      stableSeconds: 0.35,
     };
     updateBlueprint({ steps: [...orderedSteps, next] });
     setSelectedStepId(next.id);
@@ -198,6 +195,10 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
         ],
       },
     });
+  };
+
+  const removeCameraHint = () => {
+    updateStep({ cameraHint: undefined });
   };
 
   if (!selectedStep) return null;
@@ -281,32 +282,16 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
               <span>{copy.description}</span>
               <textarea value={selectedStep.description} onChange={event => updateStep({ description: event.target.value })} maxLength={500} />
             </label>
-            <div className="blueprint-editor-row">
-              <label>
-                <span>{copy.recommended}</span>
-                <select
-                  value={selectedStep.recommendedPresetId ?? ''}
-                  onChange={event => updateStep({ recommendedPresetId: event.target.value || undefined })}
-                >
-                  <option value="">{copy.noPreset}</option>
-                  {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>{copy.stable}</span>
-                <div className="blueprint-unit-input">
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    step="0.05"
-                    value={selectedStep.stableSeconds}
-                    onChange={event => updateStep({ stableSeconds: Math.max(0, Number(event.target.value)) })}
-                  />
-                  <i>s</i>
-                </div>
-              </label>
-            </div>
+            <label>
+              <span>{copy.recommended}</span>
+              <select
+                value={selectedStep.recommendedPresetId ?? ''}
+                onChange={event => updateStep({ recommendedPresetId: event.target.value || undefined })}
+              >
+                <option value="">{copy.noPreset}</option>
+                {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+              </select>
+            </label>
             <div className="blueprint-physics-note">
               <span className="physics-indicator" />
               <p>{copy.physicsScene}</p>
@@ -316,7 +301,14 @@ const BlueprintEditor: React.FC<BlueprintEditorProps> = ({
                 <span className="panel-kicker">{copy.camera}</span>
                 <strong>{selectedStep.cameraHint ? copy.cameraSaved : (lang === 'zh' ? '尚未记录' : 'Not captured')}</strong>
               </div>
-              <button onClick={captureCameraHint}>{copy.captureCamera}</button>
+              <div className="blueprint-camera-actions">
+                {selectedStep.cameraHint && (
+                  <button className="danger-text" onClick={removeCameraHint}>
+                    {lang === 'zh' ? '删除镜头' : 'Remove camera'}
+                  </button>
+                )}
+                <button onClick={captureCameraHint}>{copy.captureCamera}</button>
+              </div>
             </section>
           </div>
 

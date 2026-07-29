@@ -50,7 +50,6 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
   const [matches, setMatches] = useState<BlueprintTargetMatch[]>([]);
   const matchSampleTimeRef = useRef(0);
   const matchSignatureRef = useRef('');
-  const stableStartRef = useRef<number | null>(null);
   const completedStepRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -91,7 +90,6 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
       activeTargetId: currentStep?.cardIds[0] ?? guide.blueprint.snapshot.cards[0]?.id ?? null,
       currentStepTotal: currentStepCardIds.size,
     });
-    stableStartRef.current = null;
     completedStepRef.current = null;
   }, [
     currentStep?.id,
@@ -143,17 +141,11 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
     });
 
     if (!stepComplete) {
-      stableStartRef.current = null;
       completedStepRef.current = null;
       return;
     }
 
-    if (stableStartRef.current === null) stableStartRef.current = clock.elapsedTime;
-    const stableSeconds = Math.max(0, currentStep?.stableSeconds ?? 0.35);
-    if (
-      clock.elapsedTime - stableStartRef.current >= stableSeconds &&
-      completedStepRef.current !== guide.currentStepIndex
-    ) {
+    if (completedStepRef.current !== guide.currentStepIndex) {
       completedStepRef.current = guide.currentStepIndex;
       onStepComplete(currentStepPlayerCardIds);
     }

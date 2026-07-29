@@ -502,7 +502,6 @@ interface BlueprintStep {
   cardIds: string[];
   freezeDuringBuild: boolean;
   releasePhysicsAfterStep: boolean;
-  stableSeconds?: number;
   cameraHint?: BlueprintCameraPose;
   allowSkip?: boolean;
 }

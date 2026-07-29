@@ -69,7 +69,6 @@ export interface BlueprintStep {
   // the scene-wide physics lock state.
   freezeDuringBuild: boolean;
   releasePhysicsAfterStep: boolean;
-  stableSeconds: number;
   recommendedPresetId?: string;
   cameraHint?: BlueprintCameraHint;
 }
