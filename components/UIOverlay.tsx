@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
 import {
   AppTheme,
   BlueprintAssistance,
@@ -79,45 +80,63 @@ const getPresetGroup = (preset: RotationPreset): PresetGroup => {
   return 'custom';
 };
 
-const getDiagramClass = (preset: RotationPreset) => {
-  const classes: string[] = [];
-  if (preset.id.startsWith('flat_')) classes.push('is-flat');
-  else if (preset.id.includes('upright')) classes.push('is-upright');
-  else if (preset.id.startsWith('short_edge_') || preset.id.startsWith('long_edge_')) classes.push('is-tilted');
-  else classes.push('is-custom');
-
-  if (preset.id.startsWith('short_edge_')) classes.push('ground-short');
-  if (preset.id.startsWith('long_edge_')) classes.push('ground-long');
-
-  const portrait =
-    preset.id.includes('portrait') ||
-    preset.id.includes('_left_') ||
-    preset.id.includes('_right_');
-  const landscape =
-    preset.id.includes('landscape') ||
-    preset.id.includes('_forward_') ||
-    preset.id.includes('_backward_');
-  if (portrait) classes.push('face-portrait');
-  if (landscape) classes.push('face-landscape');
-
-  if (preset.id.includes('left')) classes.push('lean-left');
-  if (preset.id.includes('right')) classes.push('lean-right');
-  if (preset.id.includes('forward')) classes.push('lean-forward');
-  if (preset.id.includes('backward')) classes.push('lean-backward');
-  return classes.join(' ');
-};
-
 const PresetDiagram = ({ preset }: { preset: RotationPreset }) => {
-  const direction =
-    preset.id.includes('left') ? '←' :
-    preset.id.includes('right') ? '→' :
-    preset.id.includes('forward') ? '↑' :
-    preset.id.includes('backward') ? '↓' : '';
+  const scene = useMemo(() => {
+    const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(...preset.rotation, 'XYZ'));
+    const corners = [
+      new THREE.Vector3(-0.9, 0, -1.4),
+      new THREE.Vector3(0.9, 0, -1.4),
+      new THREE.Vector3(0.9, 0, 1.4),
+      new THREE.Vector3(-0.9, 0, 1.4),
+    ].map(point => point.applyQuaternion(rotation));
+    const minY = Math.min(...corners.map(point => point.y));
+    corners.forEach(point => { point.y -= minY; });
+
+    const camera = new THREE.Vector3(4.6, 4.2, 6.4);
+    const target = new THREE.Vector3(0, 0.75, 0);
+    const forward = target.clone().sub(camera).normalize();
+    const right = forward.clone().cross(new THREE.Vector3(0, 1, 0)).normalize();
+    const up = right.clone().cross(forward).normalize();
+    const project = (point: THREE.Vector3) => {
+      const relative = point.clone().sub(camera);
+      const depth = Math.max(0.1, relative.dot(forward));
+      const scale = 48 / depth;
+      return [relative.dot(right) * scale, -relative.dot(up) * scale] as [number, number];
+    };
+    const ground = [
+      new THREE.Vector3(-2.2, 0, -2.2),
+      new THREE.Vector3(2.2, 0, -2.2),
+      new THREE.Vector3(2.2, 0, 2.2),
+      new THREE.Vector3(-2.2, 0, 2.2),
+    ].map(project);
+    const projected = corners.map(project);
+    const edges = [[0, 1], [1, 2], [2, 3], [3, 0]] as const;
+    const groundedEdge = edges.reduce((best, edge) => {
+      const average = (corners[edge[0]].y + corners[edge[1]].y) / 2;
+      return average < best.average ? { edge, average } : best;
+    }, { edge: edges[0], average: Number.POSITIVE_INFINITY }).edge;
+    return { ground, projected, groundedEdge };
+  }, [preset.rotation]);
+
+  const points = (values: [number, number][]) =>
+    values.map(([x, y]) => `${(x + 24).toFixed(2)},${(y + 25).toFixed(2)}`).join(' ');
+  const [groundStart, groundEnd] = scene.groundedEdge;
+  const groundedA = scene.projected[groundStart];
+  const groundedB = scene.projected[groundEnd];
   return (
-    <span className={`preset-diagram ${getDiagramClass(preset)}`} aria-hidden="true">
-      <span className="preset-card-glyph"><i /><b /></span>
-      {direction && <em>{direction}</em>}
-    </span>
+    <svg className="preset-diagram" viewBox="0 0 48 48" aria-hidden="true">
+      <polygon className="preset-ground" points={points(scene.ground)} />
+      <line className="preset-ground-axis" x1="24" y1="25" x2="40" y2="25" />
+      <line className="preset-ground-axis" x1="24" y1="25" x2="24" y2="40" />
+      <polygon className="preset-card-face" points={points(scene.projected)} />
+      <polyline className="preset-card-outline" points={`${points(scene.projected)} ${points([scene.projected[0]])}`} />
+      <line
+        className="preset-grounded-edge"
+        x1={groundedA[0] + 24} y1={groundedA[1] + 25}
+        x2={groundedB[0] + 24} y2={groundedB[1] + 25}
+      />
+      <text className="preset-card-rank" x={scene.projected[0][0] + 25} y={scene.projected[0][1] + 28}>A</text>
+    </svg>
   );
 };
 
@@ -360,7 +379,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
           {presetOpen && interactionMode === InteractionMode.PRECISION && (
             <div className="precision-panel">
-              <span className="preset-diagram precision"><span className="preset-card-glyph"><i /><b /></span></span>
+              <PresetDiagram preset={presets.find(preset => preset.id === currentPresetId) ?? presets[0]} />
               <strong>{labels.precision}</strong>
               <p>{labels.precisionHint}</p>
               <button

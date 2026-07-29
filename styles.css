@@ -188,64 +188,21 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .preset-item kbd { position: absolute; right: 5px; top: 4px; color: var(--faint); font: 8px/1 monospace; }
 .preset-name { font-size: 10px; line-height: 1.28; }
 .preset-diagram {
-  --card-w: 15px; --card-h: 31px; --lean: 0deg;
-  position: relative; width: 43px; height: 43px; display: block;
-  perspective: 70px; color: currentColor;
+  width: 46px; height: 46px; display: block; overflow: visible;
+  color: currentColor;
 }
-.preset-diagram::after {
-  content: ""; position: absolute; left: 3px; right: 3px; bottom: 3px; height: 8px;
-  border: 1px solid var(--line); border-radius: 50%; background: color-mix(in srgb, var(--line) 26%, transparent);
-  transform: rotateX(68deg); transform-origin: center bottom;
+.preset-ground {
+  fill: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+  stroke: var(--line); stroke-width: .65;
 }
-.preset-diagram.ground-short::before,
-.preset-diagram.ground-long::before {
-  position: absolute; z-index: 5; left: -2px; top: 0; min-width: 15px; height: 14px; display: grid; place-items: center;
-  padding: 0 2px; border: 1px solid color-mix(in srgb, var(--warning) 58%, var(--line)); border-radius: 3px;
-  background: color-mix(in srgb, var(--warning) 14%, var(--surface)); color: color-mix(in srgb, var(--warning) 70%, var(--ink));
-  font: 800 7px/1 sans-serif;
+.preset-ground-axis { stroke: color-mix(in srgb, var(--line-strong) 65%, transparent); stroke-width: .45; stroke-dasharray: 1.5 1.5; }
+.preset-card-face {
+  fill: #fff; stroke: none;
+  filter: drop-shadow(1.5px 2px 1.5px rgba(20, 30, 42, .22));
 }
-.preset-diagram.ground-short::before { content: "短"; }
-.preset-diagram.ground-long::before { content: "长"; }
-.preset-card-glyph {
-  position: absolute; z-index: 2; left: 50%; bottom: 7px; width: var(--card-w); height: var(--card-h);
-  display: block; transform: translateX(-50%) rotate(var(--lean)); transform-origin: bottom center;
-}
-.preset-card-glyph i {
-  position: absolute; inset: 0; overflow: hidden; border: 1.5px solid currentColor; border-radius: 2px;
-  background: linear-gradient(145deg, #fff 0 72%, #eef2f6 100%); box-shadow: 2px 2px 3px rgba(20,30,42,.13);
-}
-.preset-card-glyph i::before {
-  content: "A"; position: absolute; left: 2px; top: 2px; color: #c52e3b; font: 700 6px/1 Georgia, serif;
-}
-.preset-card-glyph i::after {
-  content: "◆"; position: absolute; left: 2px; top: 8px; color: #c52e3b; font: 5px/1 serif;
-}
-.preset-card-glyph b {
-  position: absolute; z-index: 3; left: -2px; right: -2px; bottom: -1px; height: 3px;
-  border-radius: 2px; background: var(--warning); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 55%, #6d4d12);
-}
-.preset-diagram em {
-  position: absolute; z-index: 4; right: -1px; top: 0; width: 15px; height: 15px; display: grid; place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 50%;
-  background: var(--accent-soft); color: var(--accent-ink); font: 800 10px/1 sans-serif;
-}
-.preset-diagram.face-landscape { --card-w: 27px; --card-h: 18px; }
-.preset-diagram.face-portrait { --card-w: 15px; --card-h: 31px; }
-.preset-diagram.is-flat .preset-card-glyph {
-  bottom: 9px; transform: translateX(-50%) rotateX(62deg) rotateZ(var(--lean)); transform-origin: center;
-}
-.preset-diagram.is-flat.face-portrait { --card-w: 16px; --card-h: 29px; }
-.preset-diagram.is-flat.face-landscape { --card-w: 29px; --card-h: 16px; }
-.preset-diagram.is-flat .preset-card-glyph b { display: none; }
-.preset-diagram.is-upright.ground-short .preset-card-glyph b { left: -3px; right: -3px; }
-.preset-diagram.is-upright.ground-long .preset-card-glyph b,
-.preset-diagram.is-tilted.ground-long .preset-card-glyph b { height: 4px; }
-.preset-diagram.lean-left { --lean: -12deg; }
-.preset-diagram.lean-right { --lean: 12deg; }
-.preset-diagram.lean-forward .preset-card-glyph { transform: translateX(-50%) perspective(50px) rotateX(-18deg); }
-.preset-diagram.lean-backward .preset-card-glyph { transform: translateX(-50%) perspective(50px) rotateX(18deg); }
-.preset-diagram.lean-forward em { top: -1px; right: 0; }
-.preset-diagram.lean-backward em { top: auto; bottom: 0; right: 0; }
+.preset-card-outline { fill: none; stroke: currentColor; stroke-width: 1.15; stroke-linejoin: round; }
+.preset-grounded-edge { stroke: var(--warning); stroke-width: 2.6; stroke-linecap: round; }
+.preset-card-rank { fill: #c52e3b; font: 700 5px/1 Georgia, serif; }
 .preset-diagram.precision { margin: 0 auto; color: var(--accent); }
 .height-hint { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
 kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; justify-content: center; padding: 0 5px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface-raised); color: var(--muted); font: 700 9px/1 monospace; box-shadow: 0 1px 0 var(--line); }
