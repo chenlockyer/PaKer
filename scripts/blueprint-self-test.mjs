@@ -84,6 +84,24 @@ try {
   assert.equal(exactMatches[0].status, 'matched');
   assert.equal(exactMatches[0].feedback, 'correct');
 
+  const regressionSteps = [
+    { ...blueprint.steps[0], id: 'step-1', order: 0, cardIds: ['target-1'] },
+    { ...blueprint.steps[0], id: 'step-2', order: 1, cardIds: ['target-2'] },
+  ];
+  const regressionMatches = [
+    { ...exactMatches[0], targetId: 'target-1', status: 'missing' },
+    { ...exactMatches[0], targetId: 'target-2', status: 'matched' },
+  ];
+  assert.equal(
+    service.findEarliestBrokenBlueprintStep(regressionSteps, regressionMatches, 1),
+    0,
+  );
+  regressionMatches[0].status = 'matched';
+  assert.equal(
+    service.findEarliestBrokenBlueprintStep(regressionSteps, regressionMatches, 1),
+    null,
+  );
+
   const wrongEdgeCard = {
     ...playerCard,
     rotation: [Math.PI / 2, 0, 0],

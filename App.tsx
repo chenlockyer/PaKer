@@ -695,6 +695,17 @@ const App: React.FC = () => {
     } : null);
   }, [blueprintGuide, cards]);
 
+  const regressBlueprintStep = useCallback((stepIndex: number) => {
+    setBlueprintGuide(previous => {
+      if (!previous || stepIndex >= previous.currentStepIndex) return previous;
+      return {
+        ...previous,
+        currentStepIndex: Math.max(0, stepIndex),
+        visible: true,
+      };
+    });
+  }, []);
+
   const restoreBlueprintStep = useCallback(() => {
     if (!blueprintGuide || !blueprintCheckpointReadyRef.current) return;
     setCards(current => {
@@ -1076,6 +1087,7 @@ const App: React.FC = () => {
             onBlueprintPlaceOrigin={placeBlueprintOrigin}
             onBlueprintProgress={handleBlueprintProgress}
             onBlueprintStepComplete={completeBlueprintStep}
+            onBlueprintStepRegression={regressBlueprintStep}
             onCameraHintChange={handleCameraHintChange}
           />
           

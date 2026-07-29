@@ -329,6 +329,26 @@ export const matchCardsToBlueprint = (
     });
 };
 
+export const findEarliestBrokenBlueprintStep = (
+  steps: readonly BlueprintStep[],
+  matches: readonly BlueprintTargetMatch[],
+  currentStepIndex: number,
+): number | null => {
+  if (currentStepIndex <= 0) return null;
+  const matchByTargetId = new Map(matches.map(match => [match.targetId, match]));
+  const orderedSteps = [...steps].sort((left, right) => left.order - right.order);
+  const completedStepCount = Math.min(currentStepIndex, orderedSteps.length);
+
+  for (let index = 0; index < completedStepCount; index += 1) {
+    const step = orderedSteps[index];
+    if (step.cardIds.some(cardId => matchByTargetId.get(cardId)?.status !== 'matched')) {
+      return index;
+    }
+  }
+
+  return null;
+};
+
 const inferGroundedEdge = (
   quaternion: THREE.Quaternion,
 ): 'long' | 'short' | 'none' => {

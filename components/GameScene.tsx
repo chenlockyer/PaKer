@@ -49,6 +49,7 @@ interface GameSceneProps {
   onBlueprintPlaceOrigin: (origin: [number, number, number]) => void;
   onBlueprintProgress: (progress: BlueprintGuideProgress) => void;
   onBlueprintStepComplete: (playerCardIds: string[]) => void;
+  onBlueprintStepRegression: (stepIndex: number) => void;
   onCameraHintChange: (hint: BlueprintCameraHint) => void;
 }
 
@@ -228,6 +229,7 @@ const GameScene: React.FC<GameSceneProps> = ({
   onBlueprintPlaceOrigin,
   onBlueprintProgress,
   onBlueprintStepComplete,
+  onBlueprintStepRegression,
   onCameraHintChange,
 }) => {
   const background = theme === 'dark' ? '#171d24' : theme === 'warm' ? '#e9e6df' : '#e4e9ef';
@@ -299,6 +301,7 @@ const GameScene: React.FC<GameSceneProps> = ({
               onBlueprintPlaceOrigin={onBlueprintPlaceOrigin}
               onBlueprintProgress={onBlueprintProgress}
               onBlueprintStepComplete={onBlueprintStepComplete}
+              onBlueprintStepRegression={onBlueprintStepRegression}
             />
 
             <OrbitControls

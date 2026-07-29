@@ -82,6 +82,7 @@ interface PhysicsWorldProps {
   onBlueprintPlaceOrigin: (origin: [number, number, number]) => void;
   onBlueprintProgress: (progress: BlueprintGuideProgress) => void;
   onBlueprintStepComplete: (playerCardIds: string[]) => void;
+  onBlueprintStepRegression: (stepIndex: number) => void;
 }
 
 const WindVisual = ({ strength }: { strength: number }) => {
@@ -617,6 +618,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   onBlueprintPlaceOrigin,
   onBlueprintProgress,
   onBlueprintStepComplete,
+  onBlueprintStepRegression,
 }) => {
   
   const draggingCardData = useMemo(() => cards.find(c => c.id === draggingCardId) || null, [cards, draggingCardId]);
@@ -721,6 +723,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
           onPlaceOrigin={onBlueprintPlaceOrigin}
           onProgress={onBlueprintProgress}
           onStepComplete={onBlueprintStepComplete}
+          onStepRegression={onBlueprintStepRegression}
         />
       )}
       {showTargetGuide && <TargetHeightGuide height={targetHeight} />}

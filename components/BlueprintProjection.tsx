@@ -10,6 +10,7 @@ import {
   LiveCardTransform,
 } from '../types';
 import {
+  findEarliestBrokenBlueprintStep,
   getBlueprintWorldCards,
   matchCardsToBlueprint,
 } from '../services/blueprintService';
@@ -21,6 +22,7 @@ interface BlueprintProjectionProps {
   onPlaceOrigin: (origin: [number, number, number]) => void;
   onProgress: (progress: BlueprintGuideProgress) => void;
   onStepComplete: (playerCardIds: string[]) => void;
+  onStepRegression: (stepIndex: number) => void;
 }
 
 const EMPTY_PROGRESS: BlueprintGuideProgress = {
@@ -45,12 +47,14 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
   onPlaceOrigin,
   onProgress,
   onStepComplete,
+  onStepRegression,
 }) => {
   const [hoverOrigin, setHoverOrigin] = useState<[number, number, number]>(guide.origin);
   const [matches, setMatches] = useState<BlueprintTargetMatch[]>([]);
   const matchSampleTimeRef = useRef(0);
   const matchSignatureRef = useRef('');
   const completedStepRef = useRef<number | null>(null);
+  const regressionCandidateRef = useRef<{ index: number; since: number } | null>(null);
 
   useEffect(() => {
     if (guide.placing) setHoverOrigin(guide.origin);
@@ -73,13 +77,15 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
     () => new Set(currentStep?.cardIds ?? worldCards.map(card => card.id)),
     [currentStep, worldCards],
   );
-  const matchingOrder = useMemo(
-    () => [
-      ...worldCards.filter(card => currentStepCardIds.has(card.id)),
-      ...worldCards.filter(card => !currentStepCardIds.has(card.id)),
-    ],
-    [currentStepCardIds, worldCards],
-  );
+  const matchingOrder = useMemo(() => {
+    const worldCardById = new Map(worldCards.map(card => [card.id, card]));
+    const orderedIds = orderedSteps.flatMap(step => step.cardIds);
+    const assignedIds = new Set(orderedIds);
+    return [
+      ...orderedIds.map(id => worldCardById.get(id)).filter(Boolean),
+      ...worldCards.filter(card => !assignedIds.has(card.id)),
+    ] as typeof worldCards;
+  }, [orderedSteps, worldCards]);
 
   useEffect(() => {
     matchSignatureRef.current = '';
@@ -91,6 +97,7 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
       currentStepTotal: currentStepCardIds.size,
     });
     completedStepRef.current = null;
+    regressionCandidateRef.current = null;
   }, [
     currentStep?.id,
     currentStepCardIds,
@@ -128,6 +135,11 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
       .map(item => item.playerCardId as string);
     const finalStep = guide.currentStepIndex >= orderedSteps.length - 1;
     const stepComplete = currentMatches.length > 0 && currentStepMatched === currentMatches.length;
+    const earliestBrokenStep = findEarliestBrokenBlueprintStep(
+      orderedSteps,
+      next,
+      guide.currentStepIndex,
+    );
     onProgress({
       matched,
       near,
@@ -139,6 +151,23 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
       feedback: activeMatch?.feedback ?? 'correct',
       complete: finalStep && stepComplete && matched === next.length,
     });
+
+    if (earliestBrokenStep !== null) {
+      const candidate = regressionCandidateRef.current;
+      if (!candidate || candidate.index !== earliestBrokenStep) {
+        regressionCandidateRef.current = {
+          index: earliestBrokenStep,
+          since: clock.elapsedTime,
+        };
+      } else if (clock.elapsedTime - candidate.since >= 0.3) {
+        regressionCandidateRef.current = null;
+        completedStepRef.current = null;
+        onStepRegression(earliestBrokenStep);
+        return;
+      }
+    } else {
+      regressionCandidateRef.current = null;
+    }
 
     if (!stepComplete) {
       completedStepRef.current = null;
