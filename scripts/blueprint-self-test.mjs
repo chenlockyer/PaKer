@@ -166,11 +166,31 @@ try {
     heightMultiplier: 1,
     testDuration: 4,
     testType: 'STABILITY',
+    tutorial: {
+      enabled: true,
+      entryTitle: { zh: '平衡的力量', en: 'The Power of Balance' },
+      entrySubtitle: { zh: '完成一个 A 字结构', en: 'Build an A-frame' },
+      cues: [{
+        id: 'cue-preset',
+        kind: 'preset',
+        text: { zh: '选择左侧预设', en: 'Select the preset' },
+        presetId: 'short_edge_left_10',
+      }],
+    },
   });
   assert.notEqual(level.embeddedBlueprint, sourceBlueprint);
   assert.notEqual(level.embeddedBlueprint.id, sourceBlueprint.id);
   assert.equal(level.sourceBlueprintId, sourceBlueprint.id);
   assert.equal(level.testStages.length, 1);
+  assert.equal(level.tutorial.enabled, true);
+  assert.equal(level.tutorial.cues[0].presetId, 'short_edge_left_10');
+  assert.ok(levelService.getLevelValidationIssues({
+    ...level,
+    tutorial: {
+      ...level.tutorial,
+      cues: [{ ...level.tutorial.cues[0], presetId: undefined }],
+    },
+  }).includes('invalid-tutorial-cues'));
   assert.equal(levelService.validateLevel(level).id, level.id);
   assert.ok(levelService.getLevelValidationIssues(level).includes('playtest-required'));
   const verifiedLevel = levelService.markLevelPlaytested(level);
@@ -178,6 +198,7 @@ try {
   const duplicatedLevel = levelService.duplicateLevel(verifiedLevel);
   assert.notEqual(duplicatedLevel.id, level.id);
   assert.equal(duplicatedLevel.verification.passed, false);
+  assert.equal(duplicatedLevel.tutorial.cues.length, 1);
   const updatedLevel = levelService.updateLevel(verifiedLevel, {
     name: 'Edited',
     description: '',

@@ -215,6 +215,28 @@ export interface LevelTestStage {
   weightDropOffset?: number;
 }
 
+export type LevelTutorialCueKind =
+  | 'message'
+  | 'preset'
+  | 'input'
+  | 'blueprint-step';
+
+export interface LevelTutorialCue {
+  id: string;
+  kind: LevelTutorialCueKind;
+  text: Record<'en' | 'zh', string>;
+  presetId?: string;
+  inputAction?: string;
+  blueprintStepIndex?: number;
+}
+
+export interface LevelTutorial {
+  enabled: boolean;
+  entryTitle: Record<'en' | 'zh', string>;
+  entrySubtitle: Record<'en' | 'zh', string>;
+  cues: LevelTutorialCue[];
+}
+
 export interface LevelDefinition extends ChallengeLevel {
   schemaVersion: 1;
   origin: LevelOrigin;
@@ -227,6 +249,7 @@ export interface LevelDefinition extends ChallengeLevel {
   embeddedBlueprint: Blueprint;
   blueprintChecksum: string;
   testStages: LevelTestStage[];
+  tutorial: LevelTutorial;
   scoring: {
     baseScore: number;
     unusedCardBonus: number;

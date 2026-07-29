@@ -4,6 +4,7 @@ import {
   LevelDefinition,
   LevelOrigin,
   LevelTestStage,
+  LevelTutorial,
 } from '../types';
 
 const LEVEL_STORAGE_KEY = 'hoc_custom_levels_v1';
@@ -38,6 +39,7 @@ export interface CreateLevelInput {
   status?: LevelDefinition['status'];
   scoring?: LevelDefinition['scoring'];
   testStages?: LevelTestStage[];
+  tutorial?: LevelTutorial;
 }
 
 export const createLevel = (input: CreateLevelInput): LevelDefinition => {
@@ -86,6 +88,12 @@ export const createLevel = (input: CreateLevelInput): LevelDefinition => {
     weightMass: firstStage.testType === ChallengeTestType.WEIGHT_DROP ? Math.max(0.05, firstStage.weightMass ?? 0.45) : undefined,
     weightDropOffset: firstStage.testType === ChallengeTestType.WEIGHT_DROP ? Math.max(0.5, firstStage.weightDropOffset ?? 4) : undefined,
     testStages,
+    tutorial: input.tutorial ? clone(input.tutorial) : {
+      enabled: false,
+      entryTitle: { zh: '', en: '' },
+      entrySubtitle: { zh: '', en: '' },
+      cues: [],
+    },
     scoring: input.scoring ?? { baseScore: 500, unusedCardBonus: 50, heightBonus: 100 },
     verification: {
       passed: false,
@@ -142,6 +150,7 @@ export const duplicateLevel = (source: LevelDefinition): LevelDefinition => {
     weightDropOffset: source.weightDropOffset,
     scoring: source.scoring,
     testStages: source.testStages,
+    tutorial: source.tutorial,
   });
   return { ...copy, sourceBlueprintId: source.sourceBlueprintId };
 };
@@ -152,6 +161,15 @@ export const getLevelValidationIssues = (level: LevelDefinition): string[] => {
   if (level.minCards > level.maxCards) issues.push('invalid-card-limit');
   if (level.embeddedBlueprint.cardCount > level.maxCards) issues.push('blueprint-exceeds-card-limit');
   if (!level.testStages?.length || level.testStages.some(stage => stage.duration < 1)) issues.push('invalid-test-stages');
+  if (
+    level.tutorial?.enabled &&
+    level.tutorial.cues.some(cue =>
+      !cue.text.zh.trim() ||
+      (cue.kind === 'preset' && !cue.presetId) ||
+      (cue.kind === 'input' && !cue.inputAction) ||
+      (cue.kind === 'blueprint-step' && !Number.isInteger(cue.blueprintStepIndex))
+    )
+  ) issues.push('invalid-tutorial-cues');
   if (level.blueprintChecksum !== checksumBlueprint(level.embeddedBlueprint)) issues.push('blueprint-checksum');
   const assigned = new Set(level.embeddedBlueprint.steps.flatMap(step => step.cardIds));
   if (
@@ -208,6 +226,12 @@ export const validateLevel = (value: unknown): LevelDefinition => {
     weightMass: migrated.weightMass,
     weightDropOffset: migrated.weightDropOffset,
   }];
+  migrated.tutorial ??= {
+    enabled: false,
+    entryTitle: { zh: '', en: '' },
+    entrySubtitle: { zh: '', en: '' },
+    cues: [],
+  };
   return migrated;
 };
 

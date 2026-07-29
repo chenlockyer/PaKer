@@ -11,12 +11,13 @@ import {
   InteractionMode,
   PointerMode,
   GameMode,
+  LevelTutorialCue,
   ChallengePhase,
   ChallengeTestType
 } from '../types';
 import { translations } from '../utils/translations';
 import ChallengeHUD from './ChallengeHUD';
-import { useInput, useInputAction } from '../input/InputContext';
+import { InputAction, useInput, useInputAction } from '../input/InputContext';
 
 interface UIOverlayProps {
   presets: RotationPreset[];
@@ -70,6 +71,13 @@ interface UIOverlayProps {
   onNextChallenge: () => void;
   interactionEnabled: boolean;
   theme: AppTheme;
+  tutorialEntry: { title: string; subtitle: string } | null;
+  tutorialCue: LevelTutorialCue | null;
+  tutorialCueIndex: number;
+  tutorialCueCount: number;
+  onDismissTutorialEntry: () => void;
+  onAdvanceTutorialCue: () => void;
+  onSkipTutorial: () => void;
 }
 
 type PresetGroup = 'flat' | 'upright' | 'tilt' | 'custom';
@@ -193,6 +201,13 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   onRedo,
   onNextChallenge,
   interactionEnabled,
+  tutorialEntry,
+  tutorialCue,
+  tutorialCueIndex,
+  tutorialCueCount,
+  onDismissTutorialEntry,
+  onAdvanceTutorialCue,
+  onSkipTutorial,
 }) => {
   const t = translations[lang];
   const { formatBinding, profile } = useInput();
@@ -205,6 +220,11 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
     window.addEventListener('reset-control-coach', resetCoach);
     return () => window.removeEventListener('reset-control-coach', resetCoach);
   }, []);
+  useEffect(() => {
+    if (tutorialCue?.kind !== 'preset') return;
+    setPresetOpen(true);
+    setInteractionMode(InteractionMode.QUICK);
+  }, [setInteractionMode, tutorialCue]);
   const labels = lang === 'zh'
     ? {
         project: '纸牌建筑师',
@@ -302,7 +322,54 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         </nav>
       </header>
 
-      {showControlCoach && interactionEnabled && (
+      {tutorialEntry && (
+        <section className="tutorial-entry-layer">
+          <div className="tutorial-entry-card">
+            <span className="panel-kicker">{lang === 'zh' ? '教学关卡' : 'TUTORIAL'}</span>
+            <h2>{tutorialEntry.title || levelName}</h2>
+            {tutorialEntry.subtitle && <p>{tutorialEntry.subtitle}</p>}
+            <button className="primary-button" onClick={onDismissTutorialEntry}>
+              {lang === 'zh' ? '开始' : 'Begin'}
+            </button>
+            <button className="text-button" onClick={onSkipTutorial}>
+              {lang === 'zh' ? '跳过教学' : 'Skip tutorial'}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {tutorialCue && (
+        <section className={`tutorial-cue tutorial-cue-${tutorialCue.kind}`}>
+          <span className="tutorial-cue-progress">
+            {tutorialCueIndex + 1} / {tutorialCueCount}
+          </span>
+          <div>
+            <span className="panel-kicker">
+              {tutorialCue.kind === 'preset'
+                ? (lang === 'zh' ? '选择预设' : 'SELECT PRESET')
+                : tutorialCue.kind === 'input'
+                  ? (lang === 'zh' ? '按键练习' : 'INPUT PRACTICE')
+                  : tutorialCue.kind === 'blueprint-step'
+                    ? (lang === 'zh' ? '搭建目标' : 'BUILD TARGET')
+                    : (lang === 'zh' ? '操作提示' : 'GUIDANCE')}
+            </span>
+            <strong>{tutorialCue.text[lang] || tutorialCue.text.zh}</strong>
+          </div>
+          {tutorialCue.kind === 'input' && tutorialCue.inputAction && (
+            <kbd>{formatBinding(tutorialCue.inputAction as InputAction)}</kbd>
+          )}
+          {tutorialCue.kind === 'message' && (
+            <button className="primary-button" onClick={onAdvanceTutorialCue}>
+              {lang === 'zh' ? '知道了' : 'Continue'}
+            </button>
+          )}
+          <button className="tutorial-skip" onClick={onSkipTutorial}>
+            {lang === 'zh' ? '跳过' : 'Skip'}
+          </button>
+        </section>
+      )}
+
+      {showControlCoach && interactionEnabled && !tutorialEntry && !tutorialCue && (
         <section className="control-coach">
           <div>
             <span className="panel-kicker">{lang === 'zh' ? '新的操作方式' : 'NEW CONTROLS'}</span>
@@ -366,7 +433,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                     {groupedPresets[group].map(preset => (
                       <button
                         key={preset.id}
-                        className={`preset-item ${currentPresetId === preset.id ? 'is-selected' : ''}`}
+                        className={`preset-item ${currentPresetId === preset.id ? 'is-selected' : ''} ${tutorialCue?.kind === 'preset' && tutorialCue.presetId === preset.id ? 'is-tutorial-target' : ''}`}
                         onClick={() => setPresetId(preset.id)}
                         disabled={!interactionEnabled}
                         title={t[preset.name as keyof typeof t] || preset.name}
@@ -374,6 +441,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                         <PresetDiagram preset={preset} />
                         <span className="preset-name">{t[preset.name as keyof typeof t] || preset.name}</span>
                         {profile === 'legacy' && preset.shortcut && <kbd>{preset.shortcut}</kbd>}
+                        {tutorialCue?.kind === 'preset' && tutorialCue.presetId === preset.id && (
+                          <i className="tutorial-preset-arrow" aria-hidden="true">←</i>
+                        )}
                       </button>
                     ))}
                   </div>
