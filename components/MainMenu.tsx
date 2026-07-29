@@ -61,7 +61,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
       };
 
   return (
-    <main className="menu-screen">
+    <main className="menu-screen ui-scale-surface">
       <div className="menu-grid" aria-hidden="true" />
       <section className="menu-hero">
         <div className="menu-brand">

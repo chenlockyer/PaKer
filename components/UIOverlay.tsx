@@ -280,7 +280,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
     : null;
 
   return (
-    <div className="game-ui">
+    <div className="game-ui ui-scale-surface">
       <header className="game-topbar">
         <div className="game-brand">
           <span className="brand-pip" />

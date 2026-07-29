@@ -26,6 +26,7 @@ import {
   ChallengeTestType,
   CardSize,
   AppTheme,
+  UiScaleSetting,
   CARD_DIMENSIONS,
   LiveCardTransform,
   LevelDefinition,
@@ -61,6 +62,13 @@ import {
   publishLevel,
   updateLevel,
 } from './services/levelService';
+import {
+  DisplayMetrics,
+  getBrowserDisplayMetrics,
+  loadUiScaleSetting,
+  resolveUiScale,
+  UI_SCALE_STORAGE_KEY,
+} from './services/uiScaleService';
 
 const DEG_10 = Math.PI / 18;
 const CHALLENGE_LEVELS: ChallengeLevel[] = [
@@ -198,6 +206,9 @@ const App: React.FC = () => {
     const savedTheme = localStorage.getItem('hoc_theme');
     return savedTheme === 'warm' || savedTheme === 'dark' ? savedTheme : 'blue';
   });
+  const [uiScaleSetting, setUiScaleSetting] = useState<UiScaleSetting>(loadUiScaleSetting);
+  const [displayMetrics, setDisplayMetrics] = useState<DisplayMetrics>(getBrowserDisplayMetrics);
+  const resolvedUiScale = resolveUiScale(uiScaleSetting, displayMetrics);
   const [cardSize, setCardSize] = useState<CardSize>(() => {
     const savedSize = localStorage.getItem('hoc_card_size');
     return savedSize === CardSize.POKER ? CardSize.POKER : CardSize.BRIDGE;
@@ -282,6 +293,37 @@ const App: React.FC = () => {
     localStorage.setItem('hoc_theme', theme);
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem(UI_SCALE_STORAGE_KEY, uiScaleSetting);
+  }, [uiScaleSetting]);
+
+  useEffect(() => {
+    let removeDesktopListener: (() => void) | undefined;
+    const updateFromBrowser = () => setDisplayMetrics(getBrowserDisplayMetrics());
+
+    if (window.desktopAPI) {
+      void window.desktopAPI.getDisplayMetrics().then(setDisplayMetrics);
+      removeDesktopListener = window.desktopAPI.onDisplayMetricsChanged(setDisplayMetrics);
+    } else {
+      window.addEventListener('resize', updateFromBrowser);
+      window.addEventListener('focus', updateFromBrowser);
+    }
+
+    return () => {
+      removeDesktopListener?.();
+      window.removeEventListener('resize', updateFromBrowser);
+      window.removeEventListener('focus', updateFromBrowser);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--ui-scale', resolvedUiScale.toFixed(2));
+    document.documentElement.style.setProperty(
+      '--ui-scale-inverse',
+      `${(100 / resolvedUiScale).toFixed(4)}%`,
+    );
+  }, [resolvedUiScale]);
 
   useEffect(() => {
     persistBlueprints(blueprints);
@@ -1098,6 +1140,9 @@ const App: React.FC = () => {
         setCardSize={setCardSize}
         theme={theme}
         setTheme={setTheme}
+        uiScaleSetting={uiScaleSetting}
+        setUiScaleSetting={setUiScaleSetting}
+        resolvedUiScale={resolvedUiScale}
       />
 
       <BlueprintStudio

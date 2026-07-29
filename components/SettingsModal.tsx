@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 import React, { useState } from 'react';
-import { AppTheme, CARD_DIMENSIONS, CardSize, RotationPreset } from '../types';
+import { AppTheme, CARD_DIMENSIONS, CardSize, RotationPreset, UiScaleSetting } from '../types';
+import { UI_SCALE_OPTIONS } from '../services/uiScaleService';
 import { translations } from '../utils/translations';
 import {
   InputAction,
@@ -22,6 +23,9 @@ interface SettingsModalProps {
   setCardSize: (size: CardSize) => void;
   theme: AppTheme;
   setTheme: (theme: AppTheme) => void;
+  uiScaleSetting: UiScaleSetting;
+  setUiScaleSetting: (scale: UiScaleSetting) => void;
+  resolvedUiScale: number;
 }
 
 type Tab = 'general' | 'visuals' | 'controls' | 'presets';
@@ -29,6 +33,7 @@ type Tab = 'general' | 'visuals' | 'controls' | 'presets';
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen, onClose, lang, setLang, presets, onAddPreset, onUpdatePreset,
   onDeletePreset, onResetPresets, cardSize, setCardSize, theme, setTheme,
+  uiScaleSetting, setUiScaleSetting, resolvedUiScale,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -239,7 +244,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="modal-layer" role="dialog" aria-modal="true" aria-label={copy.title}>
+    <div className="modal-layer ui-scale-surface" role="dialog" aria-modal="true" aria-label={copy.title}>
       <section className="settings-window">
         <header className="settings-header">
           <div>
@@ -261,6 +266,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="segmented-options">
                 <button className={lang === 'zh' ? 'is-selected' : ''} onClick={() => setLang('zh')}><strong>中文</strong><small>简体中文</small></button>
                 <button className={lang === 'en' ? 'is-selected' : ''} onClick={() => setLang('en')}><strong>English</strong><small>English</small></button>
+              </div>
+              <div className="section-title section-spaced">
+                <span>02</span>
+                <div>
+                  <h3>{lang === 'zh' ? '界面缩放' : 'UI scale'}</h3>
+                  <p>{lang === 'zh' ? '只缩放菜单、文字和操作控件，不改变 3D 场景分辨率。' : 'Scale menus and controls without changing the 3D scene resolution.'}</p>
+                </div>
+              </div>
+              <div className="ui-scale-options">
+                {UI_SCALE_OPTIONS.map(option => (
+                  <button
+                    key={option.value}
+                    className={uiScaleSetting === option.value ? 'is-selected' : ''}
+                    onClick={() => setUiScaleSetting(option.value)}
+                  >
+                    {option.value === 'auto'
+                      ? `${lang === 'zh' ? '自动' : 'Auto'} · ${Math.round(resolvedUiScale * 100)}%`
+                      : `${option.value}%`}
+                  </button>
+                ))}
               </div>
             </div>
           )}

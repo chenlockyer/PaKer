@@ -246,6 +246,16 @@ export enum CardSize {
 
 export type AppTheme = 'blue' | 'warm' | 'dark';
 
+export type UiScaleSetting =
+  | 'auto'
+  | '100'
+  | '110'
+  | '125'
+  | '133'
+  | '150'
+  | '175'
+  | '200';
+
 export const CARD_DIMENSIONS: Record<CardSize, {
   width: number;
   height: number;

@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell, session } = require('electron');
 const path = require('node:path');
 
 const DEV_SERVER_URL = process.env.ELECTRON_RENDERER_URL;
 const isDevelopment = Boolean(DEV_SERVER_URL) && !app.isPackaged;
 
 let mainWindow = null;
+let displayMetricsTimer = null;
 
 function isTrustedExternalUrl(rawUrl) {
   try {
@@ -24,6 +25,37 @@ function sendWindowState() {
   });
 }
 
+function getCurrentDisplayMetrics() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    const primary = screen.getPrimaryDisplay();
+    return {
+      logicalWidth: primary.workAreaSize.width,
+      logicalHeight: primary.workAreaSize.height,
+      scaleFactor: primary.scaleFactor,
+    };
+  }
+
+  const display = screen.getDisplayMatching(mainWindow.getBounds());
+  return {
+    logicalWidth: display.workAreaSize.width,
+    logicalHeight: display.workAreaSize.height,
+    scaleFactor: display.scaleFactor,
+  };
+}
+
+function sendDisplayMetrics() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('desktop:display-metrics', getCurrentDisplayMetrics());
+}
+
+function scheduleDisplayMetrics() {
+  if (displayMetricsTimer) clearTimeout(displayMetricsTimer);
+  displayMetricsTimer = setTimeout(() => {
+    displayMetricsTimer = null;
+    sendDisplayMetrics();
+  }, 100);
+}
+
 function registerWindowIpc() {
   ipcMain.handle('desktop:minimize', () => {
     mainWindow?.minimize();
@@ -39,6 +71,8 @@ function registerWindowIpc() {
     fullscreen: mainWindow?.isFullScreen() ?? false,
     maximized: mainWindow?.isMaximized() ?? false,
   }));
+
+  ipcMain.handle('desktop:get-display-metrics', getCurrentDisplayMetrics);
 
   ipcMain.handle('desktop:quit', () => {
     app.quit();
@@ -107,6 +141,8 @@ async function createMainWindow() {
   mainWindow.on('leave-full-screen', sendWindowState);
   mainWindow.on('maximize', sendWindowState);
   mainWindow.on('unmaximize', sendWindowState);
+  mainWindow.on('move', scheduleDisplayMetrics);
+  mainWindow.on('resize', scheduleDisplayMetrics);
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -136,6 +172,9 @@ if (!hasSingleInstanceLock) {
 
     registerWindowIpc();
     await createMainWindow();
+    screen.on('display-metrics-changed', scheduleDisplayMetrics);
+    screen.on('display-added', scheduleDisplayMetrics);
+    screen.on('display-removed', scheduleDisplayMetrics);
 
     app.on('activate', async () => {
       if (BrowserWindow.getAllWindows().length === 0) {

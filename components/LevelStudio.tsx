@@ -125,7 +125,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
   };
 
   return (
-    <div className="modal-layer level-layer" role="dialog" aria-modal="true">
+    <div className="modal-layer level-layer ui-scale-surface" role="dialog" aria-modal="true">
       <section className="level-window">
         <header className="blueprint-header">
           <div>

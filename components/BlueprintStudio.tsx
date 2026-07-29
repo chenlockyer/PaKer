@@ -323,7 +323,7 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
   const editingBlueprint = blueprints.find(blueprint => blueprint.id === editingBlueprintId) ?? null;
 
   return (
-    <div className="modal-layer blueprint-layer" role="dialog" aria-modal="true">
+    <div className="modal-layer blueprint-layer ui-scale-surface" role="dialog" aria-modal="true">
       <section className="blueprint-window">
         <header className="blueprint-header">
           <div>
