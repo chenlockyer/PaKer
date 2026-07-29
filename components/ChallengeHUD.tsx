@@ -13,6 +13,8 @@ interface ChallengeHUDProps {
   levelName: string;
   levelDescription: string;
   testType: ChallengeTestType;
+  blueprintRequired: boolean;
+  blueprintComplete: boolean;
   liveHeight: number;
   targetHeight: number;
   countdown: number;
@@ -29,12 +31,16 @@ interface ChallengeHUDProps {
 const ChallengeHUD: React.FC<ChallengeHUDProps> = ({
   lang, phase, cardCount, maxCards, minCards, levelIndex, levelCount,
   levelName, levelDescription, testType, liveHeight, targetHeight,
+  blueprintRequired, blueprintComplete,
   countdown, testTimeRemaining, score, stars, onStartTest, onRetry,
   onUndo, onNext, hasNext,
 }) => {
   const t = translations[lang];
   const heightProgress = Math.min(100, targetHeight > 0 ? (liveHeight / targetHeight) * 100 : 0);
-  const canStart = cardCount >= minCards && liveHeight >= targetHeight;
+  const canStart =
+    cardCount >= minCards &&
+    liveHeight >= targetHeight &&
+    (!blueprintRequired || blueprintComplete);
   const testLabel = testType === ChallengeTestType.WEIGHT_DROP
     ? t.weightDropTest
     : testType === ChallengeTestType.WIND ? t.windTestRunning : t.stabilityTest;

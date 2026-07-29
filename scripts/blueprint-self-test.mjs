@@ -147,7 +147,36 @@ try {
   assert.notEqual(level.embeddedBlueprint, sourceBlueprint);
   assert.notEqual(level.embeddedBlueprint.id, sourceBlueprint.id);
   assert.equal(level.sourceBlueprintId, sourceBlueprint.id);
+  assert.equal(level.testStages.length, 1);
   assert.equal(levelService.validateLevel(level).id, level.id);
+  assert.ok(levelService.getLevelValidationIssues(level).includes('playtest-required'));
+  const verifiedLevel = levelService.markLevelPlaytested(level);
+  assert.equal(levelService.publishLevel(verifiedLevel).status, 'published');
+  const duplicatedLevel = levelService.duplicateLevel(verifiedLevel);
+  assert.notEqual(duplicatedLevel.id, level.id);
+  assert.equal(duplicatedLevel.verification.passed, false);
+  const updatedLevel = levelService.updateLevel(verifiedLevel, {
+    name: 'Edited',
+    description: '',
+    author: 'test',
+    origin: 'official',
+    tags: [],
+    blueprint: verifiedLevel.embeddedBlueprint,
+    maxCards: 4,
+    minCards: 2,
+    heightMultiplier: 1,
+    testDuration: 3,
+    testType: 'STABILITY',
+    testStages: [
+      { id: 'one', name: 'Stability', testType: 'STABILITY', duration: 3 },
+      { id: 'two', name: 'Wind', testType: 'WIND', duration: 4, windStrength: 0.02 },
+    ],
+  });
+  assert.equal(updatedLevel.id, level.id);
+  assert.equal(updatedLevel.sourceBlueprintId, level.sourceBlueprintId);
+  assert.equal(updatedLevel.testStages.length, 2);
+  assert.equal(updatedLevel.verification.passed, false);
+  assert.equal(levelService.validateLevel(updatedLevel).id, level.id);
   sourceBlueprint.name = 'Source changed';
   assert.equal(level.embeddedBlueprint.name, '第 1 课：A 字架');
   assert.throws(() => levelService.validateLevel({

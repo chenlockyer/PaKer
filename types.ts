@@ -205,6 +205,16 @@ export interface ChallengeLevel {
 
 export type LevelOrigin = 'official' | 'player';
 
+export interface LevelTestStage {
+  id: string;
+  name: string;
+  testType: ChallengeTestType;
+  duration: number;
+  windStrength?: number;
+  weightMass?: number;
+  weightDropOffset?: number;
+}
+
 export interface LevelDefinition extends ChallengeLevel {
   schemaVersion: 1;
   origin: LevelOrigin;
@@ -216,10 +226,16 @@ export interface LevelDefinition extends ChallengeLevel {
   sourceBlueprintId: string;
   embeddedBlueprint: Blueprint;
   blueprintChecksum: string;
+  testStages: LevelTestStage[];
   scoring: {
     baseScore: number;
     unusedCardBonus: number;
     heightBonus: number;
+  };
+  verification: {
+    passed: boolean;
+    playtestedAt: string | null;
+    blueprintChecksum: string;
   };
 }
 

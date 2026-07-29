@@ -200,9 +200,8 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   fill: #fff; stroke: none;
   filter: drop-shadow(1.5px 2px 1.5px rgba(20, 30, 42, .22));
 }
+.preset-card-face.is-back { fill: #3976bc; }
 .preset-card-outline { fill: none; stroke: currentColor; stroke-width: 1.15; stroke-linejoin: round; }
-.preset-grounded-edge { stroke: var(--warning); stroke-width: 2.6; stroke-linecap: round; }
-.preset-card-rank { fill: #c52e3b; font: 700 5px/1 Georgia, serif; }
 .preset-diagram.precision { margin: 0 auto; color: var(--accent); }
 .height-hint { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
 kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; justify-content: center; padding: 0 5px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface-raised); color: var(--muted); font: 700 9px/1 monospace; box-shadow: 0 1px 0 var(--line); }
@@ -643,13 +642,19 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .level-number-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
 .level-blueprint-note { padding: 12px; border-left: 3px solid var(--accent); border-radius: 4px; background: var(--accent-soft); }
 .level-blueprint-note p { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.level-stage-list { display: grid; gap: 7px; padding-top: 10px; border-top: 1px solid var(--line); }
+.level-stage-list > button { min-height: 34px; border: 1px dashed var(--line-strong); border-radius: 5px; background: var(--surface-soft); color: var(--accent-ink); }
+.level-stage-row { display: grid; grid-template-columns: 70px minmax(120px, 1fr) 72px 80px 80px 30px; gap: 6px; align-items: center; }
+.level-stage-row strong { font-size: 9px; }
+.level-stage-row input, .level-stage-row select { min-height: 32px; }
+.level-stage-row button { grid-column: -2 / -1; min-height: 30px; border: 1px solid var(--line); border-radius: 4px; background: transparent; }
 .level-save { grid-column: 1 / -1; min-height: 42px; }
 .level-library { display: grid; gap: 10px; padding: 20px; overflow: auto; }
 .level-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .level-card h3 { margin: 4px 0 6px; }
 .level-card p { margin: 0 0 7px; color: var(--muted); font-size: 11px; }
 .level-card small { color: var(--muted); }
-.level-card-actions { display: flex; gap: 6px; }
+.level-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 @media (max-width: 760px) {
   .level-form { grid-template-columns: 1fr; }
   .level-form section:nth-of-type(3) { grid-column: auto; }

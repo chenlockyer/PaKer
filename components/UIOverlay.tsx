@@ -56,6 +56,7 @@ interface UIOverlayProps {
   levelName: string;
   levelDescription: string;
   testType: ChallengeTestType;
+  requiresBlueprintMatch: boolean;
   targetHeight: number;
   liveHeight: number;
   countdown: number;
@@ -92,8 +93,23 @@ const PresetDiagram = ({ preset }: { preset: RotationPreset }) => {
     const minY = Math.min(...corners.map(point => point.y));
     corners.forEach(point => { point.y -= minY; });
 
-    const camera = new THREE.Vector3(4.6, 4.2, 6.4);
     const target = new THREE.Vector3(0, 0.75, 0);
+    // A small horizontal offset keeps edge-on upright cards readable. The
+    // vertical offset equals the ground-plane distance, preserving a 45°
+    // viewing angle to the floor.
+    const cameraX = 2.4;
+    const cameraZ = 5;
+    const camera = new THREE.Vector3(
+      cameraX,
+      target.y + Math.hypot(cameraX, cameraZ),
+      cameraZ,
+    );
+    const cardCenter = corners.reduce(
+      (sum, point) => sum.add(point),
+      new THREE.Vector3(),
+    ).multiplyScalar(1 / corners.length);
+    const faceNormal = new THREE.Vector3(0, 1, 0).applyQuaternion(rotation);
+    const isBack = faceNormal.dot(camera.clone().sub(cardCenter)) < 0;
     const forward = target.clone().sub(camera).normalize();
     const right = forward.clone().cross(new THREE.Vector3(0, 1, 0)).normalize();
     const up = right.clone().cross(forward).normalize();
@@ -110,32 +126,18 @@ const PresetDiagram = ({ preset }: { preset: RotationPreset }) => {
       new THREE.Vector3(-2.2, 0, 2.2),
     ].map(project);
     const projected = corners.map(project);
-    const edges = [[0, 1], [1, 2], [2, 3], [3, 0]] as const;
-    const groundedEdge = edges.reduce((best, edge) => {
-      const average = (corners[edge[0]].y + corners[edge[1]].y) / 2;
-      return average < best.average ? { edge, average } : best;
-    }, { edge: edges[0], average: Number.POSITIVE_INFINITY }).edge;
-    return { ground, projected, groundedEdge };
+    return { ground, projected, isBack };
   }, [preset.rotation]);
 
   const points = (values: [number, number][]) =>
     values.map(([x, y]) => `${(x + 24).toFixed(2)},${(y + 25).toFixed(2)}`).join(' ');
-  const [groundStart, groundEnd] = scene.groundedEdge;
-  const groundedA = scene.projected[groundStart];
-  const groundedB = scene.projected[groundEnd];
   return (
     <svg className="preset-diagram" viewBox="0 0 48 48" aria-hidden="true">
       <polygon className="preset-ground" points={points(scene.ground)} />
       <line className="preset-ground-axis" x1="24" y1="25" x2="40" y2="25" />
       <line className="preset-ground-axis" x1="24" y1="25" x2="24" y2="40" />
-      <polygon className="preset-card-face" points={points(scene.projected)} />
+      <polygon className={`preset-card-face ${scene.isBack ? 'is-back' : ''}`} points={points(scene.projected)} />
       <polyline className="preset-card-outline" points={`${points(scene.projected)} ${points([scene.projected[0]])}`} />
-      <line
-        className="preset-grounded-edge"
-        x1={groundedA[0] + 24} y1={groundedA[1] + 25}
-        x2={groundedB[0] + 24} y2={groundedB[1] + 25}
-      />
-      <text className="preset-card-rank" x={scene.projected[0][0] + 25} y={scene.projected[0][1] + 28}>A</text>
     </svg>
   );
 };
@@ -178,6 +180,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   levelName,
   levelDescription,
   testType,
+  requiresBlueprintMatch,
   targetHeight,
   liveHeight,
   countdown,
@@ -415,6 +418,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           levelName={levelName}
           levelDescription={levelDescription}
           testType={testType}
+          blueprintRequired={requiresBlueprintMatch}
+          blueprintComplete={blueprintProgress.complete}
           liveHeight={liveHeight}
           targetHeight={targetHeight}
           countdown={countdown}

@@ -53,8 +53,13 @@ import {
 import {
   CreateLevelInput,
   createLevel,
+  duplicateLevel,
+  getLevelValidationIssues,
   loadLevels,
+  markLevelPlaytested,
   persistLevels,
+  publishLevel,
+  updateLevel,
 } from './services/levelService';
 
 const DEG_10 = Math.PI / 18;
@@ -249,6 +254,7 @@ const App: React.FC = () => {
   const [liveHeight, setLiveHeight] = useState(0);
   const [challengeScore, setChallengeScore] = useState(0);
   const [challengeStars, setChallengeStars] = useState(0);
+  const [currentTestStageIndex, setCurrentTestStageIndex] = useState(0);
   const liveHeightRef = useRef(0);
   const { profile: inputProfile, subscribe: subscribeInput, setSuspended: setInputSuspended } = useInput();
 
@@ -294,6 +300,9 @@ const App: React.FC = () => {
 
   const currentPreset = presets.find(p => p.id === currentPresetId) || presets[0];
   const currentLevel = activeCustomLevel ?? CHALLENGE_LEVELS[currentLevelIndex];
+  const currentTestStage = activeCustomLevel?.testStages[currentTestStageIndex];
+  const activeTestType = currentTestStage?.testType ?? currentLevel.testType;
+  const activeTestDuration = currentTestStage?.duration ?? currentLevel.testDuration;
   const challengeTargetHeight =
     Math.floor(
       CARD_DIMENSIONS[cardSize].width *
@@ -692,6 +701,7 @@ const App: React.FC = () => {
     setLiveHeight(0);
     setChallengeScore(0);
     setChallengeStars(0);
+    setCurrentTestStageIndex(0);
   }, [resetCardHistory]);
 
   const resetChallenge = useCallback(() => {
@@ -713,8 +723,11 @@ const App: React.FC = () => {
     resetChallengeState(CHALLENGE_LEVELS[nextLevelIndex].testDuration);
   }, [activeCustomLevel, currentLevelIndex, resetChallengeState]);
 
-  const saveCustomLevel = useCallback((input: CreateLevelInput) => {
-    setCustomLevels(previous => [createLevel(input), ...previous]);
+  const saveCustomLevel = useCallback((input: CreateLevelInput, editingId: string | null) => {
+    setCustomLevels(previous => {
+      if (!editingId) return [createLevel(input), ...previous];
+      return previous.map(level => level.id === editingId ? updateLevel(level, input) : level);
+    });
   }, []);
 
   const importCustomLevel = useCallback((level: LevelDefinition) => {
@@ -750,7 +763,8 @@ const App: React.FC = () => {
     if (
       challengePhase !== ChallengePhase.BUILDING ||
       cards.length < currentLevel.minCards ||
-      liveHeightRef.current < challengeTargetHeight
+      liveHeightRef.current < challengeTargetHeight ||
+      (activeCustomLevel !== null && !blueprintProgress.complete)
     ) {
       return;
     }
@@ -759,14 +773,16 @@ const App: React.FC = () => {
     setDraggingCardId(null);
     setPointerMode(PointerMode.PLACE);
     setCountdown(3);
-    setTestTimeRemaining(currentLevel.testDuration);
+    setTestTimeRemaining(activeTestDuration);
     setChallengePhase(ChallengePhase.COUNTDOWN);
   }, [
     cards.length,
+    activeCustomLevel,
+    blueprintProgress.complete,
     challengePhase,
     challengeTargetHeight,
     currentLevel.minCards,
-    currentLevel.testDuration,
+    activeTestDuration,
     toggleFreezeMode
   ]);
 
@@ -815,6 +831,14 @@ const App: React.FC = () => {
 
         const survived = liveHeightRef.current >= challengeTargetHeight * 0.72;
         if (survived) {
+          const nextStageIndex = currentTestStageIndex + 1;
+          const nextStage = activeCustomLevel?.testStages[nextStageIndex];
+          if (nextStage) {
+            setCurrentTestStageIndex(nextStageIndex);
+            setCountdown(3);
+            setChallengePhase(ChallengePhase.COUNTDOWN);
+            return nextStage.duration;
+          }
           const unusedCards = currentLevel.maxCards - cards.length;
           const scoring = activeCustomLevel
             ? activeCustomLevel.scoring
@@ -844,6 +868,7 @@ const App: React.FC = () => {
     cards.length,
     challengeTargetHeight,
     activeCustomLevel,
+    currentTestStageIndex,
     currentLevel.maxCards,
     currentLevel.testDuration
   ]);
@@ -856,14 +881,25 @@ const App: React.FC = () => {
     }
   }, [challengePhase]);
 
+  useEffect(() => {
+    if (
+      challengePhase !== ChallengePhase.SUCCESS ||
+      !activeCustomLevel ||
+      activeCustomLevel.verification.passed
+    ) return;
+    const verified = markLevelPlaytested(activeCustomLevel);
+    setActiveCustomLevel(verified);
+    setCustomLevels(previous => previous.map(level => level.id === verified.id ? verified : level));
+  }, [activeCustomLevel, challengePhase]);
+
   const interactionEnabled =
     gameMode === GameMode.FREE ||
     challengePhase === ChallengePhase.BUILDING;
   const windStrength =
     gameMode === GameMode.CHALLENGE &&
     challengePhase === ChallengePhase.TESTING &&
-    currentLevel.testType === ChallengeTestType.WIND
-      ? (currentLevel.windStrength ?? 0)
+    activeTestType === ChallengeTestType.WIND
+      ? (currentTestStage?.windStrength ?? currentLevel.windStrength ?? 0)
       : 0;
   const placementEnabled =
     interactionEnabled &&
@@ -977,10 +1013,10 @@ const App: React.FC = () => {
             showTargetGuide={gameMode === GameMode.CHALLENGE}
             targetHeight={challengeTargetHeight}
             cardSize={cardSize}
-            testType={gameMode === GameMode.CHALLENGE ? currentLevel.testType : ChallengeTestType.STABILITY}
+            testType={gameMode === GameMode.CHALLENGE ? activeTestType : ChallengeTestType.STABILITY}
             testActive={challengePhase === ChallengePhase.TESTING}
-            weightMass={currentLevel.weightMass ?? 0.45}
-            weightDropHeight={challengeTargetHeight + (currentLevel.weightDropOffset ?? 4)}
+            weightMass={currentTestStage?.weightMass ?? currentLevel.weightMass ?? 0.45}
+            weightDropHeight={challengeTargetHeight + (currentTestStage?.weightDropOffset ?? currentLevel.weightDropOffset ?? 4)}
             theme={theme}
             onCardTransformChange={handleCardTransformChange}
             blueprintGuide={blueprintGuide}
@@ -1026,8 +1062,9 @@ const App: React.FC = () => {
             levelIndex={currentLevelIndex}
             levelCount={activeCustomLevel ? 1 : CHALLENGE_LEVELS.length}
             levelName={currentLevel.name[lang]}
-            levelDescription={currentLevel.description[lang]}
-            testType={currentLevel.testType}
+            levelDescription={`${currentLevel.description[lang]}${activeCustomLevel && activeCustomLevel.testStages.length > 1 ? ` · ${lang === 'zh' ? '测试阶段' : 'Test stage'} ${currentTestStageIndex + 1}/${activeCustomLevel.testStages.length}` : ''}`}
+            testType={activeTestType}
+            requiresBlueprintMatch={activeCustomLevel !== null}
             targetHeight={challengeTargetHeight}
             liveHeight={liveHeight}
             countdown={countdown}
@@ -1089,6 +1126,13 @@ const App: React.FC = () => {
         levels={customLevels}
         onSave={saveCustomLevel}
         onDelete={id => setCustomLevels(previous => previous.filter(level => level.id !== id))}
+        onDuplicate={level => setCustomLevels(previous => [duplicateLevel(level), ...previous])}
+        onPublish={level => {
+          const issues = getLevelValidationIssues(level);
+          if (issues.length > 0) return issues;
+          setCustomLevels(previous => previous.map(item => item.id === level.id ? publishLevel(item) : item));
+          return [];
+        }}
         onImport={importCustomLevel}
         onPlay={playtestCustomLevel}
         onClose={() => setShowLevelStudio(false)}
