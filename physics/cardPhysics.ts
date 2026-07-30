@@ -1,15 +1,10 @@
 import type { RapierRigidBody } from '@react-three/rapier';
-import type { LiveCardTransform } from '../types';
+import type { LaunchPhysicsSnapshot } from '../types';
 
 export type PhysicsVector3 = [number, number, number];
 export type PhysicsQuaternion = [number, number, number, number];
 
-export interface CardPhysicsSnapshot extends LiveCardTransform {
-  quaternion: PhysicsQuaternion;
-  linearVelocity: PhysicsVector3;
-  angularVelocity: PhysicsVector3;
-  sleeping: boolean;
-}
+export type CardPhysicsSnapshot = LaunchPhysicsSnapshot;
 
 export interface CardPhysicsHandle {
   setEnabled: (enabled: boolean) => void;

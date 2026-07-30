@@ -12,7 +12,9 @@ import {
   BlueprintGuideState,
   BlueprintCameraHint,
   CardData,
+  CardRole,
   CardSize,
+  LaunchRecord,
   LiveCardTransform,
   RotationPreset,
   InteractionMode,
@@ -30,6 +32,7 @@ interface GameSceneProps {
   addCard: (card: CardData) => void;
   removeCard: (id: string) => void;
   updateCard: (id: string, pos: [number, number, number], rot: [number, number, number]) => void;
+  setCardRole: (id: string, role: CardRole) => void;
   draggingCardId: string | null;
   setDraggingCardId: (id: string | null) => void;
   interactionEnabled: boolean;
@@ -45,6 +48,7 @@ interface GameSceneProps {
   weightDropHeight: number;
   theme: AppTheme;
   onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
+  onCardLaunch: (record: LaunchRecord) => void;
   blueprintGuide: BlueprintGuideState | null;
   onBlueprintPlaceOrigin: (origin: [number, number, number]) => void;
   onBlueprintProgress: (progress: BlueprintGuideProgress) => void;
@@ -210,6 +214,7 @@ const GameScene: React.FC<GameSceneProps> = ({
   addCard,
   removeCard,
   updateCard,
+  setCardRole,
   draggingCardId,
   setDraggingCardId,
   interactionEnabled,
@@ -225,6 +230,7 @@ const GameScene: React.FC<GameSceneProps> = ({
   weightDropHeight,
   theme,
   onCardTransformChange,
+  onCardLaunch,
   blueprintGuide,
   onBlueprintPlaceOrigin,
   onBlueprintProgress,
@@ -236,6 +242,7 @@ const GameScene: React.FC<GameSceneProps> = ({
   const nativeDpr = Math.min(window.devicePixelRatio || 1, 1.5);
   const minimumDpr = Math.min(nativeDpr, 0.75);
   const [renderDpr, setRenderDpr] = React.useState(nativeDpr);
+  const [launchBusy, setLaunchBusy] = React.useState(false);
 
   useEffect(() => {
     const nextNativeDpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -283,6 +290,7 @@ const GameScene: React.FC<GameSceneProps> = ({
               addCard={addCard}
               removeCard={removeCard}
               updateCard={updateCard}
+              setCardRole={setCardRole}
               draggingCardId={draggingCardId}
               setDraggingCardId={setDraggingCardId}
               interactionEnabled={interactionEnabled}
@@ -297,6 +305,8 @@ const GameScene: React.FC<GameSceneProps> = ({
               weightMass={weightMass}
               weightDropHeight={weightDropHeight}
               onCardTransformChange={onCardTransformChange}
+              onCardLaunch={onCardLaunch}
+              onLaunchBusyChange={setLaunchBusy}
               blueprintGuide={blueprintGuide}
               onBlueprintPlaceOrigin={onBlueprintPlaceOrigin}
               onBlueprintProgress={onBlueprintProgress}
@@ -309,7 +319,7 @@ const GameScene: React.FC<GameSceneProps> = ({
               minPolarAngle={0}
               maxPolarAngle={Math.PI / 2 - 0.1}
               dampingFactor={0.05}
-              enabled={!draggingCardId}
+              enabled={!draggingCardId && !launchBusy}
               mouseButtons={{
                 LEFT: -1 as THREE.MOUSE,
                 MIDDLE: THREE.MOUSE.PAN,

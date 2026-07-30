@@ -29,6 +29,23 @@ export interface LaunchIntent {
   pointerType: 'mouse' | 'touch' | 'pen';
 }
 
+export interface LaunchPhysicsSnapshot {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  quaternion: [number, number, number, number];
+  linearVelocity: [number, number, number];
+  angularVelocity: [number, number, number];
+  sleeping: boolean;
+}
+
+export interface LaunchRecord {
+  intent: LaunchIntent;
+  impulse: [number, number, number];
+  impulseMagnitude: number;
+  snapshotBefore: LaunchPhysicsSnapshot;
+  createdAt: number;
+}
+
 export interface LiveCardTransform {
   position: [number, number, number];
   rotation: [number, number, number];

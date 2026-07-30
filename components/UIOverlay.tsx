@@ -242,6 +242,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         place: '放置',
         move: '移动',
         remove: '删除',
+        launch: '弹射',
         physics: '物理',
         frozen: '已锁定',
         active: '运行中',
@@ -272,6 +273,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         place: 'Place',
         move: 'Move',
         remove: 'Delete',
+        launch: 'Launch',
         physics: 'Physics',
         frozen: 'Locked',
         active: 'Active',
@@ -408,7 +410,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         </section>
       )}
 
-      {pointerMode !== PointerMode.DELETE && (
+      {pointerMode !== PointerMode.DELETE && pointerMode !== PointerMode.LAUNCH && (
         <aside className={`preset-drawer ${presetOpen ? '' : 'is-collapsed'}`}>
           <div className="panel-heading">
             <div>
@@ -474,7 +476,11 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         presets={presets}
         currentPresetId={currentPresetId}
         setPresetId={setPresetId}
-        interactionEnabled={interactionEnabled && interactionMode === InteractionMode.QUICK}
+        interactionEnabled={
+          interactionEnabled &&
+          interactionMode === InteractionMode.QUICK &&
+          pointerMode === PointerMode.PLACE
+        }
         lang={lang}
       />
 
@@ -653,6 +659,19 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         >{labels.precision}</button>
       </div>
 
+      {pointerMode === PointerMode.LAUNCH && (
+        <div className={`launch-mode-callout ${isFreezeMode ? 'is-blocked' : ''}`}>
+          <strong>{lang === 'zh' ? '弹射模式' : 'LAUNCH MODE'}</strong>
+          <span>
+            {isFreezeMode
+              ? (lang === 'zh' ? '物理已锁定，请先开启物理' : 'Physics is locked. Enable physics first.')
+              : (lang === 'zh'
+                  ? '按住一张牌并沿发射方向快速滑动'
+                  : 'Press a card and flick toward the launch direction')}
+          </span>
+        </div>
+      )}
+
       <div className="tool-dock">
         <button className={pointerMode === PointerMode.PLACE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PLACE)} disabled={!interactionEnabled}>
           <span className="tool-symbol">+</span><strong>{labels.place}</strong><kbd>{formatBinding('tool.place')}</kbd>
@@ -662,6 +681,18 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         </button>
         <button className={pointerMode === PointerMode.DELETE ? 'is-danger' : ''} onClick={() => setPointerMode(PointerMode.DELETE)} disabled={!interactionEnabled}>
           <span className="tool-symbol">×</span><strong>{labels.remove}</strong><kbd>{formatBinding('tool.delete')}</kbd>
+        </button>
+        <button
+          className={pointerMode === PointerMode.LAUNCH ? 'is-launch' : ''}
+          onClick={() => setPointerMode(PointerMode.LAUNCH)}
+          disabled={!interactionEnabled || gameMode !== GameMode.FREE}
+          title={gameMode !== GameMode.FREE
+            ? (lang === 'zh' ? '当前仅自由搭建可用' : 'Currently available in free build only')
+            : undefined}
+        >
+          <span className="tool-symbol launch-symbol">➤</span>
+          <strong>{labels.launch}</strong>
+          <kbd>{formatBinding('tool.launch')}</kbd>
         </button>
         <span className="dock-divider" />
         <button className={isFreezeMode ? 'is-locked' : ''} onClick={() => setIsFreezeMode(!isFreezeMode)} disabled={!interactionEnabled}>
@@ -674,7 +705,12 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
       <div className="context-controls" aria-label={labels.controls}>
         <span>{labels.camera}</span>
-        {pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.QUICK ? (
+        {pointerMode === PointerMode.LAUNCH ? (
+          <>
+            <kbd>{formatBinding('tool.launch')}</kbd><span>{lang === 'zh' ? '弹射工具' : 'Launch tool'}</span>
+            <span>{lang === 'zh' ? '滑动距离 60% · 末端速度 40%' : 'Distance 60% · speed 40%'}</span>
+          </>
+        ) : pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.QUICK ? (
           <>
             <kbd>{formatBinding('preset.radial')}</kbd><span>{lang === 'zh' ? '姿态轮盘' : 'Preset wheel'}</span>
             <kbd>W S A D Q E</kbd><span>{lang === 'zh' ? '调整姿态' : 'Adjust pose'}</span>

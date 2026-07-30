@@ -18,7 +18,9 @@ import {
   BlueprintGuideState,
   CARD_DIMENSIONS,
   CardData,
+  CardRole,
   CardSize,
+  LaunchRecord,
   LiveCardTransform,
   RotationPreset,
   InteractionMode,
@@ -71,6 +73,7 @@ interface PhysicsWorldProps {
   addCard: (card: CardData) => void;
   removeCard: (id: string) => void;
   updateCard: (id: string, pos: [number, number, number], rot: [number, number, number]) => void;
+  setCardRole: (id: string, role: CardRole) => void;
   draggingCardId: string | null;
   setDraggingCardId: (id: string | null) => void;
   interactionEnabled: boolean;
@@ -85,6 +88,8 @@ interface PhysicsWorldProps {
   weightMass: number;
   weightDropHeight: number;
   onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
+  onCardLaunch: (record: LaunchRecord) => void;
+  onLaunchBusyChange: (busy: boolean) => void;
   blueprintGuide: BlueprintGuideState | null;
   onBlueprintPlaceOrigin: (origin: [number, number, number]) => void;
   onBlueprintProgress: (progress: BlueprintGuideProgress) => void;
@@ -617,6 +622,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   addCard,
   removeCard,
   updateCard,
+  setCardRole,
   draggingCardId,
   setDraggingCardId,
   interactionEnabled,
@@ -631,6 +637,8 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   weightMass,
   weightDropHeight,
   onCardTransformChange,
+  onCardLaunch,
+  onLaunchBusyChange,
   blueprintGuide,
   onBlueprintPlaceOrigin,
   onBlueprintProgress,
@@ -645,6 +653,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   const heightSampleTimeRef = useRef(0);
   const measurementBoxRef = useRef(new THREE.Box3());
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
+  const [activeLaunchCardId, setActiveLaunchCardId] = useState<string | null>(null);
 
   useEffect(() => {
     const activeIds = new Set(cards.map(card => card.id));
@@ -657,6 +666,20 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     liveCardTransformsRef.current.set(id, transform);
     onCardTransformChange(id, transform);
   }, [onCardTransformChange]);
+
+  const handleLaunchStateChange = useCallback((id: string, active: boolean) => {
+    setActiveLaunchCardId(previous => {
+      return active ? id : previous === id ? null : previous;
+    });
+  }, []);
+
+  useEffect(() => {
+    onLaunchBusyChange(activeLaunchCardId !== null);
+  }, [activeLaunchCardId, onLaunchBusyChange]);
+
+  const handleArmForLaunch = useCallback((id: string) => {
+    setCardRole(id, 'ammo');
+  }, [setCardRole]);
 
   useFrame(({ clock }) => {
     if (clock.elapsedTime - heightSampleTimeRef.current < 0.1) return;
@@ -706,8 +729,11 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     setDraggingCardId(card.id);
   };
 
-  const showNewCardGhost = interactionEnabled && placementEnabled && pointerMode === PointerMode.PLACE;
-  const showMoveCardGhost = interactionEnabled && pointerMode === PointerMode.MOVE && !!draggingCardData;
+  const launchIdle = activeLaunchCardId === null;
+  const showNewCardGhost =
+    interactionEnabled && launchIdle && placementEnabled && pointerMode === PointerMode.PLACE;
+  const showMoveCardGhost =
+    interactionEnabled && launchIdle && pointerMode === PointerMode.MOVE && !!draggingCardData;
 
   return (
     <Physics
@@ -769,10 +795,17 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
                 onCardDragStart(card);
               }}
               isDragging={isDragging}
-              interactionEnabled={interactionEnabled}
+              interactionEnabled={interactionEnabled && launchIdle}
               windStrength={windStrength}
               cardSize={cardSize}
               onTransformChange={handleCardTransformChange}
+              launchEnabled={
+                pointerMode === PointerMode.LAUNCH &&
+                (activeLaunchCardId === null || activeLaunchCardId === card.id)
+              }
+              onArmForLaunch={handleArmForLaunch}
+              onLaunchStateChange={handleLaunchStateChange}
+              onLaunch={onCardLaunch}
             />
           );
         })}

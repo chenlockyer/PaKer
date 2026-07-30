@@ -18,6 +18,7 @@ import {
   BlueprintRecordingState,
   BlueprintSnapshot,
   CardData,
+  CardRole,
   RotationPreset,
   InteractionMode,
   PointerMode,
@@ -32,6 +33,7 @@ import {
   LiveCardTransform,
   LevelDefinition,
   LevelTutorialCue,
+  LaunchRecord,
 } from './types';
 import { translations } from './utils/translations';
 import {
@@ -209,6 +211,7 @@ const App: React.FC = () => {
   const [activeCustomLevel, setActiveCustomLevel] = useState<LevelDefinition | null>(null);
   const [completedTutorials, setCompletedTutorials] = useState<Set<string>>(loadTutorialProgress);
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
+  const launchHistoryRef = useRef<LaunchRecord[]>([]);
   const blueprintCheckpointRef = useRef<CardData[]>([]);
   const blueprintCheckpointReadyRef = useRef(false);
   const cameraHintRef = useRef<BlueprintCameraHint>({
@@ -499,12 +502,23 @@ const App: React.FC = () => {
     });
   }, [isFreezeMode, recordCardHistory]);
 
+  const setCardRole = useCallback((id: string, role: CardRole) => {
+    setCards(previous => previous.map(card => (
+      card.id === id && card.role !== role ? { ...card, role } : card
+    )));
+  }, []);
+
+  const handleCardLaunch = useCallback((record: LaunchRecord) => {
+    launchHistoryRef.current = [...launchHistoryRef.current.slice(-199), record];
+  }, []);
+
   const clearCards = useCallback(() => {
     setCards(previous => {
       if (previous.length > 0) recordCardHistory(previous);
       return [];
     });
     liveHeightRef.current = 0;
+    launchHistoryRef.current = [];
     setLiveHeight(0);
     if (gameMode === GameMode.CHALLENGE) {
       setChallengePhase(ChallengePhase.BUILDING);
@@ -1211,6 +1225,13 @@ const App: React.FC = () => {
   useInputAction('tool.delete', event => {
     if (event.phase === 'down' && interactionEnabled) setPointerMode(PointerMode.DELETE);
   });
+  useInputAction('tool.launch', event => {
+    if (
+      event.phase === 'down' &&
+      interactionEnabled &&
+      gameMode === GameMode.FREE
+    ) setPointerMode(PointerMode.LAUNCH);
+  });
   useInputAction('mode.togglePrecision', event => {
     if (event.phase !== 'down' || !interactionEnabled) return;
     setInteractionMode(previous =>
@@ -1285,6 +1306,7 @@ const App: React.FC = () => {
             addCard={addCard} 
             removeCard={removeCard}
             updateCard={updateCard}
+            setCardRole={setCardRole}
             draggingCardId={draggingCardId}
             setDraggingCardId={setDraggingCardId}
             interactionEnabled={interactionEnabled}
@@ -1300,6 +1322,7 @@ const App: React.FC = () => {
             weightDropHeight={challengeTargetHeight + (currentTestStage?.weightDropOffset ?? currentLevel.weightDropOffset ?? 4)}
             theme={theme}
             onCardTransformChange={handleCardTransformChange}
+            onCardLaunch={handleCardLaunch}
             blueprintGuide={blueprintGuide}
             onBlueprintPlaceOrigin={placeBlueprintOrigin}
             onBlueprintProgress={handleBlueprintProgress}

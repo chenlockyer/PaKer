@@ -12,6 +12,7 @@ export type InputAction =
   | 'tool.place'
   | 'tool.move'
   | 'tool.delete'
+  | 'tool.launch'
   | 'mode.togglePrecision'
   | 'card.yawLeft'
   | 'card.yawRight'
@@ -62,6 +63,7 @@ export const ACTIONS: InputAction[] = [
   'tool.place',
   'tool.move',
   'tool.delete',
+  'tool.launch',
   'mode.togglePrecision',
   'card.yawLeft',
   'card.yawRight',
@@ -97,6 +99,7 @@ export const RECOMMENDED_BINDINGS: Record<InputAction, KeyBinding> = {
   'tool.place': { code: 'Digit1' },
   'tool.move': { code: 'Digit2' },
   'tool.delete': { code: 'Digit3' },
+  'tool.launch': { code: 'Digit4' },
   'mode.togglePrecision': { code: 'Tab' },
   'card.yawLeft': { code: 'KeyQ' },
   'card.yawRight': { code: 'KeyE' },
@@ -133,6 +136,7 @@ export const LEGACY_BINDINGS: Record<InputAction, KeyBinding> = {
   'tool.place': { code: 'Escape' },
   'tool.move': { code: 'KeyM' },
   'tool.delete': { code: 'Delete' },
+  'tool.launch': { code: 'KeyG' },
   'card.tiltForward': { code: 'KeyR' },
   'card.tiltBackward': { code: 'KeyF' },
   'card.tiltLeft': { code: 'KeyZ' },
@@ -155,7 +159,7 @@ export const LEGACY_BINDINGS: Record<InputAction, KeyBinding> = {
 };
 
 const STORAGE_KEY = 'hoc_input_settings_v1';
-const INPUT_SCHEMA_VERSION = 4;
+const INPUT_SCHEMA_VERSION = 5;
 type Listener = (event: InputActionEvent) => void;
 
 interface StoredInputSettings {

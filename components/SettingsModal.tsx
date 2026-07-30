@@ -138,6 +138,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         'tool.place': '放置工具',
         'tool.move': '移动工具',
         'tool.delete': '删除工具',
+        'tool.launch': '弹射工具',
         'mode.togglePrecision': '切换快速/精准模式',
         'card.yawLeft': '水平左转',
         'card.yawRight': '水平右转',
@@ -167,6 +168,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         'tool.place': 'Place tool',
         'tool.move': 'Move tool',
         'tool.delete': 'Delete tool',
+        'tool.launch': 'Launch tool',
         'mode.togglePrecision': 'Toggle quick/precision',
         'card.yawLeft': 'Yaw left',
         'card.yawRight': 'Yaw right',
@@ -196,7 +198,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const controlGroups: Array<{ title: string; actions: InputAction[] }> = [
     {
       title: lang === 'zh' ? '工具与历史' : 'Tools & history',
-      actions: ['tool.place', 'tool.move', 'tool.delete', 'mode.togglePrecision', 'history.undo', 'history.redo'],
+      actions: ['tool.place', 'tool.move', 'tool.delete', 'tool.launch', 'mode.togglePrecision', 'history.undo', 'history.redo'],
     },
     {
       title: lang === 'zh' ? '纸牌姿态' : 'Card pose',

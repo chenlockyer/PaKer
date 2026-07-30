@@ -337,18 +337,35 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .tool-dock button:hover:not(:disabled) { background: var(--surface-hover); color: var(--ink); }
 .tool-dock button.is-active { background: var(--accent); color: #fff; }
 .tool-dock button.is-danger { background: color-mix(in srgb, var(--danger) 13%, var(--surface)); color: var(--danger); }
+.tool-dock button.is-launch {
+  background: color-mix(in srgb, #e66a2c 88%, var(--surface)); color: #fff;
+}
 .tool-dock button.is-locked { background: var(--accent-soft); color: var(--accent-ink); }
 .tool-symbol, .physics-indicator { grid-row: 1 / 3; font-size: 19px; text-align: center; }
 .move-symbol { font-size: 16px; }
+.launch-symbol { color: #e66a2c; transform: rotate(-12deg); }
+.tool-dock button.is-launch .launch-symbol { color: #fff; }
 .tool-dock strong { align-self: end; font-size: 10px; }
 .tool-dock small { align-self: start; font-size: 8px; opacity: .72; }
 .tool-dock kbd { grid-column: 3; grid-row: 1 / 3; transform: scale(.8); }
 .tool-dock .is-active kbd { border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.13); color: #fff; box-shadow: none; }
 .dock-divider { width: 1px; margin: 5px 3px; background: var(--line); }
+.launch-mode-callout {
+  position: absolute; left: 50%; bottom: 138px; display: grid; gap: 3px;
+  min-width: 300px; transform: translateX(-50%); padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, #e66a2c 45%, var(--line)); border-radius: 7px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--muted); box-shadow: var(--shadow-small); pointer-events: none;
+  text-align: center; backdrop-filter: blur(8px);
+}
+.launch-mode-callout strong { color: #c65320; font-size: 11px; letter-spacing: .08em; }
+.launch-mode-callout span { font-size: 10px; }
+.launch-mode-callout.is-blocked { border-color: var(--danger); }
+.launch-mode-callout.is-blocked strong { color: var(--danger); }
 
 /* Contextual controls and preset wheel */
 .context-controls {
-  position: absolute; right: 14px; bottom: 14px; max-width: min(540px, calc(100vw - 32px));
+  position: absolute; right: 14px; bottom: 76px; max-width: min(420px, calc(100vw - 32px));
   display: flex; align-items: center; gap: 7px; padding: 7px 9px;
   border: 1px solid var(--line); border-radius: 6px; background: color-mix(in srgb, var(--surface) 94%, transparent);
   color: var(--muted); box-shadow: var(--shadow-small); pointer-events: auto; backdrop-filter: blur(8px);

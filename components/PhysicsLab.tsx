@@ -17,10 +17,10 @@ import {
   CardSize,
   type LaunchGestureSample,
   type LaunchIntent,
+  type LaunchRecord,
 } from '../types';
 import {
   createRapierCardPhysicsHandle,
-  type CardPhysicsSnapshot,
 } from '../physics/cardPhysics';
 import {
   isLaunchGesturePastDeadZone,
@@ -60,14 +60,6 @@ interface FlickParameters {
   maximumImpulse: number;
   linearDamping: number;
   angularDamping: number;
-}
-
-interface LaunchRecord {
-  intent: LaunchIntent;
-  impulse: [number, number, number];
-  impulseMagnitude: number;
-  snapshotBefore: CardPhysicsSnapshot;
-  createdAt: number;
 }
 
 const DEFAULT_FLICK_PARAMETERS: FlickParameters = {
