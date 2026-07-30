@@ -162,16 +162,9 @@ const Card: React.FC<CardProps> = ({
       body.setRotation(quaternion, false);
       body.setLinvel({ x: 0, y: 0, z: 0 }, false);
       body.setAngvel({ x: 0, y: 0, z: 0 }, false);
-      body.setBodyType(
-        data.locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
-        !data.locked,
-      );
     }
   }, [
-    data.locked,
     isDragging,
-    rapier.RigidBodyType.Dynamic,
-    rapier.RigidBodyType.Fixed,
     data.position[0], data.position[1], data.position[2], 
     data.rotation[0], data.rotation[1], data.rotation[2]
   ]);
