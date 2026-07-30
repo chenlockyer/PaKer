@@ -23,7 +23,6 @@ import {
   AppState,
   GameMode,
   ChallengePhase,
-  ChallengeLevel,
   ChallengeTestType,
   CardSize,
   AppTheme,
@@ -58,13 +57,17 @@ import {
   CreateLevelInput,
   createLevel,
   duplicateLevel,
-  getLevelValidationIssues,
+  getLevelPublishBlockingIssues,
   loadLevels,
   markLevelPlaytested,
   persistLevels,
   publishLevel,
   updateLevel,
 } from './services/levelService';
+import {
+  OFFICIAL_LEVEL_IDS,
+  OFFICIAL_LEVELS,
+} from './services/officialLevels';
 import {
   DisplayMetrics,
   getBrowserDisplayMetrics,
@@ -85,64 +88,6 @@ import {
 } from './services/gameSaveService';
 
 const DEG_10 = Math.PI / 18;
-const CHALLENGE_LEVELS: ChallengeLevel[] = [
-  {
-    id: 'a-frame',
-    name: { zh: 'A 字架入门', en: 'A-Frame Basics' },
-    description: {
-      zh: '只使用 2 张牌搭建一个能够独立站立的 A 字架',
-      en: 'Build a freestanding A-frame using only 2 cards'
-    },
-    maxCards: 2,
-    minCards: 2,
-    heightMultiplier: 1,
-    testDuration: 3,
-    testType: ChallengeTestType.STABILITY
-  },
-  {
-    id: 'roof-house',
-    name: { zh: '一层纸牌屋', en: 'One-Story House' },
-    description: {
-      zh: '使用不超过 10 张牌搭建有屋顶的一层房子',
-      en: 'Build a roofed one-story house with no more than 10 cards'
-    },
-    maxCards: 10,
-    minCards: 10,
-    heightMultiplier: 1,
-    testDuration: 5,
-    testType: ChallengeTestType.WIND,
-    windStrength: 0.018
-  },
-  {
-    id: 'weight-drop',
-    name: { zh: '落物冲击', en: 'Drop Impact' },
-    description: {
-      zh: '搭建一层结构，承受从上方落下的重物冲击',
-      en: 'Build one story and survive a weight dropped from above'
-    },
-    maxCards: 12,
-    minCards: 6,
-    heightMultiplier: 1,
-    testDuration: 6,
-    testType: ChallengeTestType.WEIGHT_DROP,
-    weightMass: 0.45,
-    weightDropOffset: 4
-  },
-  {
-    id: 'two-story-wind',
-    name: { zh: '两层风力挑战', en: 'Two-Story Wind Trial' },
-    description: {
-      zh: '搭建两层纸牌屋，并承受 10 秒轻风',
-      en: 'Build two stories and survive 10 seconds of light wind'
-    },
-    maxCards: 20,
-    minCards: 8,
-    heightMultiplier: 2,
-    testDuration: 10,
-    testType: ChallengeTestType.WIND,
-    windStrength: 0.07
-  }
-];
 const PRESET_SCHEMA_VERSION = '5';
 const EMPTY_BLUEPRINT_PROGRESS: BlueprintGuideProgress = {
   matched: 0,
@@ -275,7 +220,7 @@ const App: React.FC = () => {
   const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
   const [challengePhase, setChallengePhase] = useState<ChallengePhase>(ChallengePhase.BUILDING);
   const [countdown, setCountdown] = useState(3);
-  const [testTimeRemaining, setTestTimeRemaining] = useState(CHALLENGE_LEVELS[0].testDuration);
+  const [testTimeRemaining, setTestTimeRemaining] = useState(OFFICIAL_LEVELS[0].testDuration);
   const [liveHeight, setLiveHeight] = useState(0);
   const [challengeScore, setChallengeScore] = useState(0);
   const [challengeStars, setChallengeStars] = useState(0);
@@ -371,9 +316,19 @@ const App: React.FC = () => {
     }
   }, [cards]);
 
+  const officialLevelOverrides = new Map(
+    customLevels
+      .filter(level => OFFICIAL_LEVEL_IDS.has(level.id))
+      .map(level => [level.id, level]),
+  );
+  const effectiveOfficialLevels = OFFICIAL_LEVELS.map(
+    level => officialLevelOverrides.get(level.id) ?? level,
+  );
+  const playerLevels = customLevels.filter(level => !OFFICIAL_LEVEL_IDS.has(level.id));
+  const levelLibrary = [...effectiveOfficialLevels, ...playerLevels];
   const currentPreset = presets.find(p => p.id === currentPresetId) || presets[0];
-  const currentLevel = activeCustomLevel ?? CHALLENGE_LEVELS[currentLevelIndex];
-  const currentTestStage = activeCustomLevel?.testStages[currentTestStageIndex];
+  const currentLevel = activeCustomLevel ?? effectiveOfficialLevels[currentLevelIndex] ?? effectiveOfficialLevels[0];
+  const currentTestStage = currentLevel.testStages[currentTestStageIndex];
   const activeTestType = currentTestStage?.testType ?? currentLevel.testType;
   const activeTestDuration = currentTestStage?.duration ?? currentLevel.testDuration;
   const challengeTargetHeight =
@@ -387,8 +342,8 @@ const App: React.FC = () => {
     ? [...blueprintGuide.blueprint.steps]
         .sort((left, right) => left.order - right.order)[blueprintGuide.currentStepIndex]
     : null;
-  const activeTutorial = activeCustomLevel?.tutorial?.enabled
-    ? activeCustomLevel.tutorial
+  const activeTutorial = currentLevel.tutorial?.enabled
+    ? currentLevel.tutorial
     : null;
   const activeTutorialCue: LevelTutorialCue | null =
     activeTutorial?.cues[tutorialCueIndex] ?? null;
@@ -989,38 +944,60 @@ const App: React.FC = () => {
 
   const resetChallenge = useCallback(() => {
     resetChallengeState(currentLevel.testDuration);
-    if (activeCustomLevel) {
-      startBlueprintGuide(activeCustomLevel.embeddedBlueprint, true);
+    if (currentLevel.requiresBlueprintMatch) {
+      startBlueprintGuide(currentLevel.embeddedBlueprint, true);
+    } else {
+      stopBlueprintGuide();
     }
-    restartLevelTutorial(activeCustomLevel);
+    restartLevelTutorial(currentLevel);
   }, [
-    activeCustomLevel,
+    currentLevel,
     currentLevel.testDuration,
+    currentLevel,
     resetChallengeState,
     restartLevelTutorial,
     startBlueprintGuide,
+    stopBlueprintGuide,
   ]);
 
   const startChallenge = useCallback(() => {
+    const firstLevel = effectiveOfficialLevels[0];
     setActiveCustomLevel(null);
-    restartLevelTutorial(null);
+    restartLevelTutorial(firstLevel);
     setGameMode(GameMode.CHALLENGE);
     setCurrentLevelIndex(0);
-    resetChallengeState(CHALLENGE_LEVELS[0].testDuration);
+    resetChallengeState(firstLevel.testDuration);
+    if (firstLevel.requiresBlueprintMatch) {
+      startBlueprintGuide(firstLevel.embeddedBlueprint, true);
+    } else {
+      stopBlueprintGuide();
+    }
     setAppState(AppState.GAME);
-  }, [resetChallengeState, restartLevelTutorial]);
+  }, [effectiveOfficialLevels, resetChallengeState, restartLevelTutorial, startBlueprintGuide, stopBlueprintGuide]);
 
   const advanceChallenge = useCallback(() => {
     if (activeCustomLevel) return;
-    const nextLevelIndex = Math.min(currentLevelIndex + 1, CHALLENGE_LEVELS.length - 1);
+    const nextLevelIndex = Math.min(currentLevelIndex + 1, effectiveOfficialLevels.length - 1);
+    const nextLevel = effectiveOfficialLevels[nextLevelIndex];
     setCurrentLevelIndex(nextLevelIndex);
-    resetChallengeState(CHALLENGE_LEVELS[nextLevelIndex].testDuration);
-  }, [activeCustomLevel, currentLevelIndex, resetChallengeState]);
+    resetChallengeState(nextLevel.testDuration);
+    restartLevelTutorial(nextLevel);
+    if (nextLevel.requiresBlueprintMatch) {
+      startBlueprintGuide(nextLevel.embeddedBlueprint, true);
+    } else {
+      stopBlueprintGuide();
+    }
+  }, [activeCustomLevel, currentLevelIndex, effectiveOfficialLevels, resetChallengeState, restartLevelTutorial, startBlueprintGuide, stopBlueprintGuide]);
 
   const saveCustomLevel = useCallback((input: CreateLevelInput, editingId: string | null) => {
     setCustomLevels(previous => {
       if (!editingId) return [createLevel(input), ...previous];
-      return previous.map(level => level.id === editingId ? updateLevel(level, input) : level);
+      const existing = previous.find(level => level.id === editingId);
+      if (existing) {
+        return previous.map(level => level.id === editingId ? updateLevel(level, input) : level);
+      }
+      const official = OFFICIAL_LEVELS.find(level => level.id === editingId);
+      return official ? [updateLevel(official, input), ...previous] : previous;
     });
   }, []);
 
@@ -1041,9 +1018,13 @@ const App: React.FC = () => {
     resetChallengeState(level.testDuration);
     setShowLevelStudio(false);
     setAppState(AppState.GAME);
-    startBlueprintGuide(level.embeddedBlueprint, true);
+    if (level.requiresBlueprintMatch) {
+      startBlueprintGuide(level.embeddedBlueprint, true);
+    } else {
+      stopBlueprintGuide();
+    }
     restartLevelTutorial(level);
-  }, [resetChallengeState, restartLevelTutorial, startBlueprintGuide]);
+  }, [resetChallengeState, restartLevelTutorial, startBlueprintGuide, stopBlueprintGuide]);
 
   const startFreeBuild = useCallback(() => {
     setGameMode(GameMode.FREE);
@@ -1060,7 +1041,7 @@ const App: React.FC = () => {
       challengePhase !== ChallengePhase.BUILDING ||
       cards.length < currentLevel.minCards ||
       liveHeightRef.current < challengeTargetHeight ||
-      (activeCustomLevel !== null && !blueprintProgress.complete)
+      (currentLevel.requiresBlueprintMatch && !blueprintProgress.complete)
     ) {
       return;
     }
@@ -1073,11 +1054,11 @@ const App: React.FC = () => {
     setChallengePhase(ChallengePhase.COUNTDOWN);
   }, [
     cards.length,
-    activeCustomLevel,
     blueprintProgress.complete,
     challengePhase,
     challengeTargetHeight,
     currentLevel.minCards,
+    currentLevel.requiresBlueprintMatch,
     activeTestDuration,
     toggleFreezeMode
   ]);
@@ -1128,7 +1109,7 @@ const App: React.FC = () => {
         const survived = liveHeightRef.current >= challengeTargetHeight * 0.72;
         if (survived) {
           const nextStageIndex = currentTestStageIndex + 1;
-          const nextStage = activeCustomLevel?.testStages[nextStageIndex];
+          const nextStage = currentLevel.testStages[nextStageIndex];
           if (nextStage) {
             setCurrentTestStageIndex(nextStageIndex);
             setCountdown(3);
@@ -1136,9 +1117,7 @@ const App: React.FC = () => {
             return nextStage.duration;
           }
           const unusedCards = currentLevel.maxCards - cards.length;
-          const scoring = activeCustomLevel
-            ? activeCustomLevel.scoring
-            : { baseScore: currentLevel.testDuration * 50, unusedCardBonus: 50, heightBonus: 100 };
+          const scoring = currentLevel.scoring;
           const score = Math.round(
             scoring.baseScore +
             liveHeightRef.current * scoring.heightBonus +
@@ -1163,9 +1142,10 @@ const App: React.FC = () => {
     challengePhase,
     cards.length,
     challengeTargetHeight,
-    activeCustomLevel,
     currentTestStageIndex,
     currentLevel.maxCards,
+    currentLevel.scoring,
+    currentLevel.testStages,
     currentLevel.testDuration
   ]);
 
@@ -1373,11 +1353,11 @@ const App: React.FC = () => {
             maxCards={currentLevel.maxCards}
             minCards={currentLevel.minCards}
             levelIndex={currentLevelIndex}
-            levelCount={activeCustomLevel ? 1 : CHALLENGE_LEVELS.length}
+            levelCount={activeCustomLevel ? 1 : effectiveOfficialLevels.length}
             levelName={currentLevel.name[lang]}
             levelDescription={`${currentLevel.description[lang]}${activeCustomLevel && activeCustomLevel.testStages.length > 1 ? ` · ${lang === 'zh' ? '测试阶段' : 'Test stage'} ${currentTestStageIndex + 1}/${activeCustomLevel.testStages.length}` : ''}`}
             testType={activeTestType}
-            requiresBlueprintMatch={activeCustomLevel !== null}
+            requiresBlueprintMatch={currentLevel.requiresBlueprintMatch}
             targetHeight={challengeTargetHeight}
             liveHeight={liveHeight}
             countdown={countdown}
@@ -1482,12 +1462,14 @@ const App: React.FC = () => {
         lang={lang}
         blueprints={[...OFFICIAL_TUTORIAL_BLUEPRINTS, ...blueprints]}
         presets={presets}
-        levels={customLevels}
+        levels={levelLibrary}
+        officialLevelIds={[...OFFICIAL_LEVEL_IDS]}
+        overriddenOfficialLevelIds={customLevels.filter(level => OFFICIAL_LEVEL_IDS.has(level.id)).map(level => level.id)}
         onSave={saveCustomLevel}
         onDelete={id => setCustomLevels(previous => previous.filter(level => level.id !== id))}
         onDuplicate={level => setCustomLevels(previous => [duplicateLevel(level), ...previous])}
         onPublish={level => {
-          const issues = getLevelValidationIssues(level);
+          const issues = getLevelPublishBlockingIssues(level);
           if (issues.length > 0) return issues;
           setCustomLevels(previous => previous.map(item => item.id === level.id ? publishLevel(item) : item));
           return [];

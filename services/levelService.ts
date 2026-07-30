@@ -26,6 +26,7 @@ export interface CreateLevelInput {
   description: string;
   author: string;
   origin: LevelOrigin;
+  requiresBlueprintMatch?: boolean;
   tags: string[];
   blueprint: Blueprint;
   maxCards: number;
@@ -71,6 +72,7 @@ export const createLevel = (input: CreateLevelInput): LevelDefinition => {
     name: { zh: input.name.trim(), en: input.name.trim() },
     description: { zh: input.description.trim(), en: input.description.trim() },
     origin: input.origin,
+    requiresBlueprintMatch: input.requiresBlueprintMatch ?? true,
     author: input.author.trim(),
     tags: input.tags.map(tag => tag.trim()).filter(Boolean).slice(0, 8),
     createdAt: now,
@@ -137,7 +139,8 @@ export const duplicateLevel = (source: LevelDefinition): LevelDefinition => {
     name: `${source.name.zh} - 副本`,
     description: source.description.zh,
     author: source.author,
-    origin: source.origin,
+    origin: 'player',
+    requiresBlueprintMatch: source.requiresBlueprintMatch,
     tags: source.tags,
     blueprint: source.embeddedBlueprint,
     maxCards: source.maxCards,
@@ -184,6 +187,9 @@ export const getLevelValidationIssues = (level: LevelDefinition): string[] => {
   return issues;
 };
 
+export const getLevelPublishBlockingIssues = (level: LevelDefinition): string[] =>
+  getLevelValidationIssues(level).filter(issue => issue !== 'playtest-required');
+
 export const markLevelPlaytested = (level: LevelDefinition): LevelDefinition => ({
   ...level,
   updatedAt: new Date().toISOString(),
@@ -195,7 +201,7 @@ export const markLevelPlaytested = (level: LevelDefinition): LevelDefinition => 
 });
 
 export const publishLevel = (level: LevelDefinition): LevelDefinition => {
-  const issues = getLevelValidationIssues(level);
+  const issues = getLevelPublishBlockingIssues(level);
   if (issues.length > 0) throw new Error(issues.join(','));
   return { ...level, status: 'published', updatedAt: new Date().toISOString() };
 };
@@ -212,6 +218,7 @@ export const validateLevel = (value: unknown): LevelDefinition => {
     level.blueprintChecksum !== checksumBlueprint(level.embeddedBlueprint)
   ) throw new Error('Invalid or damaged level file');
   const migrated = clone(level);
+  migrated.requiresBlueprintMatch ??= true;
   migrated.verification ??= {
     passed: false,
     playtestedAt: null,

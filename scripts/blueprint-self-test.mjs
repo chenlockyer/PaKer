@@ -12,6 +12,7 @@ const bundlePath = join(temporaryDirectory, 'blueprint-service.mjs');
   const editorBundlePath = join(temporaryDirectory, 'blueprint-editor.cjs');
   const tutorialBundlePath = join(temporaryDirectory, 'official-tutorials.mjs');
   const levelBundlePath = join(temporaryDirectory, 'level-service.mjs');
+  const officialLevelsBundlePath = join(temporaryDirectory, 'official-levels.mjs');
 const require = createRequire(import.meta.url);
 
 try {
@@ -193,10 +194,13 @@ try {
   }).includes('invalid-tutorial-cues'));
   assert.equal(levelService.validateLevel(level).id, level.id);
   assert.ok(levelService.getLevelValidationIssues(level).includes('playtest-required'));
+  assert.equal(levelService.getLevelPublishBlockingIssues(level).includes('playtest-required'), false);
+  assert.equal(levelService.publishLevel(level).status, 'published');
   const verifiedLevel = levelService.markLevelPlaytested(level);
   assert.equal(levelService.publishLevel(verifiedLevel).status, 'published');
   const duplicatedLevel = levelService.duplicateLevel(verifiedLevel);
   assert.notEqual(duplicatedLevel.id, level.id);
+  assert.equal(duplicatedLevel.origin, 'player');
   assert.equal(duplicatedLevel.verification.passed, false);
   assert.equal(duplicatedLevel.tutorial.cues.length, 1);
   const updatedLevel = levelService.updateLevel(verifiedLevel, {
@@ -220,6 +224,27 @@ try {
   assert.equal(updatedLevel.sourceBlueprintId, level.sourceBlueprintId);
   assert.equal(updatedLevel.testStages.length, 2);
   assert.equal(updatedLevel.verification.passed, false);
+
+  await build({
+    entryPoints: ['services/officialLevels.ts'],
+    outfile: officialLevelsBundlePath,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    logLevel: 'silent',
+  });
+  const officialLevels = await import(`${pathToFileURL(officialLevelsBundlePath).href}?v=${Date.now()}`);
+  assert.equal(officialLevels.OFFICIAL_LEVELS.length, 4);
+  officialLevels.OFFICIAL_LEVELS.forEach(officialLevel => {
+    assert.equal(officialLevel.origin, 'official');
+    assert.equal(officialLevel.status, 'published');
+    assert.equal(officialLevel.requiresBlueprintMatch, false);
+    assert.equal(levelService.getLevelPublishBlockingIssues(officialLevel).length, 0);
+    assert.equal(
+      officialLevel.blueprintChecksum,
+      levelService.checksumBlueprint(officialLevel.embeddedBlueprint),
+    );
+  });
   assert.equal(levelService.validateLevel(updatedLevel).id, level.id);
   sourceBlueprint.name = 'Source changed';
   assert.equal(level.embeddedBlueprint.name, '第 1 课：A 字架');

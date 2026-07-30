@@ -23,6 +23,8 @@ interface LevelStudioProps {
   blueprints: Blueprint[];
   presets: RotationPreset[];
   levels: LevelDefinition[];
+  officialLevelIds: string[];
+  overriddenOfficialLevelIds: string[];
   onSave: (input: CreateLevelInput, editingId: string | null) => void;
   onDelete: (id: string) => void;
   onDuplicate: (level: LevelDefinition) => void;
@@ -33,13 +35,15 @@ interface LevelStudioProps {
 }
 
 const LevelStudio: React.FC<LevelStudioProps> = ({
-  isOpen, lang, blueprints, presets, levels, onSave, onDelete, onDuplicate, onPublish, onImport, onPlay, onClose,
+  isOpen, lang, blueprints, presets, levels, officialLevelIds, overriddenOfficialLevelIds,
+  onSave, onDelete, onDuplicate, onPublish, onImport, onPlay, onClose,
 }) => {
   const [tab, setTab] = useState<'create' | 'library'>('create');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [author, setAuthor] = useState(() => localStorage.getItem('hoc_level_author') ?? '');
   const [origin, setOrigin] = useState<LevelOrigin>('player');
+  const [requiresBlueprintMatch, setRequiresBlueprintMatch] = useState(true);
   const [blueprintId, setBlueprintId] = useState(blueprints[0]?.id ?? '');
   const [maxCards, setMaxCards] = useState(10);
   const [minCards, setMinCards] = useState(2);
@@ -66,6 +70,20 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
   const selectedBlueprint = blueprintId === '__embedded__'
     ? editingLevel?.embeddedBlueprint
     : blueprints.find(item => item.id === blueprintId);
+  const editingOfficial = Boolean(editingLevel && officialLevelIds.includes(editingLevel.id));
+  const issueLabel = (issue: string) => {
+    const labels: Record<string, { zh: string; en: string }> = {
+      'missing-name': { zh: '缺少关卡名称', en: 'Missing level name' },
+      'invalid-card-limit': { zh: '牌数上下限无效', en: 'Invalid card limits' },
+      'blueprint-exceeds-card-limit': { zh: '蓝图牌数超过关卡上限', en: 'Blueprint exceeds card limit' },
+      'invalid-test-stages': { zh: '测试阶段设置无效', en: 'Invalid test stages' },
+      'invalid-tutorial-cues': { zh: '教学步骤不完整', en: 'Incomplete tutorial cues' },
+      'blueprint-checksum': { zh: '内嵌蓝图校验失败', en: 'Embedded blueprint checksum failed' },
+      'incomplete-blueprint-steps': { zh: '蓝图步骤没有覆盖全部纸牌', en: 'Blueprint steps do not cover every card' },
+      'playtest-required': { zh: '尚未试玩验证', en: 'Not playtested yet' },
+    };
+    return labels[issue]?.[lang] ?? issue;
+  };
 
   const beginEdit = (level: LevelDefinition) => {
     setEditingLevel(level);
@@ -73,6 +91,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
     setDescription(level.description.zh);
     setAuthor(level.author);
     setOrigin(level.origin);
+    setRequiresBlueprintMatch(level.requiresBlueprintMatch);
     setBlueprintId('__embedded__');
     setMaxCards(level.maxCards);
     setMinCards(level.minCards);
@@ -103,7 +122,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
     }
     localStorage.setItem('hoc_level_author', author);
     onSave({
-      name, description, author, origin, blueprint: selectedBlueprint,
+      name, description, author, origin, requiresBlueprintMatch, blueprint: selectedBlueprint,
       tags: tags.split(/[,，]/), maxCards, minCards, heightMultiplier,
       testDuration, testType, windStrength, weightMass, weightDropOffset,
       scoring: { baseScore, unusedCardBonus, heightBonus },
@@ -201,7 +220,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
               <label><span>{lang === 'zh' ? '关卡说明' : 'Description'}</span><textarea value={description} onChange={e => setDescription(e.target.value)} /></label>
               <div className="blueprint-form-row">
                 <label><span>{lang === 'zh' ? '作者' : 'Author'}</span><input value={author} onChange={e => setAuthor(e.target.value)} /></label>
-                <label><span>{lang === 'zh' ? '来源' : 'Origin'}</span><select value={origin} onChange={e => setOrigin(e.target.value as LevelOrigin)}><option value="player">{lang === 'zh' ? '玩家关卡' : 'Player'}</option><option value="official">{lang === 'zh' ? '官方关卡' : 'Official'}</option></select></label>
+                <label><span>{lang === 'zh' ? '来源' : 'Origin'}</span><select value={origin} disabled={editingOfficial} onChange={e => setOrigin(e.target.value as LevelOrigin)}><option value="player">{lang === 'zh' ? '玩家关卡' : 'Player'}</option><option value="official">{lang === 'zh' ? '官方关卡' : 'Official'}</option></select></label>
               </div>
               <label><span>{lang === 'zh' ? '标签' : 'Tags'}</span><input value={tags} onChange={e => setTags(e.target.value)} placeholder={lang === 'zh' ? '教学, 稳定, 一层' : 'tutorial, stable'} /></label>
             </section>
@@ -219,6 +238,18 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                 <strong>{selectedBlueprint?.name ?? (lang === 'zh' ? '尚未选择蓝图' : 'No blueprint selected')}</strong>
                 <p>{lang === 'zh' ? '保存时会复制完整蓝图并写入关卡文件；删除或修改素材蓝图不会影响关卡。' : 'A complete independent copy is embedded when saved.'}</p>
               </div>
+              <label className="level-tutorial-toggle">
+                <input
+                  type="checkbox"
+                  checked={requiresBlueprintMatch}
+                  onChange={event => setRequiresBlueprintMatch(event.target.checked)}
+                />
+                <span>
+                  {lang === 'zh'
+                    ? '通关前必须完成内嵌蓝图'
+                    : 'Require the embedded blueprint before testing'}
+                </span>
+              </label>
             </section>
 
             <section>
@@ -363,13 +394,21 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
           </form>
         ) : (
           <div className="level-library">
-            {levels.length === 0 ? <div className="blueprint-empty"><strong>{lang === 'zh' ? '还没有自定义关卡' : 'No custom levels yet'}</strong></div> : levels.map(level => (
-              <article className="level-card" key={level.id}>
+            {levels.length === 0 ? <div className="blueprint-empty"><strong>{lang === 'zh' ? '还没有自定义关卡' : 'No custom levels yet'}</strong></div> : levels.map(level => {
+              const isOfficial = officialLevelIds.includes(level.id);
+              const isOfficialOverride = overriddenOfficialLevelIds.includes(level.id);
+              return (
+              <article className={`level-card ${isOfficial ? 'is-official' : ''}`} key={level.id}>
                 <div>
-                  <span className="panel-kicker">{level.origin === 'official' ? (lang === 'zh' ? '官方' : 'OFFICIAL') : (lang === 'zh' ? '玩家' : 'PLAYER')} · {level.status}</span>
+                  <span className="panel-kicker">
+                    {isOfficial ? (lang === 'zh' ? '官方' : 'OFFICIAL') : (lang === 'zh' ? '玩家' : 'PLAYER')}
+                    {isOfficialOverride ? ` · ${lang === 'zh' ? '已修改' : 'OVERRIDDEN'}` : ''}
+                    {' · '}{level.status}
+                  </span>
                   <h3>{level.name[lang]}</h3><p>{level.description[lang]}</p>
                   <small>
                     {level.embeddedBlueprint.cardCount} {lang === 'zh' ? '张目标牌' : 'target cards'} · {level.testType} · {level.testDuration}s
+                    {' · '}{level.requiresBlueprintMatch ? (lang === 'zh' ? '要求蓝图' : 'blueprint required') : (lang === 'zh' ? '自由结构' : 'free structure')}
                     {level.tutorial.enabled ? ` · ${level.tutorial.cues.length} ${lang === 'zh' ? '条教学' : 'tutorial cues'}` : ''}
                     {' · '}{level.verification.passed ? (lang === 'zh' ? '已试玩通过' : 'verified') : (lang === 'zh' ? '待试玩' : 'unverified')}
                   </small>
@@ -381,14 +420,34 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                   {level.status === 'draft' && <button onClick={() => {
                     const issues = onPublish(level);
                     setNotice(issues.length
-                      ? (lang === 'zh' ? `无法发布：${issues.join('、')}` : `Cannot publish: ${issues.join(', ')}`)
-                      : (lang === 'zh' ? '关卡已发布。' : 'Level published.'));
+                      ? (lang === 'zh'
+                          ? `无法发布：${issues.map(issueLabel).join('、')}`
+                          : `Cannot publish: ${issues.map(issueLabel).join(', ')}`)
+                      : (level.verification.passed
+                          ? (lang === 'zh' ? '关卡已发布。' : 'Level published.')
+                          : (lang === 'zh' ? '关卡已发布，但尚未试玩验证。' : 'Level published without playtest verification.')));
                   }}>{lang === 'zh' ? '发布' : 'Publish'}</button>}
                   <button onClick={() => downloadLevel(level)}>{lang === 'zh' ? '导出' : 'Export'}</button>
-                  <button className="danger-text" onClick={() => confirm(lang === 'zh' ? '删除这个关卡？' : 'Delete this level?') && onDelete(level.id)}>{lang === 'zh' ? '删除' : 'Delete'}</button>
+                  {isOfficial
+                    ? isOfficialOverride && (
+                        <button className="danger-text" onClick={() =>
+                          confirm(lang === 'zh' ? '恢复官方默认关卡？当前修改会被移除。' : 'Restore the built-in official level?') &&
+                          onDelete(level.id)
+                        }>
+                          {lang === 'zh' ? '恢复默认' : 'Restore default'}
+                        </button>
+                      )
+                    : (
+                        <button className="danger-text" onClick={() =>
+                          confirm(lang === 'zh' ? '删除这个关卡？' : 'Delete this level?') &&
+                          onDelete(level.id)
+                        }>
+                          {lang === 'zh' ? '删除' : 'Delete'}
+                        </button>
+                      )}
                 </div>
               </article>
-            ))}
+            )})}
           </div>
         )}
       </section>

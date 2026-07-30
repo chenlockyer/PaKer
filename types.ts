@@ -240,6 +240,7 @@ export interface LevelTutorial {
 export interface LevelDefinition extends ChallengeLevel {
   schemaVersion: 1;
   origin: LevelOrigin;
+  requiresBlueprintMatch: boolean;
   author: string;
   tags: string[];
   createdAt: string;
