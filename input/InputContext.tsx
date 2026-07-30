@@ -222,16 +222,20 @@ const sameBinding = (left: KeyBinding, right: KeyBinding) =>
   Boolean(left.shift) === Boolean(right.shift) &&
   Boolean(left.alt) === Boolean(right.alt);
 
-const isEditableTarget = (target: EventTarget | null) => {
-  const element = target as HTMLElement | null;
+const isEditableElement = (target: EventTarget | null) => {
+  if (!(target instanceof Element)) return false;
   return Boolean(
-    element &&
-      (element.tagName === 'INPUT' ||
-        element.tagName === 'TEXTAREA' ||
-        element.tagName === 'SELECT' ||
-        element.isContentEditable),
+    target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'),
   );
 };
+
+const isEditableEvent = (event: Event) => {
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
+  return path.some(isEditableElement);
+};
+
+const hasEditableFocus = () =>
+  typeof document !== 'undefined' && isEditableElement(document.activeElement);
 
 export const keyBindingFromEvent = (event: React.KeyboardEvent | KeyboardEvent): KeyBinding => ({
   code: event.code,
@@ -297,6 +301,8 @@ export const InputProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
+    let isComposingText = false;
+
     const resolveActions = (event: KeyboardEvent) => {
       const candidates = ACTIONS.filter(action => {
         const binding = bindingsRef.current[action];
@@ -307,7 +313,15 @@ export const InputProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (suspendedRef.current || isEditableTarget(event.target) || event.repeat) return;
+      if (
+        suspendedRef.current ||
+        isEditableEvent(event) ||
+        hasEditableFocus() ||
+        isComposingText ||
+        event.isComposing ||
+        event.keyCode === 229 ||
+        event.repeat
+      ) return;
       const actions = resolveActions(event);
       if (actions.length === 0) return;
       event.preventDefault();
@@ -321,6 +335,14 @@ export const InputProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
+      if (
+        suspendedRef.current ||
+        isEditableEvent(event) ||
+        hasEditableFocus() ||
+        isComposingText ||
+        event.isComposing ||
+        event.keyCode === 229
+      ) return;
       const actions = ACTIONS.filter(
         action =>
           pressedRef.current.has(action) &&
@@ -337,13 +359,33 @@ export const InputProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
     };
 
+    const handleFocusIn = (event: FocusEvent) => {
+      if (isEditableEvent(event)) releaseAll();
+    };
+
+    const handleCompositionStart = (event: CompositionEvent) => {
+      if (!isEditableEvent(event) && !hasEditableFocus()) return;
+      isComposingText = true;
+      releaseAll();
+    };
+
+    const handleCompositionEnd = () => {
+      isComposingText = false;
+    };
+
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp, true);
     window.addEventListener('blur', releaseAll);
+    window.addEventListener('focusin', handleFocusIn, true);
+    window.addEventListener('compositionstart', handleCompositionStart, true);
+    window.addEventListener('compositionend', handleCompositionEnd, true);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('keyup', handleKeyUp, true);
       window.removeEventListener('blur', releaseAll);
+      window.removeEventListener('focusin', handleFocusIn, true);
+      window.removeEventListener('compositionstart', handleCompositionStart, true);
+      window.removeEventListener('compositionend', handleCompositionEnd, true);
     };
   }, [releaseAll]);
 

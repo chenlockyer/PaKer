@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CARD_DIMENSIONS, CardSize } from '../types';
 import { GameSaveData } from '../services/gameSaveService';
 
@@ -47,6 +47,13 @@ const SaveLibraryModal: React.FC<SaveLibraryModalProps> = ({
   const [newName, setNewName] = useState(defaultName);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useLayoutEffect(() => {
+    if (!editingId) return;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [editingId]);
 
   const copy = lang === 'zh'
     ? {
@@ -105,17 +112,19 @@ const SaveLibraryModal: React.FC<SaveLibraryModalProps> = ({
         <div className="save-item-copy">
           {isEditing ? (
             <input
+              ref={renameInputRef}
               value={editingName}
               maxLength={40}
-              autoFocus
               onChange={event => setEditingName(event.target.value)}
               onKeyDown={event => {
+                event.stopPropagation();
                 if (event.key === 'Enter' && editingName.trim()) {
                   onRename(save.id, editingName);
                   setEditingId(null);
                 }
                 if (event.key === 'Escape') setEditingId(null);
               }}
+              onKeyUp={event => event.stopPropagation()}
             />
           ) : (
             <strong>{automatic ? copy.autosave : save.name}</strong>
@@ -213,6 +222,8 @@ const SaveLibraryModal: React.FC<SaveLibraryModalProps> = ({
               value={newName}
               maxLength={40}
               onChange={event => setNewName(event.target.value)}
+              onKeyDown={event => event.stopPropagation()}
+              onKeyUp={event => event.stopPropagation()}
             />
             <button className="primary-button" disabled={!newName.trim()}>
               {copy.create}

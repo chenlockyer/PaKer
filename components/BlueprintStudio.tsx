@@ -202,6 +202,12 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      if (
+        event.isComposing ||
+        activeElement instanceof Element &&
+          Boolean(activeElement.closest('input, textarea, select, [contenteditable="true"]'))
+      ) return;
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', closeOnEscape);
