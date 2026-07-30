@@ -71,6 +71,13 @@ import {
   resolveUiScale,
   UI_SCALE_STORAGE_KEY,
 } from './services/uiScaleService';
+import {
+  createGameSave,
+  GameSaveSlot,
+  getLatestGameSaveSummary,
+  loadLatestGameSave,
+  persistGameSave,
+} from './services/gameSaveService';
 
 const DEG_10 = Math.PI / 18;
 const CHALLENGE_LEVELS: ChallengeLevel[] = [
@@ -270,8 +277,26 @@ const App: React.FC = () => {
   const [currentTestStageIndex, setCurrentTestStageIndex] = useState(0);
   const [tutorialCueIndex, setTutorialCueIndex] = useState(0);
   const [tutorialEntryVisible, setTutorialEntryVisible] = useState(false);
+  const [saveSummary, setSaveSummary] = useState(() =>
+    getLatestGameSaveSummary(localStorage)
+  );
   const liveHeightRef = useRef(0);
+  const saveStateRef = useRef({
+    cards: [] as CardData[],
+    cardSize: CardSize.BRIDGE,
+    currentPresetId: DEFAULT_PRESETS[0].id,
+    isFreezeMode: false,
+    draggingCardId: null as string | null,
+  });
   const { profile: inputProfile, subscribe: subscribeInput, setSuspended: setInputSuspended } = useInput();
+
+  saveStateRef.current = {
+    cards,
+    cardSize,
+    currentPresetId,
+    isFreezeMode,
+    draggingCardId,
+  };
 
   const recordCardHistory = useCallback((snapshot: CardData[]) => {
     undoHistoryRef.current = [...undoHistoryRef.current.slice(-49), snapshot];
@@ -527,34 +552,121 @@ const App: React.FC = () => {
   }, [gameMode, recordCardHistory]);
 
   // --- LOGIC: SAVE/LOAD ---
+  const writeGameSave = useCallback((slot: GameSaveSlot) => {
+    const state = saveStateRef.current;
+    if (state.cards.length === 0 || state.draggingCardId) return null;
+
+    const save = createGameSave({
+      slot,
+      cards: state.cards,
+      liveTransforms: liveCardTransformsRef.current,
+      cardSize: state.cardSize,
+      currentPresetId: state.currentPresetId,
+      isFreezeMode: state.isFreezeMode,
+    });
+    persistGameSave(localStorage, save);
+    setSaveSummary({
+      slot: save.slot,
+      savedAt: save.savedAt,
+      cardCount: save.cards.length,
+    });
+    return save;
+  }, []);
+
   const saveGame = useCallback(() => {
-    const saveData = {
-      cards,
-      isFreezeMode
-    };
-    localStorage.setItem('hoc_save', JSON.stringify(saveData));
-    alert(lang === 'zh' ? '游戏已保存' : 'Game Saved');
-  }, [cards, isFreezeMode, lang]);
+    if (draggingCardId) {
+      alert(lang === 'zh' ? '请先放下当前纸牌' : 'Place the current card before saving');
+      return;
+    }
+    try {
+      const save = writeGameSave('manual');
+      if (!save) {
+        alert(lang === 'zh' ? '场景中还没有纸牌' : 'There are no cards to save');
+        return;
+      }
+      alert(
+        lang === 'zh'
+          ? `已保存 ${save.cards.length} 张牌的当前状态`
+          : `Saved the current state of ${save.cards.length} cards`
+      );
+    } catch (error) {
+      console.error('Failed to save build', error);
+      alert(lang === 'zh' ? '保存失败，请检查存储空间' : 'Save failed. Check available storage');
+    }
+  }, [draggingCardId, lang, writeGameSave]);
 
   const loadGame = useCallback(() => {
     try {
-      const saved = localStorage.getItem('hoc_save');
-      if (saved) {
-        const data = JSON.parse(saved);
-        if (data.cards) {
-          setCards(data.cards);
-          resetCardHistory();
-          setIsFreezeMode(!!data.isFreezeMode);
-          alert(lang === 'zh' ? '游戏已读取' : 'Game Loaded');
-        }
-      } else {
-        alert(lang === 'zh' ? '没有找到存档' : 'No save found');
+      const loaded = loadLatestGameSave(localStorage);
+      if (!loaded) {
+        alert(lang === 'zh' ? '没有找到可用存档' : 'No valid save found');
+        setSaveSummary(null);
+        return;
       }
+
+      const data = loaded.save;
+      liveCardTransformsRef.current.clear();
+      data.cards.forEach(card => {
+        liveCardTransformsRef.current.set(card.id, {
+          position: [...card.position],
+          rotation: [...card.rotation],
+        });
+      });
+      setDraggingCardId(null);
+      setPointerMode(PointerMode.PLACE);
+      setBlueprintGuide(null);
+      setBlueprintRecording(null);
+      setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+      setGameMode(GameMode.FREE);
+      setActiveCustomLevel(null);
+      setCardSize(data.cardSize);
+      setCurrentPresetId(
+        presets.some(preset => preset.id === data.currentPresetId)
+          ? data.currentPresetId
+          : DEFAULT_PRESETS[0].id
+      );
+      setIsFreezeMode(data.isFreezeMode);
+      setCards(data.cards.map(card => ({
+        ...card,
+        position: [...card.position],
+        rotation: [...card.rotation],
+      })));
+      resetCardHistory();
+      setAppState(AppState.GAME);
+      alert(
+        loaded.recoveredFromBackup
+          ? (lang === 'zh' ? '主存档损坏，已恢复备份' : 'Recovered the backup save')
+          : (lang === 'zh' ? '已恢复上次搭建' : 'Build restored')
+      );
     } catch (e) {
       console.error(e);
       alert(lang === 'zh' ? '读取存档失败' : 'Failed to load save');
     }
-  }, [lang, resetCardHistory]);
+  }, [lang, presets, resetCardHistory]);
+
+  useEffect(() => {
+    if (appState !== AppState.GAME) return;
+
+    const autosave = () => {
+      try {
+        writeGameSave('autosave');
+      } catch (error) {
+        console.warn('Autosave failed', error);
+      }
+    };
+    const interval = window.setInterval(autosave, 30_000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') autosave();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', autosave);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', autosave);
+    };
+  }, [appState, writeGameSave]);
 
   const handleCardTransformChange = useCallback((id: string, transform: LiveCardTransform) => {
     liveCardTransformsRef.current.set(id, {
@@ -1124,14 +1236,10 @@ const App: React.FC = () => {
         <MainMenu 
            onStartChallenge={startChallenge}
            onStartFree={startFreeBuild}
-           onLoad={() => {
-              setGameMode(GameMode.FREE);
-              loadGame();
-              setAppState(AppState.GAME);
-           }}
+           onLoad={loadGame}
            onSettings={() => setShowSettings(true)}
            onOpenLevelStudio={() => setShowLevelStudio(true)}
-           hasSave={!!localStorage.getItem('hoc_save')}
+           hasSave={saveSummary !== null}
            lang={lang}
            theme={theme}
         />
@@ -1200,7 +1308,14 @@ const App: React.FC = () => {
             cardCount={cards.length}
             lang={lang}
             onOpenSettings={() => setShowSettings(true)}
-            onBackToMenu={() => setAppState(AppState.MENU)}
+            onBackToMenu={() => {
+              try {
+                writeGameSave('autosave');
+              } catch (error) {
+                console.warn('Autosave before returning to menu failed', error);
+              }
+              setAppState(AppState.MENU);
+            }}
             gameMode={gameMode}
             challengePhase={challengePhase}
             maxCards={currentLevel.maxCards}

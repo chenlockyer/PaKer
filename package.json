@@ -14,6 +14,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:blueprint": "node scripts/blueprint-self-test.mjs",
+    "test:save": "node scripts/game-save-self-test.mjs",
     "desktop": "npm run build && electron electron/main.cjs",
     "pack:win": "npm run build && electron-builder --win --dir",
     "dist:win": "npm run build && electron-builder --win nsis"
