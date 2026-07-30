@@ -7,6 +7,26 @@ export interface CardData {
   rank: string;
   color: 'red' | 'black';
   locked: boolean;
+  role?: CardRole;
+}
+
+export type CardRole = 'structure' | 'ammo' | 'core';
+
+export interface LaunchGestureSample {
+  x: number;
+  y: number;
+  time: number;
+}
+
+export interface LaunchIntent {
+  sequenceId: string;
+  cardId: string;
+  contactPointWorld: [number, number, number];
+  contactPointLocal: [number, number, number];
+  directionWorld: [number, number, number];
+  power: number;
+  gestureSpeed: number;
+  pointerType: 'mouse' | 'touch' | 'pen';
 }
 
 export interface LiveCardTransform {
@@ -162,7 +182,8 @@ export enum InteractionMode {
 export enum PointerMode {
   PLACE = 'PLACE',
   DELETE = 'DELETE',
-  MOVE = 'MOVE'
+  MOVE = 'MOVE',
+  LAUNCH = 'LAUNCH'
 }
 
 export enum AppState {

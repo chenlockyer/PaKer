@@ -119,6 +119,14 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .physics-lab-panel dd.is-danger { color: #c33b45; }
 .physics-lab-baseline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
 .physics-lab-baseline span { padding: 5px 6px; border-radius: 4px; background: #e8edf2; color: #526174; font: 700 9px/1 monospace; }
+.physics-lab-telemetry {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; padding: 12px;
+  border: 1px solid #b9c5d2; border-radius: 6px; background: #edf3f8;
+  font: 700 10px/1.3 monospace;
+}
+.physics-lab-telemetry > span { color: #315d89; }
+.physics-lab-telemetry > strong { color: #d65f27; font-size: 18px; }
+.physics-lab-telemetry > small { color: #65778c; }
 .physics-lab-canvas { position: relative; min-width: 0; min-height: 0; }
 .physics-lab-canvas canvas { touch-action: none; }
 .ui-scale-surface {

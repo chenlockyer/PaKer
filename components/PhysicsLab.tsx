@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stats } from '@react-three/drei';
+import { Canvas, type ThreeEvent, useFrame, useThree } from '@react-three/fiber';
+import { Line, OrbitControls, Stats } from '@react-three/drei';
 import {
   CoefficientCombineRule,
   CuboidCollider,
@@ -12,7 +12,17 @@ import {
   type RapierRigidBody,
 } from '@react-three/rapier';
 import * as THREE from 'three';
-import { CARD_DIMENSIONS, CardSize } from '../types';
+import {
+  CARD_DIMENSIONS,
+  CardSize,
+  type LaunchGestureSample,
+  type LaunchIntent,
+} from '../types';
+import { createRapierCardPhysicsHandle } from '../physics/cardPhysics';
+import {
+  isLaunchGesturePastDeadZone,
+  resolveLaunchGesture,
+} from '../physics/launchGesture';
 
 type PhysicsLabScenario = 'drop' | 'stack' | 'impact' | 'flick';
 
@@ -31,6 +41,15 @@ interface LabMetrics {
   averageFps: number;
 }
 
+interface FlickTelemetry {
+  power: number;
+  gestureSpeed: number;
+  linearSpeed: number;
+  angularSpeed: number;
+  status: 'ready' | 'aiming' | 'launched' | 'settled' | 'cancelled';
+  intent: LaunchIntent | null;
+}
+
 const EMPTY_METRICS: LabMetrics = {
   runs: 0,
   tunnels: 0,
@@ -38,6 +57,15 @@ const EMPTY_METRICS: LabMetrics = {
   stableSeconds: null,
   maxDisplacement: 0,
   averageFps: 0,
+};
+
+const EMPTY_FLICK_TELEMETRY: FlickTelemetry = {
+  power: 0,
+  gestureSpeed: 0,
+  linearSpeed: 0,
+  angularSpeed: 0,
+  status: 'ready',
+  intent: null,
 };
 
 const LAB_BASELINE = {
@@ -130,7 +158,7 @@ const RapierLabCard = ({
       colliders={false}
       position={position}
       rotation={rotation}
-      linearVelocity={velocity}
+      {...(velocity ? { linearVelocity: velocity } : {})}
       linearDamping={0.5}
       angularDamping={0.5}
       canSleep
@@ -261,10 +289,341 @@ const RapierScenario = ({
   );
 };
 
+interface ActiveFlickGesture {
+  pointerId: number;
+  pointerType: LaunchIntent['pointerType'];
+  contactWorld: THREE.Vector3;
+  contactLocal: THREE.Vector3;
+  plane: THREE.Plane;
+  startWorld: THREE.Vector3;
+  currentWorld: THREE.Vector3;
+  samples: LaunchGestureSample[];
+}
+
+const FlickAmmoCard = ({
+  cardSize,
+  runId,
+  onGestureActive,
+  onTelemetry,
+  onCollision,
+}: {
+  cardSize: CardSize;
+  runId: number;
+  onGestureActive: (active: boolean) => void;
+  onTelemetry: (telemetry: FlickTelemetry) => void;
+  onCollision: () => void;
+}) => {
+  const dimensions = CARD_DIMENSIONS[cardSize];
+  const bodyRef = useRef<RapierRigidBody>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
+  const gestureRef = useRef<ActiveFlickGesture | null>(null);
+  const launchedSequencesRef = useRef(new Set<string>());
+  const launchTelemetryRef = useRef<FlickTelemetry>(EMPTY_FLICK_TELEMETRY);
+  const launchedRef = useRef(false);
+  const launchStartedAtRef = useRef(0);
+  const stableStartedAtRef = useRef<number | null>(null);
+  const telemetrySampleRef = useRef(0);
+  const { camera, size } = useThree();
+  const { rapier } = useRapier();
+  const [preview, setPreview] = useState<{
+    contact: THREE.Vector3;
+    current: THREE.Vector3;
+    power: number;
+  } | null>(null);
+
+  const cancelGesture = useCallback(() => {
+    if (!gestureRef.current) return;
+    gestureRef.current = null;
+    setPreview(null);
+    onGestureActive(false);
+    onTelemetry({ ...EMPTY_FLICK_TELEMETRY, status: 'cancelled' });
+  }, [onGestureActive, onTelemetry]);
+
+  useEffect(() => {
+    window.addEventListener('blur', cancelGesture);
+    return () => window.removeEventListener('blur', cancelGesture);
+  }, [cancelGesture]);
+
+  useAfterPhysicsStep(() => {
+    const body = bodyRef.current;
+    if (!body || !launchedRef.current || telemetrySampleRef.current++ % 6 !== 0) return;
+    const linear = body.linvel();
+    const angular = body.angvel();
+    const linearSpeed = Math.hypot(linear.x, linear.y, linear.z);
+    const angularSpeed = Math.hypot(angular.x, angular.y, angular.z);
+    const now = performance.now();
+    if (linearSpeed < 0.08 && angularSpeed < 0.08) {
+      stableStartedAtRef.current ??= now;
+    } else {
+      stableStartedAtRef.current = null;
+    }
+    const settled = (
+      stableStartedAtRef.current != null && now - stableStartedAtRef.current >= 500
+    ) || now - launchStartedAtRef.current >= 6000;
+    if (settled) launchedRef.current = false;
+    const telemetry = {
+      ...launchTelemetryRef.current,
+      status: settled ? 'settled' : 'launched',
+      linearSpeed,
+      angularSpeed,
+    } satisfies FlickTelemetry;
+    launchTelemetryRef.current = telemetry;
+    onTelemetry(telemetry);
+  });
+
+  const samplePointer = (
+    event: ThreeEvent<PointerEvent>,
+    gesture: ActiveFlickGesture,
+  ) => {
+    const now = performance.now();
+    gesture.samples.push({ x: event.clientX, y: event.clientY, time: now });
+    if (gesture.samples.length > 48) gesture.samples.splice(0, gesture.samples.length - 48);
+    event.ray.intersectPlane(gesture.plane, gesture.currentWorld);
+    const resolution = resolveLaunchGesture(
+      gesture.samples,
+      Math.min(size.width, size.height),
+      now,
+    );
+    setPreview({
+      contact: gesture.contactWorld.clone(),
+      current: gesture.currentWorld.clone(),
+      power: resolution.power,
+    });
+    return resolution;
+  };
+
+  const onPointerDown = (event: ThreeEvent<PointerEvent>) => {
+    if (event.button !== 0 || gestureRef.current || launchedRef.current || !meshRef.current) return;
+    event.stopPropagation();
+    const contactWorld = event.point.clone();
+    const contactLocal = meshRef.current.worldToLocal(contactWorld.clone());
+    const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(cameraDirection, contactWorld);
+    const pointerType = (
+      event.pointerType === 'touch' || event.pointerType === 'pen'
+        ? event.pointerType
+        : 'mouse'
+    ) as LaunchIntent['pointerType'];
+    const gesture: ActiveFlickGesture = {
+      pointerId: event.pointerId,
+      pointerType,
+      contactWorld,
+      contactLocal,
+      plane,
+      startWorld: contactWorld.clone(),
+      currentWorld: contactWorld.clone(),
+      samples: [{ x: event.clientX, y: event.clientY, time: performance.now() }],
+    };
+    gestureRef.current = gesture;
+    (event.target as unknown as { setPointerCapture?: (pointerId: number) => void })
+      .setPointerCapture?.(event.pointerId);
+    setPreview({ contact: contactWorld.clone(), current: contactWorld.clone(), power: 0 });
+    onGestureActive(true);
+    onTelemetry({ ...EMPTY_FLICK_TELEMETRY, status: 'aiming' });
+  };
+
+  const onPointerMove = (event: ThreeEvent<PointerEvent>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const resolution = samplePointer(event, gesture);
+    onTelemetry({
+      ...EMPTY_FLICK_TELEMETRY,
+      status: 'aiming',
+      power: resolution.power,
+      gestureSpeed: resolution.gestureSpeed,
+    });
+  };
+
+  const finishGesture = (event: ThreeEvent<PointerEvent>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const resolution = samplePointer(event, gesture);
+    gestureRef.current = null;
+    setPreview(null);
+    onGestureActive(false);
+    (event.target as unknown as { releasePointerCapture?: (pointerId: number) => void })
+      .releasePointerCapture?.(event.pointerId);
+
+    const worldDelta = gesture.currentWorld.clone().sub(gesture.startWorld);
+    if (
+      !isLaunchGesturePastDeadZone(gesture.samples, Math.min(size.width, size.height)) ||
+      worldDelta.lengthSq() < 0.0001
+    ) {
+      onTelemetry({ ...EMPTY_FLICK_TELEMETRY, status: 'cancelled' });
+      return;
+    }
+
+    const body = bodyRef.current;
+    if (!body) return;
+    const sequenceId = crypto.randomUUID();
+    if (launchedSequencesRef.current.has(sequenceId)) return;
+    launchedSequencesRef.current.add(sequenceId);
+    const direction = worldDelta.normalize();
+    const impulseMagnitude = 0.25 + resolution.power * 2.2;
+    const impulse = direction.multiplyScalar(impulseMagnitude);
+    const intent: LaunchIntent = {
+      sequenceId,
+      cardId: `physics-lab-ammo-${runId}`,
+      contactPointWorld: gesture.contactWorld.toArray(),
+      contactPointLocal: gesture.contactLocal.toArray(),
+      directionWorld: worldDelta.clone().normalize().toArray(),
+      power: resolution.power,
+      gestureSpeed: resolution.gestureSpeed,
+      pointerType: gesture.pointerType,
+    };
+    const handle = createRapierCardPhysicsHandle(body, locked => {
+      body.setBodyType(
+        locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
+        true,
+      );
+    });
+    handle.setVelocity([0, 0, 0], [0, 0, 0]);
+    handle.applyImpulseAtPoint(impulse.toArray(), gesture.contactWorld.toArray());
+    const telemetry = {
+      ...EMPTY_FLICK_TELEMETRY,
+      status: 'launched',
+      power: resolution.power,
+      gestureSpeed: resolution.gestureSpeed,
+      intent,
+    } satisfies FlickTelemetry;
+    launchedRef.current = true;
+    launchStartedAtRef.current = performance.now();
+    stableStartedAtRef.current = null;
+    launchTelemetryRef.current = telemetry;
+    onTelemetry(telemetry);
+  };
+
+  return (
+    <>
+      <RigidBody
+        ref={bodyRef}
+        type="dynamic"
+        colliders={false}
+        position={[0, 0.16, -4.5]}
+        linearDamping={0.08}
+        angularDamping={0.08}
+        canSleep
+        ccd
+        additionalSolverIterations={4}
+        onCollisionEnter={onCollision}
+      >
+        <CuboidCollider
+          args={[dimensions.width / 2, dimensions.thickness / 2, dimensions.height / 2]}
+          mass={0.1}
+          friction={1}
+          frictionCombineRule={CoefficientCombineRule.Multiply}
+          restitution={0}
+        />
+        <mesh
+          ref={meshRef}
+          castShadow
+          receiveShadow
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={finishGesture}
+          onPointerCancel={cancelGesture}
+        >
+          <boxGeometry args={[dimensions.width, dimensions.thickness, dimensions.height]} />
+          <meshStandardMaterial color="#fffefa" roughness={0.48} />
+        </mesh>
+      </RigidBody>
+      {preview && (
+        <group>
+          <mesh position={preview.contact}>
+            <sphereGeometry args={[0.09, 18, 12]} />
+            <meshBasicMaterial color="#f59e0b" depthTest={false} />
+          </mesh>
+          <Line
+            points={[preview.contact, preview.current]}
+            color="#e66a2c"
+            lineWidth={3}
+            depthTest={false}
+          />
+          {Array.from({ length: 4 }, (_, index) => {
+            const direction = preview.current.clone().sub(preview.contact);
+            if (direction.lengthSq() > 0.0001) direction.normalize();
+            const point = preview.contact.clone().add(
+              direction.multiplyScalar((index + 1) * (0.35 + preview.power * 0.45)),
+            );
+            return (
+              <mesh key={index} position={point}>
+                <sphereGeometry args={[0.035 + preview.power * 0.025, 10, 8]} />
+                <meshBasicMaterial color="#e66a2c" transparent opacity={0.8 - index * 0.12} />
+              </mesh>
+            );
+          })}
+        </group>
+      )}
+    </>
+  );
+};
+
+const FlickLabScene = ({
+  cardSize,
+  runId,
+  onGestureActive,
+  onTelemetry,
+  onMetric,
+}: {
+  cardSize: CardSize;
+  runId: number;
+  onGestureActive: (active: boolean) => void;
+  onTelemetry: (telemetry: FlickTelemetry) => void;
+  onMetric: (metric: Partial<LabMetrics>) => void;
+}) => {
+  const dimensions = CARD_DIMENSIONS[cardSize];
+  const collisionRef = useRef(false);
+  const recordCollision = useCallback(() => {
+    if (collisionRef.current) return;
+    collisionRef.current = true;
+    onMetric({ collisions: 1 });
+  }, [onMetric]);
+
+  return (
+    <>
+      <RigidBody type="fixed" colliders={false} position={[-0.62, 0.1, -3.2]}>
+        <CuboidCollider args={[0.055, 0.08, 2.1]} friction={1.1} restitution={0} />
+        <mesh castShadow>
+          <boxGeometry args={[0.11, 0.16, 4.2]} />
+          <meshStandardMaterial color="#4b6d91" metalness={0.15} roughness={0.55} />
+        </mesh>
+      </RigidBody>
+      <RigidBody type="fixed" colliders={false} position={[0.62, 0.1, -3.2]}>
+        <CuboidCollider args={[0.055, 0.08, 2.1]} friction={1.1} restitution={0} />
+        <mesh castShadow>
+          <boxGeometry args={[0.11, 0.16, 4.2]} />
+          <meshStandardMaterial color="#4b6d91" metalness={0.15} roughness={0.55} />
+        </mesh>
+      </RigidBody>
+      {[0.5, 3.5, 6.5].map((z, index) => (
+        <RapierLabCard
+          key={`${runId}-flick-target-${index}`}
+          cardSize={cardSize}
+          mass={0}
+          position={[0, dimensions.height / 2, z]}
+          rotation={[Math.PI / 2, 0, 0]}
+          onCollision={recordCollision}
+        />
+      ))}
+      <FlickAmmoCard
+        cardSize={cardSize}
+        runId={runId}
+        onGestureActive={onGestureActive}
+        onTelemetry={onTelemetry}
+        onCollision={recordCollision}
+      />
+    </>
+  );
+};
+
 const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   const [scenario, setScenario] = useState<PhysicsLabScenario>('drop');
   const [runId, setRunId] = useState(1);
   const [metrics, setMetrics] = useState<LabMetrics>({ ...EMPTY_METRICS, runs: 1 });
+  const [gestureActive, setGestureActive] = useState(false);
+  const [flickTelemetry, setFlickTelemetry] = useState<FlickTelemetry>(EMPTY_FLICK_TELEMETRY);
   const copy = lang === 'zh'
     ? {
         title: '开发者物理实验室',
@@ -305,11 +664,15 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   const reset = () => {
     setRunId(value => value + 1);
     setMetrics(previous => ({ ...EMPTY_METRICS, runs: previous.runs + 1 }));
+    setGestureActive(false);
+    setFlickTelemetry(EMPTY_FLICK_TELEMETRY);
   };
 
   useEffect(() => {
     setRunId(value => value + 1);
     setMetrics({ ...EMPTY_METRICS, runs: 1 });
+    setGestureActive(false);
+    setFlickTelemetry(EMPTY_FLICK_TELEMETRY);
   }, [scenario]);
 
   return (
@@ -354,6 +717,15 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
           <div><dt>MAX Δ</dt><dd>{metrics.maxDisplacement.toFixed(2)}</dd></div>
           <div><dt>AVG FPS</dt><dd>{metrics.averageFps.toFixed(0)}</dd></div>
         </dl>
+        {scenario === 'flick' && (
+          <div className="physics-lab-telemetry">
+            <span>FLICK · {flickTelemetry.status.toUpperCase()}</span>
+            <strong>{Math.round(flickTelemetry.power * 100)}%</strong>
+            <small>GESTURE {flickTelemetry.gestureSpeed.toFixed(0)} px/s</small>
+            <small>LINEAR {flickTelemetry.linearSpeed.toFixed(2)}</small>
+            <small>ANGULAR {flickTelemetry.angularSpeed.toFixed(2)}</small>
+          </div>
+        )}
         <div className="physics-lab-baseline">
           <span>STEP {LAB_BASELINE.stepSize}</span>
           <span>MASS {LAB_BASELINE.cardMass}</span>
@@ -377,16 +749,26 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
             >
               <RapierCcdSettings />
               <RapierLabFloor />
-              <RapierScenario
-                scenario={scenario}
-                cardSize={cardSize}
-                runId={runId}
-                onMetric={updateMetric}
-              />
+              {scenario === 'flick' ? (
+                <FlickLabScene
+                  cardSize={cardSize}
+                  runId={runId}
+                  onGestureActive={setGestureActive}
+                  onTelemetry={setFlickTelemetry}
+                  onMetric={updateMetric}
+                />
+              ) : (
+                <RapierScenario
+                  scenario={scenario}
+                  cardSize={cardSize}
+                  runId={runId}
+                  onMetric={updateMetric}
+                />
+              )}
             </RapierPhysics>
           </Suspense>
           <FpsSampler onAverage={averageFps => updateMetric({ averageFps })} />
-          <OrbitControls makeDefault target={[0, 1.4, 0]} />
+          <OrbitControls makeDefault target={[0, 1.4, 0]} enabled={!gestureActive} />
         </Canvas>
       </section>
     </main>
