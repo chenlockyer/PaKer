@@ -7,6 +7,7 @@ import MainMenu from './components/MainMenu';
 import SettingsModal from './components/SettingsModal';
 import BlueprintStudio from './components/BlueprintStudio';
 import LevelStudio from './components/LevelStudio';
+import SaveLibraryModal, { SaveLibraryMode } from './components/SaveLibraryModal';
 import {
   Blueprint,
   BlueprintAssistance,
@@ -73,10 +74,14 @@ import {
 } from './services/uiScaleService';
 import {
   createGameSave,
-  GameSaveSlot,
-  getLatestGameSaveSummary,
+  deleteManualGameSave,
+  findGameSave,
+  GameSaveData,
+  GameSaveSource,
+  loadGameSaveLibrary,
   loadLatestGameSave,
   persistGameSave,
+  renameManualGameSave,
 } from './services/gameSaveService';
 
 const DEG_10 = Math.PI / 18;
@@ -277,9 +282,10 @@ const App: React.FC = () => {
   const [currentTestStageIndex, setCurrentTestStageIndex] = useState(0);
   const [tutorialCueIndex, setTutorialCueIndex] = useState(0);
   const [tutorialEntryVisible, setTutorialEntryVisible] = useState(false);
-  const [saveSummary, setSaveSummary] = useState(() =>
-    getLatestGameSaveSummary(localStorage)
+  const [saveLibrary, setSaveLibrary] = useState(() =>
+    loadGameSaveLibrary(localStorage)
   );
+  const [saveLibraryMode, setSaveLibraryMode] = useState<SaveLibraryMode | null>(null);
   const liveHeightRef = useRef(0);
   const saveStateRef = useRef({
     cards: [] as CardData[],
@@ -552,59 +558,45 @@ const App: React.FC = () => {
   }, [gameMode, recordCardHistory]);
 
   // --- LOGIC: SAVE/LOAD ---
-  const writeGameSave = useCallback((slot: GameSaveSlot) => {
+  const writeGameSave = useCallback((
+    source: GameSaveSource,
+    options?: { id?: string; name?: string },
+  ) => {
     const state = saveStateRef.current;
     if (state.cards.length === 0 || state.draggingCardId) return null;
 
     const save = createGameSave({
-      slot,
+      id: options?.id,
+      name: options?.name ?? (lang === 'zh' ? '自动存档' : 'Autosave'),
+      source,
       cards: state.cards,
       liveTransforms: liveCardTransformsRef.current,
       cardSize: state.cardSize,
       currentPresetId: state.currentPresetId,
       isFreezeMode: state.isFreezeMode,
     });
-    persistGameSave(localStorage, save);
-    setSaveSummary({
-      slot: save.slot,
-      savedAt: save.savedAt,
-      cardCount: save.cards.length,
-    });
+    setSaveLibrary(persistGameSave(localStorage, save));
     return save;
-  }, []);
+  }, [lang]);
 
-  const saveGame = useCallback(() => {
+  const openSaveLibrary = useCallback(() => {
     if (draggingCardId) {
       alert(lang === 'zh' ? '请先放下当前纸牌' : 'Place the current card before saving');
       return;
     }
-    try {
-      const save = writeGameSave('manual');
-      if (!save) {
-        alert(lang === 'zh' ? '场景中还没有纸牌' : 'There are no cards to save');
-        return;
-      }
-      alert(
-        lang === 'zh'
-          ? `已保存 ${save.cards.length} 张牌的当前状态`
-          : `Saved the current state of ${save.cards.length} cards`
-      );
-    } catch (error) {
-      console.error('Failed to save build', error);
-      alert(lang === 'zh' ? '保存失败，请检查存储空间' : 'Save failed. Check available storage');
+    if (cards.length === 0) {
+      alert(lang === 'zh' ? '场景中还没有纸牌' : 'There are no cards to save');
+      return;
     }
-  }, [draggingCardId, lang, writeGameSave]);
+    setSaveLibrary(loadGameSaveLibrary(localStorage));
+    setSaveLibraryMode('save');
+  }, [cards.length, draggingCardId, lang]);
 
-  const loadGame = useCallback(() => {
+  const restoreGameSave = useCallback((
+    data: GameSaveData,
+    recoveredFromBackup = false,
+  ) => {
     try {
-      const loaded = loadLatestGameSave(localStorage);
-      if (!loaded) {
-        alert(lang === 'zh' ? '没有找到可用存档' : 'No valid save found');
-        setSaveSummary(null);
-        return;
-      }
-
-      const data = loaded.save;
       liveCardTransformsRef.current.clear();
       data.cards.forEach(card => {
         liveCardTransformsRef.current.set(card.id, {
@@ -633,10 +625,11 @@ const App: React.FC = () => {
       })));
       resetCardHistory();
       setAppState(AppState.GAME);
+      setSaveLibraryMode(null);
       alert(
-        loaded.recoveredFromBackup
+        recoveredFromBackup
           ? (lang === 'zh' ? '主存档损坏，已恢复备份' : 'Recovered the backup save')
-          : (lang === 'zh' ? '已恢复上次搭建' : 'Build restored')
+          : (lang === 'zh' ? `已读取“${data.name}”` : `Loaded “${data.name}”`)
       );
     } catch (e) {
       console.error(e);
@@ -644,12 +637,64 @@ const App: React.FC = () => {
     }
   }, [lang, presets, resetCardHistory]);
 
+  const loadLatestGame = useCallback(() => {
+    const loaded = loadLatestGameSave(localStorage);
+    if (!loaded) {
+      alert(lang === 'zh' ? '没有找到可用存档' : 'No valid save found');
+      setSaveLibrary(loadGameSaveLibrary(localStorage));
+      return;
+    }
+    restoreGameSave(loaded.save, loaded.recoveredFromBackup);
+  }, [lang, restoreGameSave]);
+
+  const loadGameById = useCallback((id: string) => {
+    const library = loadGameSaveLibrary(localStorage);
+    setSaveLibrary(library);
+    const save = findGameSave(library, id);
+    if (!save) {
+      alert(lang === 'zh' ? '这个存档已经不存在' : 'This save no longer exists');
+      return;
+    }
+    const recovered =
+      save.source === 'autosave'
+        ? library.recoveredAutosaveBackup
+        : library.recoveredManualBackup;
+    restoreGameSave(save, recovered);
+  }, [lang, restoreGameSave]);
+
+  const createManualSave = useCallback((name: string) => {
+    try {
+      const save = writeGameSave('manual', { name });
+      if (!save) return;
+      setSaveLibraryMode(null);
+    } catch (error) {
+      console.error('Failed to create save', error);
+      alert(lang === 'zh' ? '保存失败，请检查存储空间' : 'Save failed. Check available storage');
+    }
+  }, [lang, writeGameSave]);
+
+  const overwriteManualSave = useCallback((id: string) => {
+    const existing = saveLibrary.manualSaves.find(save => save.id === id);
+    if (!existing) return;
+    try {
+      const save = writeGameSave('manual', { id, name: existing.name });
+      if (!save) return;
+      setSaveLibraryMode(null);
+    } catch (error) {
+      console.error('Failed to overwrite save', error);
+      alert(lang === 'zh' ? '覆盖存档失败' : 'Failed to overwrite save');
+    }
+  }, [lang, saveLibrary.manualSaves, writeGameSave]);
+
   useEffect(() => {
     if (appState !== AppState.GAME) return;
 
     const autosave = () => {
       try {
-        writeGameSave('autosave');
+        writeGameSave('autosave', {
+          id: 'autosave',
+          name: lang === 'zh' ? '自动存档' : 'Autosave',
+        });
       } catch (error) {
         console.warn('Autosave failed', error);
       }
@@ -666,7 +711,7 @@ const App: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', autosave);
     };
-  }, [appState, writeGameSave]);
+  }, [appState, lang, writeGameSave]);
 
   const handleCardTransformChange = useCallback((id: string, transform: LiveCardTransform) => {
     liveCardTransformsRef.current.set(id, {
@@ -1163,10 +1208,11 @@ const App: React.FC = () => {
       showSettings ||
       showBlueprintStudio ||
       showLevelStudio ||
+      saveLibraryMode !== null ||
       tutorialEntryVisible ||
       appState !== AppState.GAME,
     );
-  }, [appState, setInputSuspended, showBlueprintStudio, showLevelStudio, showSettings, tutorialEntryVisible]);
+  }, [appState, saveLibraryMode, setInputSuspended, showBlueprintStudio, showLevelStudio, showSettings, tutorialEntryVisible]);
 
   const cyclePreset = useCallback((direction: -1 | 1) => {
     if (!interactionEnabled || presets.length === 0) return;
@@ -1236,10 +1282,10 @@ const App: React.FC = () => {
         <MainMenu 
            onStartChallenge={startChallenge}
            onStartFree={startFreeBuild}
-           onLoad={loadGame}
+           onLoad={loadLatestGame}
            onSettings={() => setShowSettings(true)}
            onOpenLevelStudio={() => setShowLevelStudio(true)}
-           hasSave={saveSummary !== null}
+           hasSave={saveLibrary.manualSaves.length > 0 || saveLibrary.autosave !== null}
            lang={lang}
            theme={theme}
         />
@@ -1291,8 +1337,11 @@ const App: React.FC = () => {
             isFreezeMode={isFreezeMode}
             setIsFreezeMode={() => toggleFreezeMode()}
             onClear={clearCards}
-            onSave={saveGame}
-            onLoad={loadGame}
+            onSave={openSaveLibrary}
+            onLoad={() => {
+              setSaveLibrary(loadGameSaveLibrary(localStorage));
+              setSaveLibraryMode('load');
+            }}
             onOpenBlueprint={openBlueprintStudio}
             blueprintGuide={blueprintGuide}
             blueprintProgress={blueprintProgress}
@@ -1310,7 +1359,10 @@ const App: React.FC = () => {
             onOpenSettings={() => setShowSettings(true)}
             onBackToMenu={() => {
               try {
-                writeGameSave('autosave');
+                writeGameSave('autosave', {
+                  id: 'autosave',
+                  name: lang === 'zh' ? '自动存档' : 'Autosave',
+                });
               } catch (error) {
                 console.warn('Autosave before returning to menu failed', error);
               }
@@ -1375,6 +1427,35 @@ const App: React.FC = () => {
         setUiScaleSetting={setUiScaleSetting}
         resolvedUiScale={resolvedUiScale}
       />
+
+      {saveLibraryMode && (
+        <SaveLibraryModal
+          mode={saveLibraryMode}
+          lang={lang}
+          manualSaves={saveLibrary.manualSaves}
+          autosave={saveLibrary.autosave}
+          onClose={() => setSaveLibraryMode(null)}
+          onCreate={createManualSave}
+          onOverwrite={overwriteManualSave}
+          onLoad={loadGameById}
+          onRename={(id, name) => {
+            try {
+              setSaveLibrary(renameManualGameSave(localStorage, id, name));
+            } catch (error) {
+              console.error('Failed to rename save', error);
+              alert(lang === 'zh' ? '存档改名失败' : 'Failed to rename save');
+            }
+          }}
+          onDelete={id => {
+            try {
+              setSaveLibrary(deleteManualGameSave(localStorage, id));
+            } catch (error) {
+              console.error('Failed to delete save', error);
+              alert(lang === 'zh' ? '删除存档失败' : 'Failed to delete save');
+            }
+          }}
+        />
+      )}
 
       <BlueprintStudio
         isOpen={showBlueprintStudio}
