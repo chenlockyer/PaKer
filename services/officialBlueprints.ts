@@ -97,14 +97,14 @@ const aPair = (prefix: string, x: number): TutorialCard[] => [
   {
     id: `${prefix}_left`,
     position: [x, CARD_Y, -0.24],
-    rotation: [Math.PI / 2 - DEG_10, 0, 0],
-    preset: 'short_edge_forward_10',
+    rotation: [Math.PI / 2 + DEG_10, 0, 0],
+    preset: 'short_edge_backward_10',
   },
   {
     id: `${prefix}_right`,
     position: [x, CARD_Y, 0.24],
-    rotation: [Math.PI / 2 + DEG_10, 0, 0],
-    preset: 'short_edge_backward_10',
+    rotation: [Math.PI / 2 - DEG_10, 0, 0],
+    preset: 'short_edge_forward_10',
   },
 ];
 
@@ -130,8 +130,8 @@ const braces: TutorialCard[] = [
 
 export const OFFICIAL_TUTORIAL_BLUEPRINTS: Blueprint[] = [
   buildOfficial(1, '第 1 课：A 字架', '用两张相向倾斜的牌建立最基础的稳定单元。', a1, [
-    step('a_left_step', 0, '放置第一面', '使用短边接地，让牌向结构中心倾斜。', ['a_left'], 'short_edge_forward_10'),
-    step('a_right_step', 1, '合拢 A 字架', '从另一侧相向倾斜，使两张牌的顶部互相支撑。', ['a_right'], 'short_edge_backward_10'),
+    step('a_left_step', 0, '放置第一面', '使用短边接地，让牌向结构中心倾斜。', ['a_left'], 'short_edge_backward_10'),
+    step('a_right_step', 1, '合拢 A 字架', '从另一侧相向倾斜，使两张牌的顶部互相支撑。', ['a_right'], 'short_edge_forward_10'),
   ]),
   buildOfficial(2, '第 2 课：双 A 字支撑', '复制两个 A 字架，学习间距、对齐和成组支撑。', a2, [
     step('front_pair', 0, '前侧 A 字架', '先完成第一组相向支撑。', ['front_left', 'front_right'], 'short_edge_forward_10'),

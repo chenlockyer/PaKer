@@ -18,9 +18,13 @@ import {
   type LaunchGestureSample,
   type LaunchIntent,
 } from '../types';
-import { createRapierCardPhysicsHandle } from '../physics/cardPhysics';
+import {
+  createRapierCardPhysicsHandle,
+  type CardPhysicsSnapshot,
+} from '../physics/cardPhysics';
 import {
   isLaunchGesturePastDeadZone,
+  resolveLaunchImpulseMagnitude,
   resolveLaunchGesture,
 } from '../physics/launchGesture';
 
@@ -48,7 +52,30 @@ interface FlickTelemetry {
   angularSpeed: number;
   status: 'ready' | 'aiming' | 'launched' | 'settled' | 'cancelled';
   intent: LaunchIntent | null;
+  record: LaunchRecord | null;
 }
+
+interface FlickParameters {
+  minimumImpulse: number;
+  maximumImpulse: number;
+  linearDamping: number;
+  angularDamping: number;
+}
+
+interface LaunchRecord {
+  intent: LaunchIntent;
+  impulse: [number, number, number];
+  impulseMagnitude: number;
+  snapshotBefore: CardPhysicsSnapshot;
+  createdAt: number;
+}
+
+const DEFAULT_FLICK_PARAMETERS: FlickParameters = {
+  minimumImpulse: 0.25,
+  maximumImpulse: 2.45,
+  linearDamping: 0.08,
+  angularDamping: 0.08,
+};
 
 const EMPTY_METRICS: LabMetrics = {
   runs: 0,
@@ -66,6 +93,7 @@ const EMPTY_FLICK_TELEMETRY: FlickTelemetry = {
   angularSpeed: 0,
   status: 'ready',
   intent: null,
+  record: null,
 };
 
 const LAB_BASELINE = {
@@ -144,7 +172,7 @@ const RapierLabCard = ({
 
   useAfterPhysicsStep(() => {
     const body = bodyRef.current;
-    if (!body) return;
+    if (!body || (!onPosition && !onVelocity)) return;
     const nextPosition = body.translation();
     const nextVelocity = body.linvel();
     onPosition?.([nextPosition.x, nextPosition.y, nextPosition.z]);
@@ -185,11 +213,13 @@ const RapierScenario = ({
   scenario,
   cardSize,
   runId,
+  stackCount,
   onMetric,
 }: {
   scenario: PhysicsLabScenario;
   cardSize: CardSize;
   runId: number;
+  stackCount: 10 | 30 | 60;
   onMetric: (metric: Partial<LabMetrics>) => void;
 }) => {
   const dimensions = CARD_DIMENSIONS[cardSize];
@@ -229,15 +259,28 @@ const RapierScenario = ({
   }, [onMetric]);
 
   if (scenario === 'stack') {
+    const groupCount = Math.ceil(stackCount / 10);
+    const columns = Math.min(3, groupCount);
+    const rows = Math.ceil(groupCount / columns);
     return (
       <>
-        {Array.from({ length: 12 }, (_, index) => (
-          <RapierLabCard
-            key={`${runId}-rapier-stack-${index}`}
-            cardSize={cardSize}
-            position={[0, dimensions.thickness / 2 + index * (dimensions.thickness + 0.002), 0]}
-          />
-        ))}
+        {Array.from({ length: stackCount }, (_, index) => {
+          const groupIndex = Math.floor(index / 10);
+          const stackIndex = index % 10;
+          const column = groupIndex % columns;
+          const row = Math.floor(groupIndex / columns);
+          return (
+            <RapierLabCard
+              key={`${runId}-rapier-stack-${index}`}
+              cardSize={cardSize}
+              position={[
+                (column - (columns - 1) / 2) * 2.6,
+                dimensions.thickness / 2 + stackIndex * (dimensions.thickness + 0.002),
+                (row - (rows - 1) / 2) * 3.2,
+              ]}
+            />
+          );
+        })}
       </>
     );
   }
@@ -290,6 +333,7 @@ const RapierScenario = ({
 };
 
 interface ActiveFlickGesture {
+  sequenceId: string;
   pointerId: number;
   pointerType: LaunchIntent['pointerType'];
   contactWorld: THREE.Vector3;
@@ -300,18 +344,86 @@ interface ActiveFlickGesture {
   samples: LaunchGestureSample[];
 }
 
+const FlickAimPreview = ({
+  contact,
+  current,
+  power,
+  cameraQuaternion,
+}: {
+  contact: THREE.Vector3;
+  current: THREE.Vector3;
+  power: number;
+  cameraQuaternion: THREE.Quaternion;
+}) => {
+  const direction = current.clone().sub(contact);
+  const hasDirection = direction.lengthSq() > 0.0001;
+  if (hasDirection) direction.normalize();
+  const arrowRotation = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    hasDirection ? direction : new THREE.Vector3(0, 1, 0),
+  );
+
+  return (
+    <group>
+      <mesh position={contact}>
+        <sphereGeometry args={[0.075, 18, 12]} />
+        <meshBasicMaterial color="#f59e0b" depthTest={false} />
+      </mesh>
+      <mesh
+        position={contact}
+        quaternion={cameraQuaternion}
+        scale={1 + power * 1.4}
+      >
+        <ringGeometry args={[0.11, 0.135, 32]} />
+        <meshBasicMaterial
+          color="#f59e0b"
+          transparent
+          opacity={0.85}
+          side={THREE.DoubleSide}
+          depthTest={false}
+        />
+      </mesh>
+      <Line
+        points={[contact, current]}
+        color="#e66a2c"
+        lineWidth={3}
+        depthTest={false}
+      />
+      {hasDirection && (
+        <mesh position={current} quaternion={arrowRotation}>
+          <coneGeometry args={[0.095, 0.28, 16]} />
+          <meshBasicMaterial color="#e66a2c" depthTest={false} />
+        </mesh>
+      )}
+      {Array.from({ length: 4 }, (_, index) => {
+        const point = contact.clone().add(
+          direction.clone().multiplyScalar((index + 1) * (0.35 + power * 0.45)),
+        );
+        return (
+          <mesh key={index} position={point}>
+            <sphereGeometry args={[0.035 + power * 0.025, 10, 8]} />
+            <meshBasicMaterial color="#e66a2c" transparent opacity={0.8 - index * 0.12} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+};
+
 const FlickAmmoCard = ({
   cardSize,
   runId,
   onGestureActive,
   onTelemetry,
   onCollision,
+  parameters,
 }: {
   cardSize: CardSize;
   runId: number;
   onGestureActive: (active: boolean) => void;
   onTelemetry: (telemetry: FlickTelemetry) => void;
   onCollision: () => void;
+  parameters: FlickParameters;
 }) => {
   const dimensions = CARD_DIMENSIONS[cardSize];
   const bodyRef = useRef<RapierRigidBody>(null);
@@ -405,6 +517,7 @@ const FlickAmmoCard = ({
         : 'mouse'
     ) as LaunchIntent['pointerType'];
     const gesture: ActiveFlickGesture = {
+      sequenceId: crypto.randomUUID(),
       pointerId: event.pointerId,
       pointerType,
       contactWorld,
@@ -457,11 +570,15 @@ const FlickAmmoCard = ({
 
     const body = bodyRef.current;
     if (!body) return;
-    const sequenceId = crypto.randomUUID();
+    const sequenceId = gesture.sequenceId;
     if (launchedSequencesRef.current.has(sequenceId)) return;
     launchedSequencesRef.current.add(sequenceId);
     const direction = worldDelta.normalize();
-    const impulseMagnitude = 0.25 + resolution.power * 2.2;
+    const impulseMagnitude = resolveLaunchImpulseMagnitude(
+      resolution.power,
+      parameters.minimumImpulse,
+      parameters.maximumImpulse,
+    );
     const impulse = direction.multiplyScalar(impulseMagnitude);
     const intent: LaunchIntent = {
       sequenceId,
@@ -479,14 +596,23 @@ const FlickAmmoCard = ({
         true,
       );
     });
+    const snapshotBefore = handle.getSnapshot();
     handle.setVelocity([0, 0, 0], [0, 0, 0]);
     handle.applyImpulseAtPoint(impulse.toArray(), gesture.contactWorld.toArray());
+    const record: LaunchRecord = {
+      intent,
+      impulse: impulse.toArray(),
+      impulseMagnitude,
+      snapshotBefore,
+      createdAt: Date.now(),
+    };
     const telemetry = {
       ...EMPTY_FLICK_TELEMETRY,
       status: 'launched',
       power: resolution.power,
       gestureSpeed: resolution.gestureSpeed,
       intent,
+      record,
     } satisfies FlickTelemetry;
     launchedRef.current = true;
     launchStartedAtRef.current = performance.now();
@@ -502,8 +628,8 @@ const FlickAmmoCard = ({
         type="dynamic"
         colliders={false}
         position={[0, 0.16, -4.5]}
-        linearDamping={0.08}
-        angularDamping={0.08}
+        angularDamping={parameters.angularDamping}
+        linearDamping={parameters.linearDamping}
         canSleep
         ccd
         additionalSolverIterations={4}
@@ -530,31 +656,12 @@ const FlickAmmoCard = ({
         </mesh>
       </RigidBody>
       {preview && (
-        <group>
-          <mesh position={preview.contact}>
-            <sphereGeometry args={[0.09, 18, 12]} />
-            <meshBasicMaterial color="#f59e0b" depthTest={false} />
-          </mesh>
-          <Line
-            points={[preview.contact, preview.current]}
-            color="#e66a2c"
-            lineWidth={3}
-            depthTest={false}
-          />
-          {Array.from({ length: 4 }, (_, index) => {
-            const direction = preview.current.clone().sub(preview.contact);
-            if (direction.lengthSq() > 0.0001) direction.normalize();
-            const point = preview.contact.clone().add(
-              direction.multiplyScalar((index + 1) * (0.35 + preview.power * 0.45)),
-            );
-            return (
-              <mesh key={index} position={point}>
-                <sphereGeometry args={[0.035 + preview.power * 0.025, 10, 8]} />
-                <meshBasicMaterial color="#e66a2c" transparent opacity={0.8 - index * 0.12} />
-              </mesh>
-            );
-          })}
-        </group>
+        <FlickAimPreview
+          contact={preview.contact}
+          current={preview.current}
+          power={preview.power}
+          cameraQuaternion={camera.quaternion}
+        />
       )}
     </>
   );
@@ -566,12 +673,16 @@ const FlickLabScene = ({
   onGestureActive,
   onTelemetry,
   onMetric,
+  onTargetHit,
+  parameters,
 }: {
   cardSize: CardSize;
   runId: number;
   onGestureActive: (active: boolean) => void;
   onTelemetry: (telemetry: FlickTelemetry) => void;
   onMetric: (metric: Partial<LabMetrics>) => void;
+  onTargetHit: (target: number) => void;
+  parameters: FlickParameters;
 }) => {
   const dimensions = CARD_DIMENSIONS[cardSize];
   const collisionRef = useRef(false);
@@ -604,7 +715,10 @@ const FlickLabScene = ({
           mass={0}
           position={[0, dimensions.height / 2, z]}
           rotation={[Math.PI / 2, 0, 0]}
-          onCollision={recordCollision}
+          onCollision={() => {
+            recordCollision();
+            onTargetHit(index + 1);
+          }}
         />
       ))}
       <FlickAmmoCard
@@ -613,6 +727,7 @@ const FlickLabScene = ({
         onGestureActive={onGestureActive}
         onTelemetry={onTelemetry}
         onCollision={recordCollision}
+        parameters={parameters}
       />
     </>
   );
@@ -624,6 +739,13 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   const [metrics, setMetrics] = useState<LabMetrics>({ ...EMPTY_METRICS, runs: 1 });
   const [gestureActive, setGestureActive] = useState(false);
   const [flickTelemetry, setFlickTelemetry] = useState<FlickTelemetry>(EMPTY_FLICK_TELEMETRY);
+  const [flickParameters, setFlickParameters] = useState<FlickParameters>(
+    DEFAULT_FLICK_PARAMETERS,
+  );
+  const [slowMotion, setSlowMotion] = useState(false);
+  const [targetHit, setTargetHit] = useState<number | null>(null);
+  const [launchRecords, setLaunchRecords] = useState<LaunchRecord[]>([]);
+  const [stackCount, setStackCount] = useState<10 | 30 | 60>(10);
   const copy = lang === 'zh'
     ? {
         title: '开发者物理实验室',
@@ -661,11 +783,23 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
     }));
   }, []);
 
+  const updateFlickTelemetry = useCallback((telemetry: FlickTelemetry) => {
+    setFlickTelemetry(telemetry);
+    if (!telemetry.record) return;
+    setLaunchRecords(previous => (
+      previous.some(record => record.intent.sequenceId === telemetry.record?.intent.sequenceId)
+        ? previous
+        : [...previous, telemetry.record]
+    ));
+  }, []);
+
   const reset = () => {
     setRunId(value => value + 1);
     setMetrics(previous => ({ ...EMPTY_METRICS, runs: previous.runs + 1 }));
     setGestureActive(false);
     setFlickTelemetry(EMPTY_FLICK_TELEMETRY);
+    setTargetHit(null);
+    setLaunchRecords([]);
   };
 
   useEffect(() => {
@@ -673,6 +807,9 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
     setMetrics({ ...EMPTY_METRICS, runs: 1 });
     setGestureActive(false);
     setFlickTelemetry(EMPTY_FLICK_TELEMETRY);
+    setSlowMotion(false);
+    setTargetHit(null);
+    setLaunchRecords([]);
   }, [scenario]);
 
   return (
@@ -685,6 +822,14 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
         </div>
         <div className="physics-lab-header-actions">
           <button onClick={reset}>{copy.reset}</button>
+          {scenario === 'flick' && (
+            <button
+              className={slowMotion ? 'is-active' : ''}
+              onClick={() => setSlowMotion(value => !value)}
+            >
+              {slowMotion ? '慢动作 ×0.25' : '正常速度 ×1'}
+            </button>
+          )}
           <button className="primary-button" onClick={onClose}>{copy.close}</button>
         </div>
       </header>
@@ -709,6 +854,23 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
               </button>
             ))}
         </nav>
+        {scenario === 'stack' && (
+          <div className="physics-lab-stack-count" aria-label="堆叠性能牌数">
+            <span>PERFORMANCE CARDS</span>
+            {[10, 30, 60].map(count => (
+              <button
+                key={count}
+                className={stackCount === count ? 'is-active' : ''}
+                onClick={() => {
+                  setStackCount(count as 10 | 30 | 60);
+                  reset();
+                }}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+        )}
         <dl>
           <div><dt>RUNS</dt><dd>{metrics.runs}</dd></div>
           <div><dt>TUNNELS</dt><dd className={metrics.tunnels ? 'is-danger' : ''}>{metrics.tunnels}</dd></div>
@@ -718,13 +880,46 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
           <div><dt>AVG FPS</dt><dd>{metrics.averageFps.toFixed(0)}</dd></div>
         </dl>
         {scenario === 'flick' && (
-          <div className="physics-lab-telemetry">
-            <span>FLICK · {flickTelemetry.status.toUpperCase()}</span>
-            <strong>{Math.round(flickTelemetry.power * 100)}%</strong>
-            <small>GESTURE {flickTelemetry.gestureSpeed.toFixed(0)} px/s</small>
-            <small>LINEAR {flickTelemetry.linearSpeed.toFixed(2)}</small>
-            <small>ANGULAR {flickTelemetry.angularSpeed.toFixed(2)}</small>
-          </div>
+          <>
+            <div className="physics-lab-telemetry">
+              <span>FLICK · {flickTelemetry.status.toUpperCase()}</span>
+              <strong>{Math.round(flickTelemetry.power * 100)}%</strong>
+              <small>GESTURE {flickTelemetry.gestureSpeed.toFixed(0)} px/s</small>
+              <small>LINEAR {flickTelemetry.linearSpeed.toFixed(2)}</small>
+              <small>ANGULAR {flickTelemetry.angularSpeed.toFixed(2)}</small>
+              <small>IMPULSE {flickTelemetry.record?.impulseMagnitude.toFixed(2) ?? '—'}</small>
+              <small>TARGET {targetHit == null ? '—' : ['近', '中', '远'][targetHit - 1]}</small>
+              <small>
+                SEQ {flickTelemetry.intent?.sequenceId.slice(0, 8) ?? '—'}
+              </small>
+              <small>RECORDS {launchRecords.length}</small>
+            </div>
+            <div className="physics-lab-parameters">
+              <span>LAUNCH PARAMETERS</span>
+              {([
+                ['minimumImpulse', 'MIN IMPULSE', 0, 1, 0.05],
+                ['maximumImpulse', 'MAX IMPULSE', 0.5, 5, 0.05],
+                ['linearDamping', 'LINEAR DAMP', 0, 1, 0.01],
+                ['angularDamping', 'ANGULAR DAMP', 0, 1, 0.01],
+              ] as const).map(([key, label, min, max, step]) => (
+                <label key={key}>
+                  <span>{label}</span>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={flickParameters[key]}
+                    onChange={event => setFlickParameters(previous => ({
+                      ...previous,
+                      [key]: Number(event.target.value),
+                    }))}
+                  />
+                  <output>{flickParameters[key].toFixed(2)}</output>
+                </label>
+              ))}
+            </div>
+          </>
         )}
         <div className="physics-lab-baseline">
           <span>STEP {LAB_BASELINE.stepSize}</span>
@@ -744,7 +939,7 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
             <RapierPhysics
               key={`rapier-${scenario}-${runId}`}
               gravity={[0, -9.81, 0]}
-              timeStep={1 / 60}
+              timeStep={slowMotion && scenario === 'flick' ? 1 / 240 : 1 / 60}
               interpolate
             >
               <RapierCcdSettings />
@@ -754,14 +949,17 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
                   cardSize={cardSize}
                   runId={runId}
                   onGestureActive={setGestureActive}
-                  onTelemetry={setFlickTelemetry}
+                  onTelemetry={updateFlickTelemetry}
                   onMetric={updateMetric}
+                  onTargetHit={setTargetHit}
+                  parameters={flickParameters}
                 />
               ) : (
                 <RapierScenario
                   scenario={scenario}
                   cardSize={cardSize}
                   runId={runId}
+                  stackCount={stackCount}
                   onMetric={updateMetric}
                 />
               )}

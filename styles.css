@@ -101,9 +101,12 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   min-height: 38px; padding: 0 14px; border: 1px solid #aeb9c6; border-radius: 6px;
   background: #fff; cursor: pointer;
 }
+.physics-lab-header-actions button.is-active {
+  border-color: #2d6fba; background: #e5f0fb; color: #174f8c; font-weight: 800;
+}
 .physics-lab-panel {
   display: flex; flex-direction: column; gap: 16px; padding: 18px;
-  border-right: 1px solid #aeb9c6; background: #f7f9fb;
+  overflow: auto; border-right: 1px solid #aeb9c6; background: #f7f9fb;
 }
 .physics-lab-panel label { display: grid; gap: 6px; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
 .physics-lab-panel select { height: 36px; border: 1px solid #b8c3cf; border-radius: 5px; padding: 0 8px; background: #edf1f5; }
@@ -112,6 +115,18 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   min-height: 38px; border: 1px solid #b8c3cf; border-radius: 5px; background: #fff; cursor: pointer;
 }
 .physics-lab-panel nav button.is-active { border-color: #2d6fba; background: #e5f0fb; color: #174f8c; font-weight: 800; }
+.physics-lab-stack-count {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+}
+.physics-lab-stack-count > span {
+  grid-column: 1 / -1; color: #315d89; font: 800 10px/1.2 monospace;
+}
+.physics-lab-stack-count button {
+  min-height: 32px; border: 1px solid #b8c3cf; border-radius: 5px; background: #fff; cursor: pointer;
+}
+.physics-lab-stack-count button.is-active {
+  border-color: #2d6fba; background: #e5f0fb; color: #174f8c; font-weight: 800;
+}
 .physics-lab-panel dl { display: grid; gap: 1px; margin: 0; overflow: hidden; border: 1px solid #c4cdd7; border-radius: 6px; background: #c4cdd7; }
 .physics-lab-panel dl div { display: flex; justify-content: space-between; padding: 9px 10px; background: #fff; }
 .physics-lab-panel dt { color: #718095; font: 700 10px/1.4 monospace; }
@@ -127,6 +142,18 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .physics-lab-telemetry > span { color: #315d89; }
 .physics-lab-telemetry > strong { color: #d65f27; font-size: 18px; }
 .physics-lab-telemetry > small { color: #65778c; }
+.physics-lab-parameters {
+  display: grid; gap: 8px; padding: 12px; border: 1px solid #c4cdd7;
+  border-radius: 6px; background: #fff;
+}
+.physics-lab-parameters > span { color: #315d89; font: 800 10px/1.2 monospace; }
+.physics-lab-parameters label {
+  display: grid; grid-template-columns: 78px minmax(0, 1fr) 34px;
+  align-items: center; gap: 6px; color: #65778c; font: 700 9px/1.2 monospace;
+  letter-spacing: 0;
+}
+.physics-lab-parameters input { width: 100%; accent-color: #2d6fba; }
+.physics-lab-parameters output { color: #263b52; text-align: right; }
 .physics-lab-canvas { position: relative; min-width: 0; min-height: 0; }
 .physics-lab-canvas canvas { touch-action: none; }
 .ui-scale-surface {

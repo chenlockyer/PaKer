@@ -1,4 +1,4 @@
-import type { LaunchGestureSample } from '../types';
+import type { CardRole, LaunchGestureSample } from '../types';
 
 export interface LaunchGestureResolution {
   distanceRatio: number;
@@ -9,6 +9,10 @@ export interface LaunchGestureResolution {
 }
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+export const resolveCardRole = (role?: CardRole): CardRole => role ?? 'structure';
+
+export const canLaunchCardRole = (role?: CardRole) => resolveCardRole(role) === 'ammo';
 
 export const resolveLaunchGesture = (
   samples: LaunchGestureSample[],
@@ -47,4 +51,14 @@ export const isLaunchGesturePastDeadZone = (
   const first = samples[0];
   const last = samples[samples.length - 1];
   return Math.hypot(last.x - first.x, last.y - first.y) >= viewportShortSide * 0.01;
+};
+
+export const resolveLaunchImpulseMagnitude = (
+  power: number,
+  minimumImpulse: number,
+  maximumImpulse: number,
+) => {
+  const minimum = Math.max(0, Math.min(minimumImpulse, maximumImpulse));
+  const maximum = Math.max(minimum, maximumImpulse);
+  return minimum + clamp01(power) * (maximum - minimum);
 };

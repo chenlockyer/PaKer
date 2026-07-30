@@ -18,6 +18,10 @@ try {
     logLevel: 'silent',
   });
   const gesture = await import(`${pathToFileURL(bundlePath).href}?v=${Date.now()}`);
+  assert.equal(gesture.resolveCardRole(undefined), 'structure');
+  assert.equal(gesture.canLaunchCardRole(undefined), false);
+  assert.equal(gesture.canLaunchCardRole('structure'), false);
+  assert.equal(gesture.canLaunchCardRole('ammo'), true);
   const viewport = 720;
   const slow = [
     { x: 100, y: 100, time: 0 },
@@ -50,7 +54,17 @@ try {
     gesture.resolveLaunchGesture(longFast, viewport),
   );
   assert.ok(repeated.every(result => result.power === repeated[0].power));
-  console.log('Launch self-test passed: power curve, speed weighting, dead zone, and repeatability.');
+  assert.equal(gesture.resolveLaunchImpulseMagnitude(-1, 0.25, 2.45), 0.25);
+  assert.equal(gesture.resolveLaunchImpulseMagnitude(1, 0.25, 2.45), 2.45);
+  assert.equal(gesture.resolveLaunchImpulseMagnitude(2, 0.25, 2.45), 2.45);
+  assert.ok(
+    gesture.resolveLaunchImpulseMagnitude(0.75, 0.25, 2.45)
+      > gesture.resolveLaunchImpulseMagnitude(0.25, 0.25, 2.45),
+    'impulse output must be monotonic',
+  );
+  console.log(
+    'Launch self-test passed: power curve, speed weighting, dead zone, impulse range, and repeatability.',
+  );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }
