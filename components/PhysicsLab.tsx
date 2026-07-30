@@ -3,10 +3,20 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { Physics, useBox, usePlane } from '@react-three/cannon';
+import {
+  CoefficientCombineRule,
+  CuboidCollider,
+  Physics as RapierPhysics,
+  RigidBody,
+  useAfterPhysicsStep,
+  useRapier,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import * as THREE from 'three';
 import { CARD_DIMENSIONS, CardSize } from '../types';
 
 type PhysicsLabScenario = 'drop' | 'stack' | 'impact' | 'flick';
+type PhysicsLabEngine = 'cannon' | 'rapier';
 
 interface PhysicsLabProps {
   lang: 'zh' | 'en';
@@ -55,6 +65,33 @@ const LabFloor = () => {
     </mesh>
   );
 };
+
+const RapierCcdSettings = () => {
+  const { world } = useRapier();
+  useEffect(() => {
+    world.integrationParameters.maxCcdSubsteps = 2;
+  }, [world]);
+  return null;
+};
+
+const RapierLabFloor = () => (
+  <>
+    <RigidBody type="fixed" colliders={false}>
+      <CuboidCollider
+        args={[20, 0.05, 20]}
+        position={[0, -0.05, 0]}
+        friction={LAB_BASELINE.floorFriction}
+        frictionCombineRule={CoefficientCombineRule.Multiply}
+        restitution={0}
+      />
+    </RigidBody>
+    <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+      <planeGeometry args={[40, 40]} />
+      <meshStandardMaterial color="#d9dee5" roughness={0.9} />
+      <gridHelper args={[40, 40, '#8190a3', '#aeb8c4']} rotation={[-Math.PI / 2, 0, 0]} />
+    </mesh>
+  </>
+);
 
 const LabCard = ({
   cardSize,
@@ -121,6 +158,67 @@ const FpsSampler = ({ onAverage }: { onAverage: (fps: number) => void }) => {
     elapsedRef.current = 0;
   });
   return null;
+};
+
+const RapierLabCard = ({
+  cardSize,
+  position,
+  rotation = [0, 0, 0],
+  mass = 0.1,
+  velocity,
+  onPosition,
+  onVelocity,
+  onCollision,
+}: {
+  cardSize: CardSize;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  mass?: number;
+  velocity?: [number, number, number];
+  onPosition?: (position: [number, number, number]) => void;
+  onVelocity?: (velocity: [number, number, number]) => void;
+  onCollision?: () => void;
+}) => {
+  const dimensions = CARD_DIMENSIONS[cardSize];
+  const bodyRef = useRef<RapierRigidBody>(null);
+
+  useAfterPhysicsStep(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const nextPosition = body.translation();
+    const nextVelocity = body.linvel();
+    onPosition?.([nextPosition.x, nextPosition.y, nextPosition.z]);
+    onVelocity?.([nextVelocity.x, nextVelocity.y, nextVelocity.z]);
+  });
+
+  return (
+    <RigidBody
+      ref={bodyRef}
+      type={mass === 0 ? 'fixed' : 'dynamic'}
+      colliders={false}
+      position={position}
+      rotation={rotation}
+      linearVelocity={velocity}
+      linearDamping={0.5}
+      angularDamping={0.5}
+      canSleep
+      ccd={mass > 0}
+      additionalSolverIterations={4}
+      onCollisionEnter={onCollision}
+    >
+      <CuboidCollider
+        args={[dimensions.width / 2, dimensions.thickness / 2, dimensions.height / 2]}
+        mass={mass || undefined}
+        friction={LAB_BASELINE.cardFriction}
+        frictionCombineRule={CoefficientCombineRule.Multiply}
+        restitution={0}
+      />
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[dimensions.width, dimensions.thickness, dimensions.height]} />
+        <meshStandardMaterial color="#f7f6f2" roughness={0.55} />
+      </mesh>
+    </RigidBody>
+  );
 };
 
 const CannonScenario = ({
@@ -231,8 +329,117 @@ const CannonScenario = ({
   );
 };
 
+const RapierScenario = ({
+  scenario,
+  cardSize,
+  runId,
+  onMetric,
+}: {
+  scenario: PhysicsLabScenario;
+  cardSize: CardSize;
+  runId: number;
+  onMetric: (metric: Partial<LabMetrics>) => void;
+}) => {
+  const dimensions = CARD_DIMENSIONS[cardSize];
+  const startedAtRef = useRef(performance.now());
+  const collidedRef = useRef(false);
+  const tunneledRef = useRef(false);
+  const initialPosition = useMemo<[number, number, number]>(() => {
+    if (scenario === 'impact' || scenario === 'flick') return [-6, dimensions.height / 2, 0];
+    return [0, scenario === 'drop' ? dimensions.height * 2.5 : dimensions.thickness / 2, 0];
+  }, [dimensions.height, dimensions.thickness, scenario]);
+
+  const recordCollision = useCallback(() => {
+    if (collidedRef.current) return;
+    collidedRef.current = true;
+    onMetric({ collisions: 1 });
+  }, [onMetric]);
+
+  const recordPosition = useCallback((position: [number, number, number]) => {
+    const displacement = new THREE.Vector3(...position).distanceTo(new THREE.Vector3(...initialPosition));
+    onMetric({ maxDisplacement: displacement });
+    if (
+      scenario === 'drop' &&
+      position[1] < dimensions.thickness * -2 &&
+      !collidedRef.current &&
+      !tunneledRef.current
+    ) {
+      tunneledRef.current = true;
+      onMetric({ tunnels: 1 });
+    }
+  }, [dimensions.thickness, initialPosition, onMetric, scenario]);
+
+  const recordVelocity = useCallback((velocity: [number, number, number]) => {
+    if (performance.now() - startedAtRef.current < 350) return;
+    if (new THREE.Vector3(...velocity).length() < 0.05) {
+      onMetric({ stableSeconds: (performance.now() - startedAtRef.current) / 1000 });
+    }
+  }, [onMetric]);
+
+  if (scenario === 'stack') {
+    return (
+      <>
+        {Array.from({ length: 12 }, (_, index) => (
+          <RapierLabCard
+            key={`${runId}-rapier-stack-${index}`}
+            cardSize={cardSize}
+            position={[0, dimensions.thickness / 2 + index * (dimensions.thickness + 0.002), 0]}
+          />
+        ))}
+      </>
+    );
+  }
+
+  if (scenario === 'drop') {
+    return (
+      <>
+        <RapierLabCard
+          key={`${runId}-rapier-drop-target`}
+          cardSize={cardSize}
+          mass={0}
+          position={[0, dimensions.thickness * 1.5, 0]}
+          onCollision={recordCollision}
+        />
+        <RapierLabCard
+          key={`${runId}-rapier-drop-card`}
+          cardSize={cardSize}
+          position={initialPosition}
+          onPosition={recordPosition}
+          onVelocity={recordVelocity}
+          onCollision={recordCollision}
+        />
+      </>
+    );
+  }
+
+  const speed = scenario === 'flick' ? 15 : 10;
+  return (
+    <>
+      <RapierLabCard
+        key={`${runId}-rapier-impact-target`}
+        cardSize={cardSize}
+        mass={0}
+        position={[0, dimensions.height / 2, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+        onCollision={recordCollision}
+      />
+      <RapierLabCard
+        key={`${runId}-rapier-projectile`}
+        cardSize={cardSize}
+        position={initialPosition}
+        rotation={[Math.PI / 2, 0, Math.PI / 2]}
+        velocity={[speed, 0, 0]}
+        onPosition={recordPosition}
+        onVelocity={recordVelocity}
+        onCollision={recordCollision}
+      />
+    </>
+  );
+};
+
 const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   const [scenario, setScenario] = useState<PhysicsLabScenario>('drop');
+  const [engine, setEngine] = useState<PhysicsLabEngine>('cannon');
   const [runId, setRunId] = useState(1);
   const [metrics, setMetrics] = useState<LabMetrics>({ ...EMPTY_METRICS, runs: 1 });
   const copy = lang === 'zh'
@@ -280,7 +487,7 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   useEffect(() => {
     setRunId(value => value + 1);
     setMetrics({ ...EMPTY_METRICS, runs: 1 });
-  }, [scenario]);
+  }, [engine, scenario]);
 
   return (
     <main className="physics-lab">
@@ -299,8 +506,9 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
       <aside className="physics-lab-panel">
         <label>
           <span>ENGINE</span>
-          <select value="cannon" disabled>
+          <select value={engine} onChange={event => setEngine(event.target.value as PhysicsLabEngine)}>
             <option value="cannon">{LAB_BASELINE.engine}</option>
+            <option value="rapier">Rapier 0.19 · CCD</option>
           </select>
         </label>
         <nav>
@@ -339,24 +547,42 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
           <directionalLight position={[8, 14, 8]} intensity={1.25} castShadow />
           <Stats />
           <Suspense fallback={null}>
-            <Physics
-              key={`${scenario}-${runId}`}
-              gravity={[0, -9.81, 0]}
-              stepSize={1 / 60}
-              maxSubSteps={10}
-              iterations={12}
-              tolerance={0.001}
-              broadphase="SAP"
-              allowSleep
-            >
-              <LabFloor />
-              <CannonScenario
-                scenario={scenario}
-                cardSize={cardSize}
-                runId={runId}
-                onMetric={updateMetric}
-              />
-            </Physics>
+            {engine === 'cannon' ? (
+              <Physics
+                key={`cannon-${scenario}-${runId}`}
+                gravity={[0, -9.81, 0]}
+                stepSize={1 / 60}
+                maxSubSteps={10}
+                iterations={12}
+                tolerance={0.001}
+                broadphase="SAP"
+                allowSleep
+              >
+                <LabFloor />
+                <CannonScenario
+                  scenario={scenario}
+                  cardSize={cardSize}
+                  runId={runId}
+                  onMetric={updateMetric}
+                />
+              </Physics>
+            ) : (
+              <RapierPhysics
+                key={`rapier-${scenario}-${runId}`}
+                gravity={[0, -9.81, 0]}
+                timeStep={1 / 60}
+                interpolate
+              >
+                <RapierCcdSettings />
+                <RapierLabFloor />
+                <RapierScenario
+                  scenario={scenario}
+                  cardSize={cardSize}
+                  runId={runId}
+                  onMetric={updateMetric}
+                />
+              </RapierPhysics>
+            )}
           </Suspense>
           <FpsSampler onAverage={averageFps => updateMetric({ averageFps })} />
           <OrbitControls makeDefault target={[0, 1.4, 0]} />
