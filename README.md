@@ -21,7 +21,7 @@
 
 ### ✨ 核心特性
 
-*   **🧪 动力学物理模拟**: 核心由 `cannon-es` 驱动。每张纸牌都拥有真实的质量、摩擦系数以及碰撞体，模拟真实世界中的物理反馈。
+*   **🧪 动力学物理模拟**: 核心由 Rapier 驱动。每张纸牌都拥有真实的质量、摩擦系数、碰撞体和连续碰撞检测，模拟真实世界中的物理反馈并避免薄纸牌穿模。
 *   **⏳ 时间操控艺术**: 
     *   **时间暂停 (`F`)**: 冻结所有物体的物理状态，在“真空”中进行构思与搭建。
     *   **恢复物理**: 一键解除冻结，看重力如何决定你结构的命运。
@@ -96,7 +96,7 @@
 
 ### ✨ Key Features
 
-*   **Realistic Physics**: Cards have volume, mass, and friction, calculation is powered by `cannon-es`.
+*   **Realistic Physics**: Cards have volume, mass, friction, and CCD, powered by Rapier.
 *   **Time Control**: Freeze space to build gravity-defying architectures, then unfreeze to let physics take its course.
 *   **Hybrid Workflow**: Switch between effortless **Quick Build** and pixel-perfect **Precision Mode** with industry-standard Gizmos.
 *   **Configurable**: Customize your own rotation presets and save your progress locally.

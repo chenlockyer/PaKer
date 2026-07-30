@@ -1,6 +1,12 @@
 /// <reference lib="dom" />
-import React, { useMemo, useEffect, useState } from 'react';
-import { useBox } from '@react-three/cannon';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
+import {
+  CoefficientCombineRule,
+  CuboidCollider,
+  RigidBody,
+  useRapier,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CARD_DIMENSIONS, CardData, CardSize, LiveCardTransform, PointerMode } from '../types';
@@ -102,42 +108,24 @@ const Card: React.FC<CardProps> = ({
 
   const dimensions = CARD_DIMENSIONS[cardSize];
   const geometry = useMemo(() => getCardGeometry(cardSize), [cardSize]);
-
-  const [ref, api] = useBox(() => ({
-    mass: 0.1, // Always init as dynamic so we can sleep/wake it
-    type: 'Dynamic',
-    position: data.position,
-    rotation: data.rotation,
-    args: [dimensions.width, dimensions.thickness, dimensions.height],
-    linearDamping: 0.5, 
-    angularDamping: 0.5, 
-    material: {
-      friction: 1.0,
-      restitution: 0.0, 
-    },
-    onCollide: (event: any) => {
-      playCollisionSound(Math.abs(event.contact?.impactVelocity ?? 0));
-    },
-  }));
+  const bodyRef = useRef<RapierRigidBody>(null);
+  const { rapier } = useRapier();
   const physicsPositionRef = React.useRef<[number, number, number]>(data.position);
   const physicsRotationRef = React.useRef<[number, number, number]>(data.rotation);
   const transformSampleTimeRef = React.useRef(0);
 
-  useEffect(
-    () => api.position.subscribe(position => {
-      physicsPositionRef.current = position;
-    }),
-    [api.position]
-  );
-
-  useEffect(
-    () => api.rotation.subscribe(rotation => {
-      physicsRotationRef.current = rotation;
-    }),
-    [api.rotation]
-  );
-
   useFrame(({ clock }) => {
+    const body = bodyRef.current;
+    if (!body || isDragging) return;
+    const position = body.translation();
+    const quaternion = body.rotation();
+    const euler = new THREE.Euler().setFromQuaternion(
+      new THREE.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w),
+      'XYZ',
+    );
+    physicsPositionRef.current = [position.x, position.y, position.z];
+    physicsRotationRef.current = [euler.x, euler.y, euler.z];
+
     if (clock.elapsedTime - transformSampleTimeRef.current >= 0.05) {
       transformSampleTimeRef.current = clock.elapsedTime;
       onTransformChange?.(data.id, {
@@ -150,43 +138,40 @@ const Card: React.FC<CardProps> = ({
 
     const gust = windStrength * (0.8 + Math.sin(clock.elapsedTime * 2.4) * 0.2);
     const [x, y, z] = physicsPositionRef.current;
-    api.applyForce(
-      [gust, 0, gust * 0.18],
-      [x, y + 0.65, z]
+    body.addForceAtPoint(
+      { x: gust, y: 0, z: gust * 0.18 },
+      { x, y: y + 0.65, z },
+      true,
     );
-    api.wakeUp();
   });
 
   // Effect 1: Handle Position Teleporting (Sync React State -> Physics World)
   // Only runs when dragging status changes or the defined position VALUES change (Placement/Move)
   // We decompose dependencies to avoid re-running when just 'locked' changes (which preserves physics settling)
   useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
     if (isDragging) {
-      // Hide and disable physics while dragging (Ghost takes over)
-      api.mass.set(0);
-      api.velocity.set(0, 0, 0);
-      api.position.set(0, -100, 0); 
-      api.sleep();
+      body.setLinvel({ x: 0, y: 0, z: 0 }, false);
+      body.setAngvel({ x: 0, y: 0, z: 0 }, false);
+      body.setEnabled(false);
     } else {
-      // Teleport to the new position defined by React state
-      api.position.set(data.position[0], data.position[1], data.position[2]);
-      api.rotation.set(data.rotation[0], data.rotation[1], data.rotation[2]);
-      
-      // CRITICAL: Reset velocity to prevent "flinging" after a teleport
-      // This ensures the card sits still immediately after being dropped
-      api.velocity.set(0, 0, 0);
-      api.angularVelocity.set(0, 0, 0);
-      
-      // If it's not locked, make sure it has mass and is awake
-      if (!data.locked) {
-        api.mass.set(0.1);
-        api.wakeUp();
-      }
+      const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...data.rotation, 'XYZ'));
+      body.setEnabled(true);
+      body.setTranslation({ x: data.position[0], y: data.position[1], z: data.position[2] }, false);
+      body.setRotation(quaternion, false);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, false);
+      body.setAngvel({ x: 0, y: 0, z: 0 }, false);
+      body.setBodyType(
+        data.locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
+        !data.locked,
+      );
     }
   }, [
-    isDragging, 
-    api, 
-    // Decompose position/rotation to ensure check is on values, not object reference
+    data.locked,
+    isDragging,
+    rapier.RigidBodyType.Dynamic,
+    rapier.RigidBodyType.Fixed,
     data.position[0], data.position[1], data.position[2], 
     data.rotation[0], data.rotation[1], data.rotation[2]
   ]);
@@ -194,22 +179,15 @@ const Card: React.FC<CardProps> = ({
   // Effect 2: Handle Locking/Freezing (State Sync)
   // Only runs when locked state changes
   useEffect(() => {
-    if (isDragging) return; // Ignore if dragging (handled above)
-
-    if (data.locked) {
-      // Freeze: Make static, stop moving
-      api.mass.set(0);
-      api.velocity.set(0, 0, 0);
-      api.angularVelocity.set(0, 0, 0);
-      api.sleep(); // Disable collision checks to save performance
-    } else {
-      // Unfreeze: Make dynamic, wake up
-      api.mass.set(0.1);
-      api.wakeUp();
-      // Tiny nudge to ensure physics engine activates it
-      api.velocity.set(0, 0.01, 0); 
-    }
-  }, [data.locked, isDragging, api]);
+    const body = bodyRef.current;
+    if (!body || isDragging) return;
+    body.setLinvel({ x: 0, y: data.locked ? 0 : 0.01, z: 0 }, !data.locked);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, false);
+    body.setBodyType(
+      data.locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
+      !data.locked,
+    );
+  }, [data.locked, isDragging, rapier.RigidBodyType.Dynamic, rapier.RigidBodyType.Fixed]);
 
   // Texture Gen
   const texture = useMemo(
@@ -269,22 +247,44 @@ const Card: React.FC<CardProps> = ({
   }
 
   return (
-    <mesh 
-      ref={ref as any} 
-      castShadow 
-      receiveShadow={false}
-      onPointerOver={handlePointerOver}
-      onPointerOut={handlePointerOut}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
-      onPointerDown={handlePointerDown}
-      visible={!isDragging}
+    <RigidBody
+      ref={bodyRef}
+      type={data.locked ? 'fixed' : 'dynamic'}
+      colliders={false}
+      position={data.position}
+      rotation={data.rotation}
+      linearDamping={0.5}
+      angularDamping={0.5}
+      canSleep
+      ccd={!data.locked}
+      additionalSolverIterations={4}
     >
-      <primitive object={geometry} attach="geometry" />
-      <meshStandardMaterial color="#f0f0f0" attach="material-0" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
-      <meshStandardMaterial map={texture} attach="material-1" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
-      <meshStandardMaterial color="#2563eb" attach="material-2" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
-    </mesh>
+      <CuboidCollider
+        args={[dimensions.width / 2, dimensions.thickness / 2, dimensions.height / 2]}
+        mass={0.1}
+        friction={1}
+        frictionCombineRule={CoefficientCombineRule.Multiply}
+        restitution={0}
+        onContactForce={event => {
+          playCollisionSound(Math.min(8, Math.abs(event.totalForceMagnitude) / 12));
+        }}
+      />
+      <mesh
+        castShadow
+        receiveShadow={false}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+        onPointerDown={handlePointerDown}
+        visible={!isDragging}
+      >
+        <primitive object={geometry} attach="geometry" />
+        <meshStandardMaterial color="#f0f0f0" attach="material-0" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
+        <meshStandardMaterial map={texture} attach="material-1" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
+        <meshStandardMaterial color="#2563eb" attach="material-2" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
+      </mesh>
+    </RigidBody>
   );
 };
 

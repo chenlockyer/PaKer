@@ -1,6 +1,13 @@
 /// <reference lib="dom" />
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
-import { Physics, usePlane, useSphere } from '@react-three/cannon';
+import {
+  BallCollider,
+  CoefficientCombineRule,
+  CuboidCollider,
+  Physics,
+  RigidBody,
+  useRapier,
+} from '@react-three/rapier';
 import { useThree, useFrame, ThreeElements } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -143,23 +150,22 @@ const TargetHeightGuide = ({ height }: { height: number }) => (
 
 const TestWeight = ({ mass, dropHeight }: { mass: number; dropHeight: number }) => {
   const radius = 0.36;
-  const [ref] = useSphere(() => ({
-    mass,
-    args: [radius],
-    position: [0, dropHeight, 0],
-    linearDamping: 0.02,
-    angularDamping: 0.1,
-    material: {
-      friction: 0.65,
-      restitution: 0.05,
-    },
-  }));
 
   return (
-    <mesh ref={ref as React.RefObject<THREE.Mesh>} castShadow>
-      <sphereGeometry args={[radius, 24, 16]} />
-      <meshStandardMaterial color="#f97316" metalness={0.55} roughness={0.3} />
-    </mesh>
+    <RigidBody
+      type="dynamic"
+      colliders={false}
+      position={[0, dropHeight, 0]}
+      linearDamping={0.02}
+      angularDamping={0.1}
+      ccd
+    >
+      <BallCollider args={[radius]} mass={mass} friction={0.65} restitution={0.05} />
+      <mesh castShadow>
+        <sphereGeometry args={[radius, 24, 16]} />
+        <meshStandardMaterial color="#f97316" metalness={0.55} roughness={0.3} />
+      </mesh>
+    </RigidBody>
   );
 };
 
@@ -193,22 +199,33 @@ const Floor = ({
   const gridSize = gridCellSize * gridDivisions;
   const gridColor = 0x8492a3;
 
-  usePlane(() => ({
-    rotation: [-Math.PI / 2, 0, 0],
-    position: [0, 0, 0],
-    material: { friction: 1.1, restitution: 0 }
-  }), meshRef);
-
   return (
-    <mesh ref={meshRef} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[100, 100]} />
-      <shadowMaterial opacity={0.3} />
-      <gridHelper
-        args={[gridSize, gridDivisions, gridColor, gridColor]}
-        rotation={[-Math.PI / 2, 0, 0]}
+    <RigidBody type="fixed" colliders={false}>
+      <CuboidCollider
+        args={[50, 0.05, 50]}
+        position={[0, -0.05, 0]}
+        friction={1.1}
+        frictionCombineRule={CoefficientCombineRule.Multiply}
+        restitution={0}
       />
-    </mesh>
+      <mesh ref={meshRef} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[100, 100]} />
+        <shadowMaterial opacity={0.3} />
+        <gridHelper
+          args={[gridSize, gridDivisions, gridColor, gridColor]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        />
+      </mesh>
+    </RigidBody>
   );
+};
+
+const RapierWorldSettings = () => {
+  const { world } = useRapier();
+  useEffect(() => {
+    world.integrationParameters.maxCcdSubsteps = 2;
+  }, [world]);
+  return null;
 };
 
 // The Ghost Card follows the mouse to show where a card will be placed
@@ -695,11 +712,13 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   return (
     <Physics
       gravity={[0, -9.81, 0]}
-      iterations={12}
-      tolerance={0.001}
-      allowSleep
-      broadphase="SAP"
+      timeStep={1 / 60}
+      interpolate
+      numSolverIterations={8}
+      numInternalPgsIterations={2}
+      allowedLinearError={0.0005}
     >
+      <RapierWorldSettings />
       <ambientLight intensity={0.5} />
       <directionalLight
         position={[10, 20, 10]}
