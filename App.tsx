@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import GameScene from './components/GameScene';
 import UIOverlay from './components/UIOverlay';
 import MainMenu from './components/MainMenu';
+import PhysicsLab from './components/PhysicsLab';
 import SettingsModal from './components/SettingsModal';
 import BlueprintStudio from './components/BlueprintStudio';
 import LevelStudio from './components/LevelStudio';
@@ -1265,6 +1266,7 @@ const App: React.FC = () => {
            onLoad={loadLatestGame}
            onSettings={() => setShowSettings(true)}
            onOpenLevelStudio={() => setShowLevelStudio(true)}
+           onOpenPhysicsLab={() => setAppState(AppState.PHYSICS_LAB)}
            hasSave={saveLibrary.manualSaves.length > 0 || saveLibrary.autosave !== null}
            lang={lang}
            theme={theme}
@@ -1434,6 +1436,14 @@ const App: React.FC = () => {
               alert(lang === 'zh' ? '删除存档失败' : 'Failed to delete save');
             }
           }}
+        />
+      )}
+
+      {import.meta.env.DEV && appState === AppState.PHYSICS_LAB && (
+        <PhysicsLab
+          lang={lang}
+          cardSize={cardSize}
+          onClose={() => setAppState(AppState.MENU)}
         />
       )}
 

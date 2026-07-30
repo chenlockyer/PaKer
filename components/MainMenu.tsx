@@ -9,6 +9,7 @@ interface MainMenuProps {
   onLoad: () => void;
   onSettings: () => void;
   onOpenLevelStudio: () => void;
+  onOpenPhysicsLab: () => void;
   hasSave: boolean;
   lang: 'en' | 'zh';
   theme: AppTheme;
@@ -28,6 +29,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
   onLoad,
   onSettings,
   onOpenLevelStudio,
+  onOpenPhysicsLab,
   hasSave,
   lang,
 }) => {
@@ -118,6 +120,15 @@ const MainMenu: React.FC<MainMenuProps> = ({
           </span>
           <b aria-hidden="true">04</b>
         </button>
+        {import.meta.env.DEV && (
+          <button className="menu-action menu-action-lab" onClick={onOpenPhysicsLab}>
+            <span>
+              <strong>{lang === 'zh' ? '物理实验室' : 'Physics Lab'}</strong>
+              <small>{lang === 'zh' ? '测试跌落、堆叠、撞击与弹射' : 'Test drops, stacks, impacts, and flicks'}</small>
+            </span>
+            <b aria-hidden="true">DEV</b>
+          </button>
+        )}
 
         <div className="menu-secondary">
           <button className="text-button" onClick={onSettings}>{copy.settings}</button>

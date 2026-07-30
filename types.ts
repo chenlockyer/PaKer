@@ -167,7 +167,8 @@ export enum PointerMode {
 
 export enum AppState {
   MENU = 'MENU',
-  GAME = 'GAME'
+  GAME = 'GAME',
+  PHYSICS_LAB = 'PHYSICS_LAB'
 }
 
 export enum GameMode {
