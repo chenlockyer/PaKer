@@ -33,6 +33,7 @@ import {
   LiveCardTransform,
   LevelDefinition,
   LevelTutorialCue,
+  LaunchPreset,
   LaunchRecord,
 } from './types';
 import { translations } from './utils/translations';
@@ -199,6 +200,7 @@ const App: React.FC = () => {
   const [currentPresetId, setCurrentPresetId] = useState<string>(DEFAULT_PRESETS[0].id);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>(InteractionMode.QUICK);
   const [pointerMode, setPointerMode] = useState<PointerMode>(PointerMode.PLACE);
+  const [launchPreset, setLaunchPreset] = useState<LaunchPreset>('short-edge');
   const [isFreezeMode, setIsFreezeMode] = useState(false);
   const [cards, setCards] = useState<CardData[]>([]);
   const [blueprints, setBlueprints] = useState<Blueprint[]>(loadBlueprints);
@@ -1219,8 +1221,8 @@ const App: React.FC = () => {
   useInputAction('tool.place', event => {
     if (event.phase === 'down' && interactionEnabled) setPointerMode(PointerMode.PLACE);
   });
-  useInputAction('tool.move', event => {
-    if (event.phase === 'down' && interactionEnabled) setPointerMode(PointerMode.MOVE);
+  useInputAction('tool.push', event => {
+    if (event.phase === 'down' && interactionEnabled) setPointerMode(PointerMode.PUSH);
   });
   useInputAction('tool.delete', event => {
     if (event.phase === 'down' && interactionEnabled) setPointerMode(PointerMode.DELETE);
@@ -1299,16 +1301,12 @@ const App: React.FC = () => {
           <GameScene 
             rotationPreset={currentPreset}
             interactionMode={interactionMode} 
-            pointerMode={pointerMode}
-            setPointerMode={setPointerMode}
+             pointerMode={pointerMode}
+             launchPreset={launchPreset}
             isFreezeMode={isFreezeMode}
             cards={cards} 
             addCard={addCard} 
             removeCard={removeCard}
-            updateCard={updateCard}
-            setCardRole={setCardRole}
-            draggingCardId={draggingCardId}
-            setDraggingCardId={setDraggingCardId}
             interactionEnabled={interactionEnabled}
             placementEnabled={placementEnabled}
             windStrength={windStrength}
@@ -1337,8 +1335,10 @@ const App: React.FC = () => {
             setPresetId={setCurrentPresetId}
             interactionMode={interactionMode}
             setInteractionMode={setInteractionMode}
-            pointerMode={pointerMode}
-            setPointerMode={setPointerMode}
+             pointerMode={pointerMode}
+             setPointerMode={setPointerMode}
+             launchPreset={launchPreset}
+             setLaunchPreset={setLaunchPreset}
             isFreezeMode={isFreezeMode}
             setIsFreezeMode={() => toggleFreezeMode()}
             onClear={clearCards}

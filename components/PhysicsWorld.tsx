@@ -17,9 +17,11 @@ import {
   BlueprintGuideProgress,
   BlueprintGuideState,
   CARD_DIMENSIONS,
+  CardLaunchRequest,
   CardData,
-  CardRole,
   CardSize,
+  LaunchMemberRecord,
+  LaunchPreset,
   LaunchRecord,
   LiveCardTransform,
   RotationPreset,
@@ -33,6 +35,16 @@ import {
   InputActionEvent,
   useInputAction,
 } from '../input/InputContext';
+import type { CardPhysicsHandle } from '../physics/cardPhysics';
+import {
+  distributeImpulseByMass,
+  findStackedCardIds,
+  getLaunchPresetCandidates,
+  localPointToWorld,
+  quaternionToWorldVector,
+  resolveLaunchImpulseMagnitude,
+  worldDirectionFromQuaternion,
+} from '../physics/launchGesture';
 
 const useRepeatingInputAction = (
   action: InputAction,
@@ -67,15 +79,11 @@ interface PhysicsWorldProps {
   rotationPreset: RotationPreset;
   interactionMode: InteractionMode;
   pointerMode: PointerMode;
-  setPointerMode: (mode: PointerMode) => void;
+  launchPreset: LaunchPreset;
   isFreezeMode: boolean;
   cards: CardData[];
   addCard: (card: CardData) => void;
   removeCard: (id: string) => void;
-  updateCard: (id: string, pos: [number, number, number], rot: [number, number, number]) => void;
-  setCardRole: (id: string, role: CardRole) => void;
-  draggingCardId: string | null;
-  setDraggingCardId: (id: string | null) => void;
   interactionEnabled: boolean;
   placementEnabled: boolean;
   windStrength: number;
@@ -89,7 +97,6 @@ interface PhysicsWorldProps {
   weightDropHeight: number;
   onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
   onCardLaunch: (record: LaunchRecord) => void;
-  onLaunchBusyChange: (busy: boolean) => void;
   blueprintGuide: BlueprintGuideState | null;
   onBlueprintPlaceOrigin: (origin: [number, number, number]) => void;
   onBlueprintProgress: (progress: BlueprintGuideProgress) => void;
@@ -240,7 +247,6 @@ const GhostCard = ({
   onPlace,
   floorRef,
   cardsGroupRef,
-  dragMode = false,
   cardSize
 }: { 
   rotationPreset: RotationPreset; 
@@ -248,7 +254,6 @@ const GhostCard = ({
   onPlace: (pos: THREE.Vector3, rot: THREE.Euler) => void;
   floorRef: React.RefObject<THREE.Mesh>;
   cardsGroupRef: React.RefObject<THREE.Group>;
-  dragMode?: boolean;
   cardSize: CardSize;
 }) => {
   const { camera, raycaster } = useThree();
@@ -481,35 +486,27 @@ const GhostCard = ({
       }
     };
 
-    if (dragMode) {
-      const handleUp = () => triggerPlace();
-      window.addEventListener('pointerup', handleUp);
-      return () => window.removeEventListener('pointerup', handleUp);
-    } else {
-      const handleClick = (e: MouseEvent) => {
-        if ((e.target as HTMLElement).tagName !== 'CANVAS') return;
-        
-        if (clickStartRef.current) {
-          const dx = e.clientX - clickStartRef.current.x;
-          const dy = e.clientY - clickStartRef.current.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance > 5) return; 
-        }
+    const handleClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).tagName !== 'CANVAS') return;
 
-        triggerPlace();
-      };
-      window.addEventListener('click', handleClick);
-      return () => window.removeEventListener('click', handleClick);
-    }
-  }, [onPlace, dragMode]);
+      if (clickStartRef.current) {
+        const dx = e.clientX - clickStartRef.current.x;
+        const dy = e.clientY - clickStartRef.current.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 5) return;
+      }
+
+      triggerPlace();
+    };
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [onPlace]);
 
   const ghostColor = isHeightLocked
     ? 0xa855f7
-    : dragMode
-      ? 0x3b82f6
-      : isFreezeMode
-        ? 0x00ffff
-        : 0x00ff00;
+    : isFreezeMode
+      ? 0x00ffff
+      : 0x00ff00;
 
   return (
     <mesh ref={meshRef} name="ghost">
@@ -616,15 +613,11 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   rotationPreset, 
   interactionMode, 
   pointerMode,
-  setPointerMode,
+  launchPreset,
   isFreezeMode, 
   cards, 
   addCard,
   removeCard,
-  updateCard,
-  setCardRole,
-  draggingCardId,
-  setDraggingCardId,
   interactionEnabled,
   placementEnabled,
   windStrength,
@@ -638,7 +631,6 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   weightDropHeight,
   onCardTransformChange,
   onCardLaunch,
-  onLaunchBusyChange,
   blueprintGuide,
   onBlueprintPlaceOrigin,
   onBlueprintProgress,
@@ -646,14 +638,19 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   onBlueprintStepRegression,
 }) => {
   
-  const draggingCardData = useMemo(() => cards.find(c => c.id === draggingCardId) || null, [cards, draggingCardId]);
-  
   const floorRef = useRef<THREE.Mesh>(null);
   const cardsGroupRef = useRef<THREE.Group>(null);
   const heightSampleTimeRef = useRef(0);
   const measurementBoxRef = useRef(new THREE.Box3());
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
-  const [activeLaunchCardId, setActiveLaunchCardId] = useState<string | null>(null);
+  const physicsHandlesRef = useRef(new Map<string, CardPhysicsHandle>());
+  const launchedSequencesRef = useRef(new Set<string>());
+  const flightDampingRef = useRef(new Map<string, {
+    startedAt: number;
+    stableAt: number | null;
+    originalLinear: number;
+    originalAngular: number;
+  }>());
 
   useEffect(() => {
     const activeIds = new Set(cards.map(card => card.id));
@@ -667,21 +664,201 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     onCardTransformChange(id, transform);
   }, [onCardTransformChange]);
 
-  const handleLaunchStateChange = useCallback((id: string, active: boolean) => {
-    setActiveLaunchCardId(previous => {
-      return active ? id : previous === id ? null : previous;
-    });
+  const handlePhysicsHandleChange = useCallback((
+    id: string,
+    handle: CardPhysicsHandle | null,
+  ) => {
+    if (handle) physicsHandlesRef.current.set(id, handle);
+    else {
+      physicsHandlesRef.current.delete(id);
+      flightDampingRef.current.delete(id);
+    }
   }, []);
 
-  useEffect(() => {
-    onLaunchBusyChange(activeLaunchCardId !== null);
-  }, [activeLaunchCardId, onLaunchBusyChange]);
+  const handleLaunchRequest = useCallback((request: CardLaunchRequest) => {
+    if (launchedSequencesRef.current.has(request.sequenceId)) return;
+    launchedSequencesRef.current.add(request.sequenceId);
+    if (launchedSequencesRef.current.size > 256) {
+      const oldest = launchedSequencesRef.current.values().next().value;
+      if (oldest) launchedSequencesRef.current.delete(oldest);
+    }
 
-  const handleArmForLaunch = useCallback((id: string) => {
-    setCardRole(id, 'ammo');
-  }, [setCardRole]);
+    const dimensions = CARD_DIMENSIONS[cardSize];
+    const stackCandidates = cards.flatMap(card => {
+      const handle = physicsHandlesRef.current.get(card.id);
+      if (!handle) return [];
+      const snapshot = handle.getSnapshot();
+      return [{
+        id: card.id,
+        position: snapshot.position,
+        quaternion: snapshot.quaternion,
+        locked: card.locked,
+        mass: handle.getMass(),
+        dimensions,
+      }];
+    });
+    const memberIds = findStackedCardIds(
+      request.primaryCardId,
+      stackCandidates,
+      {
+        maximumOrientationAngleDegrees: 8,
+        minimumOverlapRatio: 0.8,
+        minimumLayerDistance: 0.06,
+        thicknessMultiplier: 3,
+      },
+    );
+    let members = memberIds.flatMap(id => {
+      const handle = physicsHandlesRef.current.get(id);
+      const card = stackCandidates.find(candidate => candidate.id === id);
+      return handle && card ? [{ handle, card }] : [];
+    });
+    const primaryMember = members.find(({ card }) => card.id === request.primaryCardId);
+    if (request.preset === 'card-back-half' && primaryMember) {
+      const primaryNormal = worldDirectionFromQuaternion([0, 1, 0], primaryMember.card.quaternion);
+      const minimumNormalDot = Math.cos(8 * Math.PI / 180);
+      members = members.filter(({ card }) => {
+        const normal = worldDirectionFromQuaternion([0, 1, 0], card.quaternion);
+        return (
+          normal[0] * primaryNormal[0] +
+          normal[1] * primaryNormal[1] +
+          normal[2] * primaryNormal[2]
+        ) >= minimumNormalDot;
+      });
+    }
+    if (members.length === 0) return;
+
+    const totalImpulseMagnitude = resolveLaunchImpulseMagnitude(request.meterPower);
+    const shares = distributeImpulseByMass(
+      totalImpulseMagnitude,
+      members.map(({ card }) => ({ id: card.id, mass: card.mass })),
+    );
+    const memberRecords: LaunchMemberRecord[] = [];
+    const nowSeconds = performance.now() / 1000;
+    const primarySnapshot = primaryMember?.handle.getSnapshot();
+    const primaryDirectionWorld = primarySnapshot
+      ? worldDirectionFromQuaternion(request.directionLocal, primarySnapshot.quaternion)
+      : request.directionLocal;
+    const primaryContactOffsetWorld = primarySnapshot
+      ? quaternionToWorldVector(request.contactPointLocal, primarySnapshot.quaternion)
+      : request.contactPointLocal;
+    const presetCandidates = getLaunchPresetCandidates(request.preset, dimensions);
+
+    for (const { handle, card } of members) {
+      const share = shares.find(candidate => candidate.cardId === card.id);
+      if (!share) continue;
+      const snapshotBefore = handle.getSnapshot();
+      const memberTarget = presetCandidates.reduce((best, candidate) => {
+        const direction = worldDirectionFromQuaternion(
+          candidate.directionLocal,
+          snapshotBefore.quaternion,
+        );
+        const contactOffset = quaternionToWorldVector(
+          candidate.contactPointLocal,
+          snapshotBefore.quaternion,
+        );
+        const directionDot =
+          direction[0] * primaryDirectionWorld[0] +
+          direction[1] * primaryDirectionWorld[1] +
+          direction[2] * primaryDirectionWorld[2];
+        const contactDistance = Math.hypot(
+          contactOffset[0] - primaryContactOffsetWorld[0],
+          contactOffset[1] - primaryContactOffsetWorld[1],
+          contactOffset[2] - primaryContactOffsetWorld[2],
+        );
+        const score = directionDot * 2 - contactDistance / Math.max(dimensions.width, dimensions.height);
+        return score > best.score
+          ? { candidate, direction, score }
+          : best;
+      }, {
+        candidate: {
+          contactPointLocal: request.contactPointLocal,
+          directionLocal: request.directionLocal,
+          index: -1,
+        },
+        direction: worldDirectionFromQuaternion(
+          request.directionLocal,
+          snapshotBefore.quaternion,
+        ),
+        score: Number.NEGATIVE_INFINITY,
+      });
+      const directionWorld = memberTarget.direction;
+      const contactPointLocal = memberTarget.candidate.contactPointLocal;
+      const contactPointWorld = localPointToWorld(
+        contactPointLocal,
+        snapshotBefore.position,
+        snapshotBefore.quaternion,
+      );
+      const impulse: [number, number, number] = [
+        directionWorld[0] * share.impulseMagnitude,
+        directionWorld[1] * share.impulseMagnitude,
+        directionWorld[2] * share.impulseMagnitude,
+      ];
+      const previousFlight = flightDampingRef.current.get(card.id);
+      const originalDamping = previousFlight
+        ? {
+            linear: previousFlight.originalLinear,
+            angular: previousFlight.originalAngular,
+          }
+        : handle.getDamping();
+      handle.setDamping(0.08, 0.08);
+      handle.wakeUp();
+      handle.applyImpulseAtPoint(impulse, contactPointWorld);
+      flightDampingRef.current.set(card.id, {
+        startedAt: nowSeconds,
+        stableAt: null,
+        originalLinear: originalDamping.linear,
+        originalAngular: originalDamping.angular,
+      });
+      memberRecords.push({
+        cardId: card.id,
+        contactPointLocal: [...contactPointLocal],
+        contactPointWorld,
+        directionWorld,
+        impulse,
+        snapshotBefore,
+      });
+    }
+
+    onCardLaunch({
+      intent: {
+        sequenceId: request.sequenceId,
+        primaryCardId: request.primaryCardId,
+        cardIds: memberRecords.map(member => member.cardId),
+        preset: request.preset,
+        meterPower: request.meterPower,
+        totalImpulseMagnitude,
+        pointerType: request.pointerType,
+      },
+      members: memberRecords,
+      createdAt: Date.now(),
+    });
+  }, [cardSize, cards, onCardLaunch]);
 
   useFrame(({ clock }) => {
+    const nowSeconds = performance.now() / 1000;
+    for (const [id, state] of flightDampingRef.current) {
+      const handle = physicsHandlesRef.current.get(id);
+      if (!handle) {
+        flightDampingRef.current.delete(id);
+        continue;
+      }
+      const snapshot = handle.getSnapshot();
+      const linearSpeed = Math.hypot(...snapshot.linearVelocity);
+      const angularSpeed = Math.hypot(...snapshot.angularVelocity);
+      if (linearSpeed < 0.08 && angularSpeed < 0.08) {
+        state.stableAt ??= nowSeconds;
+      } else {
+        state.stableAt = null;
+      }
+      const settled = (
+        state.stableAt != null && nowSeconds - state.stableAt >= 0.5
+      ) || nowSeconds - state.startedAt >= 6;
+      if (settled) {
+        handle.setDamping(state.originalLinear, state.originalAngular);
+        flightDampingRef.current.delete(id);
+      }
+    }
+
     if (clock.elapsedTime - heightSampleTimeRef.current < 0.1) return;
     heightSampleTimeRef.current = clock.elapsedTime;
 
@@ -718,22 +895,8 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     playPlaceSound();
   };
 
-  const handlePlaceMoved = (pos: THREE.Vector3, rot: THREE.Euler) => {
-    if (draggingCardData) {
-      updateCard(draggingCardData.id, [pos.x, pos.y, pos.z], [rot.x, rot.y, rot.z]);
-      setDraggingCardId(null);
-    }
-  };
-
-  const onCardDragStart = (card: CardData) => {
-    setDraggingCardId(card.id);
-  };
-
-  const launchIdle = activeLaunchCardId === null;
   const showNewCardGhost =
-    interactionEnabled && launchIdle && placementEnabled && pointerMode === PointerMode.PLACE;
-  const showMoveCardGhost =
-    interactionEnabled && launchIdle && pointerMode === PointerMode.MOVE && !!draggingCardData;
+    interactionEnabled && placementEnabled && pointerMode === PointerMode.PLACE;
 
   return (
     <Physics
@@ -782,30 +945,19 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       
       <group ref={cardsGroupRef}>
         {cards.map((card) => {
-          const isDragging = draggingCardData?.id === card.id;
           return (
             <Card 
               key={`${card.id}-${cardSize}`}
               data={card} 
               pointerMode={pointerMode}
               onRemove={() => removeCard(card.id)}
-              onDragStart={() => onCardDragStart(card)}
-              onQuickMove={() => {
-                setPointerMode(PointerMode.MOVE);
-                onCardDragStart(card);
-              }}
-              isDragging={isDragging}
-              interactionEnabled={interactionEnabled && launchIdle}
+              interactionEnabled={interactionEnabled}
               windStrength={windStrength}
               cardSize={cardSize}
               onTransformChange={handleCardTransformChange}
-              launchEnabled={
-                pointerMode === PointerMode.LAUNCH &&
-                (activeLaunchCardId === null || activeLaunchCardId === card.id)
-              }
-              onArmForLaunch={handleArmForLaunch}
-              onLaunchStateChange={handleLaunchStateChange}
-              onLaunch={onCardLaunch}
+              launchPreset={launchPreset}
+              onPhysicsHandleChange={handlePhysicsHandleChange}
+              onLaunchRequest={handleLaunchRequest}
             />
           );
         })}
@@ -831,19 +983,6 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
         )
       )}
 
-      {/* GHOST FOR MOVING EXISTING CARDS */}
-      {showMoveCardGhost && (
-        <GhostCard 
-            rotationPreset={rotationPreset}
-            isFreezeMode={isFreezeMode}
-            onPlace={handlePlaceMoved}
-            dragMode={true} 
-            floorRef={floorRef}
-            cardsGroupRef={cardsGroupRef}
-            cardSize={cardSize}
-        />
-      )}
-      
     </Physics>
   );
 };

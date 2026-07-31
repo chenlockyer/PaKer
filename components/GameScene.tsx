@@ -12,9 +12,9 @@ import {
   BlueprintGuideState,
   BlueprintCameraHint,
   CardData,
-  CardRole,
   CardSize,
   LaunchRecord,
+  LaunchPreset,
   LiveCardTransform,
   RotationPreset,
   InteractionMode,
@@ -26,15 +26,11 @@ interface GameSceneProps {
   rotationPreset: RotationPreset;
   interactionMode: InteractionMode;
   pointerMode: PointerMode;
-  setPointerMode: (mode: PointerMode) => void;
+  launchPreset: LaunchPreset;
   isFreezeMode: boolean;
   cards: CardData[];
   addCard: (card: CardData) => void;
   removeCard: (id: string) => void;
-  updateCard: (id: string, pos: [number, number, number], rot: [number, number, number]) => void;
-  setCardRole: (id: string, role: CardRole) => void;
-  draggingCardId: string | null;
-  setDraggingCardId: (id: string | null) => void;
   interactionEnabled: boolean;
   placementEnabled: boolean;
   windStrength: number;
@@ -206,17 +202,13 @@ const CameraBridge = ({
 
 const GameScene: React.FC<GameSceneProps> = ({ 
   rotationPreset, 
-  interactionMode, 
+  interactionMode,
   pointerMode,
-  setPointerMode,
+  launchPreset,
   isFreezeMode, 
   cards, 
   addCard,
   removeCard,
-  updateCard,
-  setCardRole,
-  draggingCardId,
-  setDraggingCardId,
   interactionEnabled,
   placementEnabled,
   windStrength,
@@ -242,7 +234,6 @@ const GameScene: React.FC<GameSceneProps> = ({
   const nativeDpr = Math.min(window.devicePixelRatio || 1, 1.5);
   const minimumDpr = Math.min(nativeDpr, 0.75);
   const [renderDpr, setRenderDpr] = React.useState(nativeDpr);
-  const [launchBusy, setLaunchBusy] = React.useState(false);
 
   useEffect(() => {
     const nextNativeDpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -284,15 +275,11 @@ const GameScene: React.FC<GameSceneProps> = ({
               rotationPreset={rotationPreset}
               interactionMode={interactionMode}
               pointerMode={pointerMode}
-              setPointerMode={setPointerMode}
+              launchPreset={launchPreset}
               isFreezeMode={isFreezeMode}
               cards={cards}
               addCard={addCard}
               removeCard={removeCard}
-              updateCard={updateCard}
-              setCardRole={setCardRole}
-              draggingCardId={draggingCardId}
-              setDraggingCardId={setDraggingCardId}
               interactionEnabled={interactionEnabled}
               placementEnabled={placementEnabled}
               windStrength={windStrength}
@@ -306,7 +293,6 @@ const GameScene: React.FC<GameSceneProps> = ({
               weightDropHeight={weightDropHeight}
               onCardTransformChange={onCardTransformChange}
               onCardLaunch={onCardLaunch}
-              onLaunchBusyChange={setLaunchBusy}
               blueprintGuide={blueprintGuide}
               onBlueprintPlaceOrigin={onBlueprintPlaceOrigin}
               onBlueprintProgress={onBlueprintProgress}
@@ -319,7 +305,7 @@ const GameScene: React.FC<GameSceneProps> = ({
               minPolarAngle={0}
               maxPolarAngle={Math.PI / 2 - 0.1}
               dampingFactor={0.05}
-              enabled={!draggingCardId && !launchBusy}
+              enabled
               mouseButtons={{
                 LEFT: -1 as THREE.MOUSE,
                 MIDDLE: THREE.MOUSE.PAN,

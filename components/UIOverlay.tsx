@@ -13,7 +13,8 @@ import {
   GameMode,
   LevelTutorialCue,
   ChallengePhase,
-  ChallengeTestType
+  ChallengeTestType,
+  LaunchPreset,
 } from '../types';
 import { translations } from '../utils/translations';
 import ChallengeHUD from './ChallengeHUD';
@@ -27,6 +28,8 @@ interface UIOverlayProps {
   setInteractionMode: (mode: InteractionMode) => void;
   pointerMode: PointerMode;
   setPointerMode: (mode: PointerMode) => void;
+  launchPreset: LaunchPreset;
+  setLaunchPreset: (preset: LaunchPreset) => void;
   isFreezeMode: boolean;
   setIsFreezeMode: (val: boolean) => void;
   onClear: () => void;
@@ -150,6 +153,39 @@ const PresetDiagram = ({ preset }: { preset: RotationPreset }) => {
   );
 };
 
+const LAUNCH_PRESET_ORDER: LaunchPreset[] = [
+  'short-edge',
+  'long-edge-quarter',
+  'card-back-half',
+];
+
+const LaunchPresetIcon = ({ preset }: { preset: LaunchPreset }) => (
+  <svg className="launch-preset-icon" viewBox="0 0 56 38" aria-hidden="true">
+    <path className="launch-card-shape" d="M13 6.5h30v25H13z" />
+    {preset === 'short-edge' && (
+      <>
+        <circle className="launch-contact-dot" cx="28" cy="31.5" r="2.2" />
+        <path className="launch-axis-arrow" d="M28 29V11m0 0-4 5m4-5 4 5" />
+      </>
+    )}
+    {preset === 'long-edge-quarter' && (
+      <>
+        <circle className="launch-contact-dot" cx="13" cy="13" r="2.2" />
+        <path className="launch-axis-arrow" d="M15 13h22m0 0-5-4m5 4-5 4" />
+        <path className="launch-spin-mark" d="M20 24c3 4 13 5 17-1m0 0-1 5m1-5-5 1" />
+      </>
+    )}
+    {preset === 'card-back-half' && (
+      <>
+        <path className="launch-card-back" d="M16 9.5h24v19H16z" />
+        <path className="launch-card-divider" d="M16 19h24" />
+        <circle className="launch-contact-dot" cx="28" cy="14.2" r="2.2" />
+        <path className="launch-lift-arrow" d="M29 13 42 5m0 0-6 .3M42 5l-2 5" />
+      </>
+    )}
+  </svg>
+);
+
 const UIOverlay: React.FC<UIOverlayProps> = ({
   presets,
   currentPresetId,
@@ -158,6 +194,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   setInteractionMode,
   pointerMode,
   setPointerMode,
+  launchPreset,
+  setLaunchPreset,
   isFreezeMode,
   setIsFreezeMode,
   onClear,
@@ -240,7 +278,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         tilt: '倾斜 10°',
         custom: '自定义',
         place: '放置',
-        move: '移动',
+        push: '推拨',
         remove: '删除',
         launch: '弹射',
         physics: '物理',
@@ -271,7 +309,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         tilt: 'Tilt 10°',
         custom: 'Custom',
         place: 'Place',
-        move: 'Move',
+        push: 'Push',
         remove: 'Delete',
         launch: 'Launch',
         physics: 'Physics',
@@ -300,6 +338,23 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   const activeBlueprintStep = blueprintGuide
     ? blueprintSteps[blueprintGuide.currentStepIndex]
     : null;
+
+  const cycleLaunchPreset = (direction: -1 | 1) => {
+    const currentIndex = LAUNCH_PRESET_ORDER.indexOf(launchPreset);
+    const nextIndex = (currentIndex + direction + LAUNCH_PRESET_ORDER.length)
+      % LAUNCH_PRESET_ORDER.length;
+    setLaunchPreset(LAUNCH_PRESET_ORDER[nextIndex]);
+  };
+  useInputAction('launch.presetPrevious', event => {
+    if (event.phase === 'down' && pointerMode === PointerMode.LAUNCH && interactionEnabled) {
+      cycleLaunchPreset(-1);
+    }
+  });
+  useInputAction('launch.presetNext', event => {
+    if (event.phase === 'down' && pointerMode === PointerMode.LAUNCH && interactionEnabled) {
+      cycleLaunchPreset(1);
+    }
+  });
 
   return (
     <div className="game-ui ui-scale-surface">
@@ -661,13 +716,43 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
       {pointerMode === PointerMode.LAUNCH && (
         <div className={`launch-mode-callout ${isFreezeMode ? 'is-blocked' : ''}`}>
-          <strong>{lang === 'zh' ? '弹射模式' : 'LAUNCH MODE'}</strong>
-          <span>
+          <div className="launch-mode-heading">
+            <strong>{lang === 'zh' ? '弹射模式' : 'LAUNCH MODE'}</strong>
+            <span>
+              <kbd>{formatBinding('launch.presetPrevious')}</kbd>
+              <kbd>{formatBinding('launch.presetNext')}</kbd>
+            </span>
+          </div>
+          <div className="launch-preset-selector" role="radiogroup" aria-label={lang === 'zh' ? '弹射方式' : 'Launch preset'}>
+            {LAUNCH_PRESET_ORDER.map(preset => {
+              const title = ({
+                'short-edge': lang === 'zh' ? '短边弹射' : 'Short edge',
+                'long-edge-quarter': lang === 'zh' ? '长边四分点' : 'Long edge quarter',
+                'card-back-half': lang === 'zh' ? '卡背半区' : 'Card back half',
+              } as const)[preset];
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  role="radio"
+                  aria-checked={launchPreset === preset}
+                  aria-label={title}
+                  title={title}
+                  className={launchPreset === preset ? 'is-active' : ''}
+                  onClick={() => setLaunchPreset(preset)}
+                  disabled={!interactionEnabled}
+                >
+                  <LaunchPresetIcon preset={preset} />
+                </button>
+              );
+            })}
+          </div>
+          <span className="launch-mode-hint">
             {isFreezeMode
               ? (lang === 'zh' ? '物理已锁定，请先开启物理' : 'Physics is locked. Enable physics first.')
               : (lang === 'zh'
-                  ? '按住一张牌并沿发射方向快速滑动'
-                  : 'Press a card and flick toward the launch direction')}
+                  ? '按住卡牌蓄力，松开发射'
+                  : 'Hold to charge, release to launch')}
           </span>
         </div>
       )}
@@ -676,8 +761,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         <button className={pointerMode === PointerMode.PLACE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PLACE)} disabled={!interactionEnabled}>
           <span className="tool-symbol">+</span><strong>{labels.place}</strong><kbd>{formatBinding('tool.place')}</kbd>
         </button>
-        <button className={pointerMode === PointerMode.MOVE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.MOVE)} disabled={!interactionEnabled}>
-          <span className="tool-symbol move-symbol">↔</span><strong>{labels.move}</strong><kbd>{formatBinding('tool.move')}</kbd>
+        <button className={pointerMode === PointerMode.PUSH ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PUSH)} disabled={!interactionEnabled}>
+          <span className="tool-symbol push-symbol">↝</span><strong>{labels.push}</strong><kbd>{formatBinding('tool.push')}</kbd>
         </button>
         <button className={pointerMode === PointerMode.DELETE ? 'is-danger' : ''} onClick={() => setPointerMode(PointerMode.DELETE)} disabled={!interactionEnabled}>
           <span className="tool-symbol">×</span><strong>{labels.remove}</strong><kbd>{formatBinding('tool.delete')}</kbd>
@@ -708,7 +793,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         {pointerMode === PointerMode.LAUNCH ? (
           <>
             <kbd>{formatBinding('tool.launch')}</kbd><span>{lang === 'zh' ? '弹射工具' : 'Launch tool'}</span>
-            <span>{lang === 'zh' ? '滑动距离 60% · 末端速度 40%' : 'Distance 60% · speed 40%'}</span>
+            <kbd>{formatBinding('launch.presetPrevious')} / {formatBinding('launch.presetNext')}</kbd>
+            <span>{lang === 'zh' ? '切换方式' : 'Switch preset'}</span>
           </>
         ) : pointerMode === PointerMode.PLACE && interactionMode === InteractionMode.QUICK ? (
           <>

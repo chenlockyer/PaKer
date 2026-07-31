@@ -17,15 +17,24 @@ import {
   CardSize,
   type LaunchGestureSample,
   type LaunchIntent,
+  type LaunchMemberRecord,
+  type LaunchPreset,
   type LaunchRecord,
 } from '../types';
 import {
   createRapierCardPhysicsHandle,
 } from '../physics/cardPhysics';
 import {
+  distributeImpulseByMass,
+  findStackedCardIds,
   isLaunchGesturePastDeadZone,
-  resolveLaunchImpulseMagnitude,
+  localPointToWorld,
+  resolveFormalLaunchImpulseMagnitude,
   resolveLaunchGesture,
+  resolveLaunchMeterPower,
+  resolveLaunchTarget,
+  resolvePushImpulseMagnitude,
+  worldDirectionFromQuaternion,
 } from '../physics/launchGesture';
 
 type PhysicsLabScenario = 'drop' | 'stack' | 'impact' | 'flick';
@@ -48,9 +57,13 @@ interface LabMetrics {
 interface FlickTelemetry {
   power: number;
   gestureSpeed: number;
+  memberCount: number;
+  totalImpulse: number;
+  memberImpulse: number;
+  preset: LaunchPreset;
   linearSpeed: number;
   angularSpeed: number;
-  status: 'ready' | 'aiming' | 'launched' | 'settled' | 'cancelled';
+  status: 'ready' | 'charging' | 'aiming' | 'launched' | 'settled' | 'cancelled';
   intent: LaunchIntent | null;
   record: LaunchRecord | null;
 }
@@ -81,6 +94,10 @@ const EMPTY_METRICS: LabMetrics = {
 const EMPTY_FLICK_TELEMETRY: FlickTelemetry = {
   power: 0,
   gestureSpeed: 0,
+  memberCount: 0,
+  totalImpulse: 0,
+  memberImpulse: 0,
+  preset: 'short-edge',
   linearSpeed: 0,
   angularSpeed: 0,
   status: 'ready',
@@ -324,345 +341,89 @@ const RapierScenario = ({
   );
 };
 
-interface ActiveFlickGesture {
+type FlickTool = 'launch' | 'push';
+
+interface ActiveLaunchCharge {
   sequenceId: string;
   pointerId: number;
   pointerType: LaunchIntent['pointerType'];
+  cardId: string;
+  startedAt: number;
+  contactLocal: [number, number, number];
+  directionLocal: [number, number, number];
+}
+
+interface ActivePushGesture {
+  sequenceId: string;
+  pointerId: number;
+  cardId: string;
   contactWorld: THREE.Vector3;
-  contactLocal: THREE.Vector3;
   plane: THREE.Plane;
   startWorld: THREE.Vector3;
   currentWorld: THREE.Vector3;
   samples: LaunchGestureSample[];
 }
 
-const FlickAimPreview = ({
-  contact,
-  current,
-  power,
-  cameraQuaternion,
-}: {
+interface FlickPreview {
   contact: THREE.Vector3;
-  current: THREE.Vector3;
+  direction: THREE.Vector3;
   power: number;
-  cameraQuaternion: THREE.Quaternion;
-}) => {
-  const direction = current.clone().sub(contact);
+  kind: FlickTool;
+}
+
+const pointerTypeOf = (event: ThreeEvent<PointerEvent>): LaunchIntent['pointerType'] => (
+  event.pointerType === 'touch' || event.pointerType === 'pen'
+    ? event.pointerType
+    : 'mouse'
+);
+
+const FlickAimPreview = ({ preview }: { preview: FlickPreview }) => {
+  const direction = preview.direction.clone();
   const hasDirection = direction.lengthSq() > 0.0001;
   if (hasDirection) direction.normalize();
+  const end = preview.contact.clone().add(
+    direction.clone().multiplyScalar(0.65 + preview.power * 1.25),
+  );
   const arrowRotation = new THREE.Quaternion().setFromUnitVectors(
     new THREE.Vector3(0, 1, 0),
     hasDirection ? direction : new THREE.Vector3(0, 1, 0),
   );
+  const color = preview.kind === 'launch' ? '#f59e0b' : '#3b82f6';
 
   return (
     <group>
-      <mesh position={contact}>
+      <mesh position={preview.contact}>
         <sphereGeometry args={[0.075, 18, 12]} />
-        <meshBasicMaterial color="#f59e0b" depthTest={false} />
+        <meshBasicMaterial color={color} depthTest={false} />
       </mesh>
-      <mesh
-        position={contact}
-        quaternion={cameraQuaternion}
-        scale={1 + power * 1.4}
-      >
-        <ringGeometry args={[0.11, 0.135, 32]} />
-        <meshBasicMaterial
-          color="#f59e0b"
-          transparent
-          opacity={0.85}
-          side={THREE.DoubleSide}
-          depthTest={false}
-        />
+      <mesh position={preview.contact} scale={0.8 + preview.power * 1.8}>
+        <sphereGeometry args={[0.11, 18, 12]} />
+        <meshBasicMaterial color={color} transparent opacity={0.2} depthTest={false} />
       </mesh>
-      <Line
-        points={[contact, current]}
-        color="#e66a2c"
-        lineWidth={3}
-        depthTest={false}
-      />
       {hasDirection && (
-        <mesh position={current} quaternion={arrowRotation}>
-          <coneGeometry args={[0.095, 0.28, 16]} />
-          <meshBasicMaterial color="#e66a2c" depthTest={false} />
-        </mesh>
-      )}
-      {Array.from({ length: 4 }, (_, index) => {
-        const point = contact.clone().add(
-          direction.clone().multiplyScalar((index + 1) * (0.35 + power * 0.45)),
-        );
-        return (
-          <mesh key={index} position={point}>
-            <sphereGeometry args={[0.035 + power * 0.025, 10, 8]} />
-            <meshBasicMaterial color="#e66a2c" transparent opacity={0.8 - index * 0.12} />
+        <>
+          <Line
+            points={[preview.contact, end]}
+            color={color}
+            lineWidth={3}
+            depthTest={false}
+          />
+          <mesh position={end} quaternion={arrowRotation}>
+            <coneGeometry args={[0.095, 0.28, 16]} />
+            <meshBasicMaterial color={color} depthTest={false} />
           </mesh>
-        );
-      })}
-    </group>
-  );
-};
-
-const FlickAmmoCard = ({
-  cardSize,
-  runId,
-  onGestureActive,
-  onTelemetry,
-  onCollision,
-  parameters,
-}: {
-  cardSize: CardSize;
-  runId: number;
-  onGestureActive: (active: boolean) => void;
-  onTelemetry: (telemetry: FlickTelemetry) => void;
-  onCollision: () => void;
-  parameters: FlickParameters;
-}) => {
-  const dimensions = CARD_DIMENSIONS[cardSize];
-  const bodyRef = useRef<RapierRigidBody>(null);
-  const meshRef = useRef<THREE.Mesh>(null);
-  const gestureRef = useRef<ActiveFlickGesture | null>(null);
-  const launchedSequencesRef = useRef(new Set<string>());
-  const launchTelemetryRef = useRef<FlickTelemetry>(EMPTY_FLICK_TELEMETRY);
-  const launchedRef = useRef(false);
-  const launchStartedAtRef = useRef(0);
-  const stableStartedAtRef = useRef<number | null>(null);
-  const telemetrySampleRef = useRef(0);
-  const { camera, size } = useThree();
-  const { rapier } = useRapier();
-  const [preview, setPreview] = useState<{
-    contact: THREE.Vector3;
-    current: THREE.Vector3;
-    power: number;
-  } | null>(null);
-
-  const cancelGesture = useCallback(() => {
-    if (!gestureRef.current) return;
-    gestureRef.current = null;
-    setPreview(null);
-    onGestureActive(false);
-    onTelemetry({ ...EMPTY_FLICK_TELEMETRY, status: 'cancelled' });
-  }, [onGestureActive, onTelemetry]);
-
-  useEffect(() => {
-    window.addEventListener('blur', cancelGesture);
-    return () => window.removeEventListener('blur', cancelGesture);
-  }, [cancelGesture]);
-
-  useAfterPhysicsStep(() => {
-    const body = bodyRef.current;
-    if (!body || !launchedRef.current || telemetrySampleRef.current++ % 6 !== 0) return;
-    const linear = body.linvel();
-    const angular = body.angvel();
-    const linearSpeed = Math.hypot(linear.x, linear.y, linear.z);
-    const angularSpeed = Math.hypot(angular.x, angular.y, angular.z);
-    const now = performance.now();
-    if (linearSpeed < 0.08 && angularSpeed < 0.08) {
-      stableStartedAtRef.current ??= now;
-    } else {
-      stableStartedAtRef.current = null;
-    }
-    const settled = (
-      stableStartedAtRef.current != null && now - stableStartedAtRef.current >= 500
-    ) || now - launchStartedAtRef.current >= 6000;
-    if (settled) launchedRef.current = false;
-    const telemetry = {
-      ...launchTelemetryRef.current,
-      status: settled ? 'settled' : 'launched',
-      linearSpeed,
-      angularSpeed,
-    } satisfies FlickTelemetry;
-    launchTelemetryRef.current = telemetry;
-    onTelemetry(telemetry);
-  });
-
-  const samplePointer = (
-    event: ThreeEvent<PointerEvent>,
-    gesture: ActiveFlickGesture,
-  ) => {
-    const now = performance.now();
-    gesture.samples.push({ x: event.clientX, y: event.clientY, time: now });
-    if (gesture.samples.length > 48) gesture.samples.splice(0, gesture.samples.length - 48);
-    event.ray.intersectPlane(gesture.plane, gesture.currentWorld);
-    const resolution = resolveLaunchGesture(
-      gesture.samples,
-      Math.min(size.width, size.height),
-      now,
-    );
-    setPreview({
-      contact: gesture.contactWorld.clone(),
-      current: gesture.currentWorld.clone(),
-      power: resolution.power,
-    });
-    return resolution;
-  };
-
-  const onPointerDown = (event: ThreeEvent<PointerEvent>) => {
-    if (event.button !== 0 || gestureRef.current || launchedRef.current || !meshRef.current) return;
-    event.stopPropagation();
-    const contactWorld = event.point.clone();
-    const contactLocal = meshRef.current.worldToLocal(contactWorld.clone());
-    const cameraDirection = camera.getWorldDirection(new THREE.Vector3());
-    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(cameraDirection, contactWorld);
-    const pointerType = (
-      event.pointerType === 'touch' || event.pointerType === 'pen'
-        ? event.pointerType
-        : 'mouse'
-    ) as LaunchIntent['pointerType'];
-    const gesture: ActiveFlickGesture = {
-      sequenceId: crypto.randomUUID(),
-      pointerId: event.pointerId,
-      pointerType,
-      contactWorld,
-      contactLocal,
-      plane,
-      startWorld: contactWorld.clone(),
-      currentWorld: contactWorld.clone(),
-      samples: [{ x: event.clientX, y: event.clientY, time: performance.now() }],
-    };
-    gestureRef.current = gesture;
-    (event.target as unknown as { setPointerCapture?: (pointerId: number) => void })
-      .setPointerCapture?.(event.pointerId);
-    setPreview({ contact: contactWorld.clone(), current: contactWorld.clone(), power: 0 });
-    onGestureActive(true);
-    onTelemetry({ ...EMPTY_FLICK_TELEMETRY, status: 'aiming' });
-  };
-
-  const onPointerMove = (event: ThreeEvent<PointerEvent>) => {
-    const gesture = gestureRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    event.stopPropagation();
-    const resolution = samplePointer(event, gesture);
-    onTelemetry({
-      ...EMPTY_FLICK_TELEMETRY,
-      status: 'aiming',
-      power: resolution.power,
-      gestureSpeed: resolution.gestureSpeed,
-    });
-  };
-
-  const finishGesture = (event: ThreeEvent<PointerEvent>) => {
-    const gesture = gestureRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    event.stopPropagation();
-    const resolution = samplePointer(event, gesture);
-    gestureRef.current = null;
-    setPreview(null);
-    onGestureActive(false);
-    (event.target as unknown as { releasePointerCapture?: (pointerId: number) => void })
-      .releasePointerCapture?.(event.pointerId);
-
-    const worldDelta = gesture.currentWorld.clone().sub(gesture.startWorld);
-    if (
-      !isLaunchGesturePastDeadZone(gesture.samples, Math.min(size.width, size.height)) ||
-      worldDelta.lengthSq() < 0.0001
-    ) {
-      onTelemetry({ ...EMPTY_FLICK_TELEMETRY, status: 'cancelled' });
-      return;
-    }
-
-    const body = bodyRef.current;
-    if (!body) return;
-    const sequenceId = gesture.sequenceId;
-    if (launchedSequencesRef.current.has(sequenceId)) return;
-    launchedSequencesRef.current.add(sequenceId);
-    const direction = worldDelta.normalize();
-    const impulseMagnitude = resolveLaunchImpulseMagnitude(
-      resolution.power,
-      parameters.minimumImpulse,
-      parameters.maximumImpulse,
-    );
-    const impulse = direction.multiplyScalar(impulseMagnitude);
-    const intent: LaunchIntent = {
-      sequenceId,
-      cardId: `physics-lab-ammo-${runId}`,
-      contactPointWorld: gesture.contactWorld.toArray(),
-      contactPointLocal: gesture.contactLocal.toArray(),
-      directionWorld: worldDelta.clone().normalize().toArray(),
-      power: resolution.power,
-      gestureSpeed: resolution.gestureSpeed,
-      pointerType: gesture.pointerType,
-    };
-    const handle = createRapierCardPhysicsHandle(body, locked => {
-      body.setBodyType(
-        locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
-        true,
-      );
-    });
-    const snapshotBefore = handle.getSnapshot();
-    handle.setVelocity([0, 0, 0], [0, 0, 0]);
-    handle.applyImpulseAtPoint(impulse.toArray(), gesture.contactWorld.toArray());
-    const record: LaunchRecord = {
-      intent,
-      impulse: impulse.toArray(),
-      impulseMagnitude,
-      snapshotBefore,
-      createdAt: Date.now(),
-    };
-    const telemetry = {
-      ...EMPTY_FLICK_TELEMETRY,
-      status: 'launched',
-      power: resolution.power,
-      gestureSpeed: resolution.gestureSpeed,
-      intent,
-      record,
-    } satisfies FlickTelemetry;
-    launchedRef.current = true;
-    launchStartedAtRef.current = performance.now();
-    stableStartedAtRef.current = null;
-    launchTelemetryRef.current = telemetry;
-    onTelemetry(telemetry);
-  };
-
-  return (
-    <>
-      <RigidBody
-        ref={bodyRef}
-        type="dynamic"
-        colliders={false}
-        position={[0, 0.16, -4.5]}
-        angularDamping={parameters.angularDamping}
-        linearDamping={parameters.linearDamping}
-        canSleep
-        ccd
-        additionalSolverIterations={4}
-        onCollisionEnter={onCollision}
-      >
-        <CuboidCollider
-          args={[dimensions.width / 2, dimensions.thickness / 2, dimensions.height / 2]}
-          mass={0.1}
-          friction={1}
-          frictionCombineRule={CoefficientCombineRule.Multiply}
-          restitution={0}
-        />
-        <mesh
-          ref={meshRef}
-          castShadow
-          receiveShadow
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={finishGesture}
-          onPointerCancel={cancelGesture}
-        >
-          <boxGeometry args={[dimensions.width, dimensions.thickness, dimensions.height]} />
-          <meshStandardMaterial color="#fffefa" roughness={0.48} />
-        </mesh>
-      </RigidBody>
-      {preview && (
-        <FlickAimPreview
-          contact={preview.contact}
-          current={preview.current}
-          power={preview.power}
-          cameraQuaternion={camera.quaternion}
-        />
+        </>
       )}
-    </>
+    </group>
   );
 };
 
 const FlickLabScene = ({
   cardSize,
   runId,
-  onGestureActive,
+  preset,
+  tool,
+  ammoCount,
   onTelemetry,
   onMetric,
   onTargetHit,
@@ -670,14 +431,403 @@ const FlickLabScene = ({
 }: {
   cardSize: CardSize;
   runId: number;
-  onGestureActive: (active: boolean) => void;
+  preset: LaunchPreset;
+  tool: FlickTool;
+  ammoCount: 1 | 2 | 3 | 6;
   onTelemetry: (telemetry: FlickTelemetry) => void;
   onMetric: (metric: Partial<LabMetrics>) => void;
   onTargetHit: (target: number) => void;
   parameters: FlickParameters;
 }) => {
   const dimensions = CARD_DIMENSIONS[cardSize];
+  const bodyRefs = useRef(new Map<string, RapierRigidBody>());
+  const meshRefs = useRef(new Map<string, THREE.Mesh>());
+  const launchChargeRef = useRef<ActiveLaunchCharge | null>(null);
+  const pushGestureRef = useRef<ActivePushGesture | null>(null);
+  const launchedSequencesRef = useRef(new Set<string>());
+  const flightDampingRef = useRef(new Map<string, { startedAt: number; stableAt: number | null }>());
+  const telemetryRef = useRef<FlickTelemetry>({ ...EMPTY_FLICK_TELEMETRY, preset });
   const collisionRef = useRef(false);
+  const telemetrySampleRef = useRef(0);
+  const { camera, size } = useThree();
+  const { rapier } = useRapier();
+  const [preview, setPreview] = useState<FlickPreview | null>(null);
+
+  const cardIdAt = useCallback((index: number) => (
+    `physics-lab-ammo-${runId}-${index}`
+  ), [runId]);
+
+  const emitTelemetry = useCallback((next: FlickTelemetry) => {
+    telemetryRef.current = next;
+    onTelemetry(next);
+  }, [onTelemetry]);
+
+  const cancelGesture = useCallback(() => {
+    if (!launchChargeRef.current && !pushGestureRef.current) return;
+    launchChargeRef.current = null;
+    pushGestureRef.current = null;
+    setPreview(null);
+    emitTelemetry({
+      ...telemetryRef.current,
+      status: 'cancelled',
+      power: 0,
+      gestureSpeed: 0,
+    });
+  }, [emitTelemetry]);
+
+  useEffect(() => {
+    cancelGesture();
+  }, [ammoCount, cancelGesture, preset, tool]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') cancelGesture();
+    };
+    window.addEventListener('blur', cancelGesture);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('blur', cancelGesture);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [cancelGesture]);
+
+  useFrame(() => {
+    const charge = launchChargeRef.current;
+    if (!charge) return;
+    const power = resolveLaunchMeterPower(performance.now() - charge.startedAt);
+    setPreview(previous => previous ? { ...previous, power } : previous);
+    emitTelemetry({
+      ...telemetryRef.current,
+      status: 'charging',
+      power,
+      preset,
+    });
+  });
+
+  useAfterPhysicsStep(() => {
+    if (telemetrySampleRef.current++ % 6 !== 0) return;
+    const now = performance.now() / 1000;
+    let maximumLinearSpeed = 0;
+    let maximumAngularSpeed = 0;
+    let anyInFlight = false;
+    for (const [cardId, state] of flightDampingRef.current) {
+      const body = bodyRefs.current.get(cardId);
+      if (!body) {
+        flightDampingRef.current.delete(cardId);
+        continue;
+      }
+      const linear = body.linvel();
+      const angular = body.angvel();
+      const linearSpeed = Math.hypot(linear.x, linear.y, linear.z);
+      const angularSpeed = Math.hypot(angular.x, angular.y, angular.z);
+      maximumLinearSpeed = Math.max(maximumLinearSpeed, linearSpeed);
+      maximumAngularSpeed = Math.max(maximumAngularSpeed, angularSpeed);
+      if (linearSpeed < 0.08 && angularSpeed < 0.08) state.stableAt ??= now;
+      else state.stableAt = null;
+      const settled = (
+        state.stableAt != null && now - state.stableAt >= 0.5
+      ) || now - state.startedAt >= 6;
+      if (settled) {
+        body.setLinearDamping(0.5);
+        body.setAngularDamping(0.5);
+        flightDampingRef.current.delete(cardId);
+      } else {
+        anyInFlight = true;
+      }
+    }
+    if (telemetryRef.current.status !== 'launched' && !anyInFlight) return;
+    emitTelemetry({
+      ...telemetryRef.current,
+      status: anyInFlight ? 'launched' : 'settled',
+      linearSpeed: maximumLinearSpeed,
+      angularSpeed: maximumAngularSpeed,
+    });
+  });
+
+  const registerBody = useCallback((cardId: string, body: RapierRigidBody | null) => {
+    if (body) bodyRefs.current.set(cardId, body);
+    else bodyRefs.current.delete(cardId);
+  }, []);
+
+  const registerMesh = useCallback((cardId: string, mesh: THREE.Mesh | null) => {
+    if (mesh) meshRefs.current.set(cardId, mesh);
+    else meshRefs.current.delete(cardId);
+  }, []);
+
+  const capturePointer = (event: ThreeEvent<PointerEvent>) => {
+    (event.target as unknown as { setPointerCapture?: (pointerId: number) => void })
+      .setPointerCapture?.(event.pointerId);
+  };
+
+  const releasePointer = (event: ThreeEvent<PointerEvent>) => {
+    (event.target as unknown as { releasePointerCapture?: (pointerId: number) => void })
+      .releasePointerCapture?.(event.pointerId);
+  };
+
+  const startLaunchCharge = (
+    cardId: string,
+    event: ThreeEvent<PointerEvent>,
+    mesh: THREE.Mesh,
+  ) => {
+    const clickedLocal = mesh.worldToLocal(event.point.clone());
+    const target = resolveLaunchTarget(preset, clickedLocal.toArray(), dimensions);
+    if (!target.valid) return;
+    const body = bodyRefs.current.get(cardId);
+    if (!body) return;
+    const snapshot = createRapierCardPhysicsHandle(body, () => undefined).getSnapshot();
+    const contactWorld = localPointToWorld(
+      target.contactLocal,
+      snapshot.position,
+      snapshot.quaternion,
+    );
+    const directionWorld = worldDirectionFromQuaternion(
+      target.directionLocal,
+      snapshot.quaternion,
+    );
+    launchChargeRef.current = {
+      sequenceId: crypto.randomUUID(),
+      pointerId: event.pointerId,
+      pointerType: pointerTypeOf(event),
+      cardId,
+      startedAt: performance.now(),
+      contactLocal: target.contactLocal,
+      directionLocal: target.directionLocal,
+    };
+    setPreview({
+      contact: new THREE.Vector3(...contactWorld),
+      direction: new THREE.Vector3(...directionWorld),
+      power: 0,
+      kind: 'launch',
+    });
+    emitTelemetry({
+      ...EMPTY_FLICK_TELEMETRY,
+      status: 'charging',
+      preset,
+    });
+    capturePointer(event);
+  };
+
+  const startPushGesture = (
+    cardId: string,
+    event: ThreeEvent<PointerEvent>,
+  ) => {
+    const contactWorld = event.point.clone();
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+      camera.getWorldDirection(new THREE.Vector3()),
+      contactWorld,
+    );
+    pushGestureRef.current = {
+      sequenceId: crypto.randomUUID(),
+      pointerId: event.pointerId,
+      cardId,
+      contactWorld,
+      plane,
+      startWorld: contactWorld.clone(),
+      currentWorld: contactWorld.clone(),
+      samples: [{ x: event.clientX, y: event.clientY, time: performance.now() }],
+    };
+    setPreview({
+      contact: contactWorld,
+      direction: new THREE.Vector3(),
+      power: 0,
+      kind: 'push',
+    });
+    emitTelemetry({
+      ...EMPTY_FLICK_TELEMETRY,
+      status: 'aiming',
+      preset,
+    });
+    capturePointer(event);
+  };
+
+  const samplePush = (event: ThreeEvent<PointerEvent>, gesture: ActivePushGesture) => {
+    const now = performance.now();
+    gesture.samples.push({ x: event.clientX, y: event.clientY, time: now });
+    if (gesture.samples.length > 48) gesture.samples.splice(0, gesture.samples.length - 48);
+    event.ray.intersectPlane(gesture.plane, gesture.currentWorld);
+    const resolution = resolveLaunchGesture(gesture.samples, Math.min(size.width, size.height), now);
+    setPreview({
+      contact: gesture.contactWorld.clone(),
+      direction: gesture.currentWorld.clone().sub(gesture.startWorld),
+      power: resolution.rawPower,
+      kind: 'push',
+    });
+    emitTelemetry({
+      ...telemetryRef.current,
+      status: 'aiming',
+      power: resolution.rawPower,
+      gestureSpeed: resolution.gestureSpeed,
+    });
+    return resolution;
+  };
+
+  const launchStack = (charge: ActiveLaunchCharge, meterPower: number) => {
+    if (launchedSequencesRef.current.has(charge.sequenceId)) return;
+    launchedSequencesRef.current.add(charge.sequenceId);
+    const stackCandidates = Array.from(bodyRefs.current, ([id, body]) => {
+      const handle = createRapierCardPhysicsHandle(body, locked => {
+        body.setBodyType(
+          locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
+          true,
+        );
+      });
+      const snapshot = handle.getSnapshot();
+      return {
+        id,
+        position: snapshot.position,
+        quaternion: snapshot.quaternion,
+        locked: false,
+        mass: handle.getMass(),
+        dimensions,
+      };
+    });
+    const memberIds = findStackedCardIds(charge.cardId, stackCandidates, {
+      maximumOrientationAngleDegrees: 8,
+      minimumOverlapRatio: 0.8,
+      minimumLayerDistance: 0.06,
+      thicknessMultiplier: 3,
+    });
+    const members = memberIds.flatMap(id => {
+      const body = bodyRefs.current.get(id);
+      const card = stackCandidates.find(candidate => candidate.id === id);
+      return body && card ? [{ body, card }] : [];
+    });
+    if (members.length === 0) return;
+    const totalImpulseMagnitude = resolveFormalLaunchImpulseMagnitude(
+      meterPower,
+      parameters.minimumImpulse,
+      parameters.maximumImpulse,
+    );
+    const shares = distributeImpulseByMass(
+      totalImpulseMagnitude,
+      members.map(({ card }) => ({ id: card.id, mass: card.mass })),
+    );
+    const memberRecords: LaunchMemberRecord[] = [];
+    const now = performance.now() / 1000;
+    for (const { body, card } of members) {
+      const share = shares.find(candidate => candidate.cardId === card.id);
+      if (!share) continue;
+      const handle = createRapierCardPhysicsHandle(body, locked => {
+        body.setBodyType(
+          locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
+          true,
+        );
+      });
+      const snapshotBefore = handle.getSnapshot();
+      const directionWorld = worldDirectionFromQuaternion(
+        charge.directionLocal,
+        snapshotBefore.quaternion,
+      );
+      const contactPointWorld = localPointToWorld(
+        charge.contactLocal,
+        snapshotBefore.position,
+        snapshotBefore.quaternion,
+      );
+      const impulse: [number, number, number] = [
+        directionWorld[0] * share.impulseMagnitude,
+        directionWorld[1] * share.impulseMagnitude,
+        directionWorld[2] * share.impulseMagnitude,
+      ];
+      handle.setDamping(parameters.linearDamping, parameters.angularDamping);
+      handle.wakeUp();
+      handle.applyImpulseAtPoint(impulse, contactPointWorld);
+      flightDampingRef.current.set(card.id, { startedAt: now, stableAt: null });
+      memberRecords.push({
+        cardId: card.id,
+        contactPointLocal: [...charge.contactLocal],
+        contactPointWorld,
+        directionWorld,
+        impulse,
+        snapshotBefore,
+      });
+    }
+    const intent: LaunchIntent = {
+      sequenceId: charge.sequenceId,
+      primaryCardId: charge.cardId,
+      cardIds: memberRecords.map(member => member.cardId),
+      preset,
+      meterPower,
+      totalImpulseMagnitude,
+      pointerType: charge.pointerType,
+    };
+    const record: LaunchRecord = { intent, members: memberRecords, createdAt: Date.now() };
+    emitTelemetry({
+      ...EMPTY_FLICK_TELEMETRY,
+      status: 'launched',
+      power: meterPower,
+      memberCount: memberRecords.length,
+      totalImpulse: totalImpulseMagnitude,
+      memberImpulse: memberRecords.length > 0
+        ? totalImpulseMagnitude / memberRecords.length
+        : 0,
+      preset,
+      intent,
+      record,
+    });
+  };
+
+  const finishGesture = (event: ThreeEvent<PointerEvent>) => {
+    const charge = launchChargeRef.current;
+    if (charge?.pointerId === event.pointerId) {
+      event.stopPropagation();
+      launchChargeRef.current = null;
+      setPreview(null);
+      releasePointer(event);
+      launchStack(charge, resolveLaunchMeterPower(performance.now() - charge.startedAt));
+      return;
+    }
+    const gesture = pushGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const resolution = samplePush(event, gesture);
+    pushGestureRef.current = null;
+    setPreview(null);
+    releasePointer(event);
+    const worldDelta = gesture.currentWorld.clone().sub(gesture.startWorld);
+    if (
+      !isLaunchGesturePastDeadZone(gesture.samples, Math.min(size.width, size.height))
+      || worldDelta.lengthSq() < 0.0001
+      || launchedSequencesRef.current.has(gesture.sequenceId)
+    ) {
+      emitTelemetry({ ...telemetryRef.current, status: 'cancelled' });
+      return;
+    }
+    launchedSequencesRef.current.add(gesture.sequenceId);
+    const body = bodyRefs.current.get(gesture.cardId);
+    if (!body) return;
+    const impulseMagnitude = resolvePushImpulseMagnitude(resolution.rawPower);
+    const impulse = worldDelta.normalize().multiplyScalar(impulseMagnitude);
+    body.applyImpulseAtPoint(
+      { x: impulse.x, y: impulse.y, z: impulse.z },
+      {
+        x: gesture.contactWorld.x,
+        y: gesture.contactWorld.y,
+        z: gesture.contactWorld.z,
+      },
+      true,
+    );
+    emitTelemetry({
+      ...EMPTY_FLICK_TELEMETRY,
+      status: 'launched',
+      power: resolution.rawPower,
+      gestureSpeed: resolution.gestureSpeed,
+      memberCount: 1,
+      totalImpulse: impulseMagnitude,
+      memberImpulse: impulseMagnitude,
+      preset,
+    });
+  };
+
+  const moveGesture = (event: ThreeEvent<PointerEvent>) => {
+    if (launchChargeRef.current?.pointerId === event.pointerId) {
+      return;
+    }
+    const gesture = pushGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    samplePush(event, gesture);
+  };
+
   const recordCollision = useCallback(() => {
     if (collisionRef.current) return;
     collisionRef.current = true;
@@ -713,14 +863,56 @@ const FlickLabScene = ({
           }}
         />
       ))}
-      <FlickAmmoCard
-        cardSize={cardSize}
-        runId={runId}
-        onGestureActive={onGestureActive}
-        onTelemetry={onTelemetry}
-        onCollision={recordCollision}
-        parameters={parameters}
-      />
+      {Array.from({ length: ammoCount }, (_, index) => {
+        const cardId = cardIdAt(index);
+        return (
+          <RigidBody
+            key={cardId}
+            ref={body => registerBody(cardId, body)}
+            type="dynamic"
+            colliders={false}
+            position={[
+              0,
+              dimensions.thickness / 2 + index * (dimensions.thickness + 0.004),
+              -4.5,
+            ]}
+            linearDamping={0.5}
+            angularDamping={0.5}
+            canSleep
+            ccd
+            additionalSolverIterations={4}
+            onCollisionEnter={recordCollision}
+          >
+            <CuboidCollider
+              args={[dimensions.width / 2, dimensions.thickness / 2, dimensions.height / 2]}
+              mass={0.1}
+              friction={1}
+              frictionCombineRule={CoefficientCombineRule.Multiply}
+              restitution={0}
+            />
+            <mesh
+              ref={mesh => registerMesh(cardId, mesh)}
+              castShadow
+              receiveShadow
+              onPointerDown={event => {
+                if (event.button !== 0) return;
+                event.stopPropagation();
+                const mesh = meshRefs.current.get(cardId);
+                if (!mesh) return;
+                if (tool === 'launch') startLaunchCharge(cardId, event, mesh);
+                else startPushGesture(cardId, event);
+              }}
+              onPointerMove={moveGesture}
+              onPointerUp={finishGesture}
+              onPointerCancel={cancelGesture}
+            >
+              <boxGeometry args={[dimensions.width, dimensions.thickness, dimensions.height]} />
+              <meshStandardMaterial color="#fffefa" roughness={0.48} />
+            </mesh>
+          </RigidBody>
+        );
+      })}
+      {preview && <FlickAimPreview preview={preview} />}
     </>
   );
 };
@@ -729,11 +921,13 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   const [scenario, setScenario] = useState<PhysicsLabScenario>('drop');
   const [runId, setRunId] = useState(1);
   const [metrics, setMetrics] = useState<LabMetrics>({ ...EMPTY_METRICS, runs: 1 });
-  const [gestureActive, setGestureActive] = useState(false);
   const [flickTelemetry, setFlickTelemetry] = useState<FlickTelemetry>(EMPTY_FLICK_TELEMETRY);
   const [flickParameters, setFlickParameters] = useState<FlickParameters>(
     DEFAULT_FLICK_PARAMETERS,
   );
+  const [launchPreset, setLaunchPreset] = useState<LaunchPreset>('short-edge');
+  const [flickTool, setFlickTool] = useState<FlickTool>('launch');
+  const [ammoCount, setAmmoCount] = useState<1 | 2 | 3 | 6>(1);
   const [slowMotion, setSlowMotion] = useState(false);
   const [targetHit, setTargetHit] = useState<number | null>(null);
   const [launchRecords, setLaunchRecords] = useState<LaunchRecord[]>([]);
@@ -788,8 +982,7 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   const reset = () => {
     setRunId(value => value + 1);
     setMetrics(previous => ({ ...EMPTY_METRICS, runs: previous.runs + 1 }));
-    setGestureActive(false);
-    setFlickTelemetry(EMPTY_FLICK_TELEMETRY);
+    setFlickTelemetry({ ...EMPTY_FLICK_TELEMETRY, preset: launchPreset });
     setTargetHit(null);
     setLaunchRecords([]);
   };
@@ -797,11 +990,28 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   useEffect(() => {
     setRunId(value => value + 1);
     setMetrics({ ...EMPTY_METRICS, runs: 1 });
-    setGestureActive(false);
-    setFlickTelemetry(EMPTY_FLICK_TELEMETRY);
+    setFlickTelemetry({ ...EMPTY_FLICK_TELEMETRY, preset: launchPreset });
     setSlowMotion(false);
     setTargetHit(null);
     setLaunchRecords([]);
+  }, [scenario, launchPreset]);
+
+  useEffect(() => {
+    if (scenario !== 'flick') return;
+    const presets: LaunchPreset[] = ['short-edge', 'long-edge-quarter', 'card-back-half'];
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || (event.key.toLowerCase() !== 'q' && event.key.toLowerCase() !== 'e')) {
+        return;
+      }
+      event.preventDefault();
+      setLaunchPreset(current => {
+        const direction = event.key.toLowerCase() === 'q' ? -1 : 1;
+        const index = presets.indexOf(current);
+        return presets[(index + direction + presets.length) % presets.length];
+      });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [scenario]);
 
   return (
@@ -863,6 +1073,56 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
             ))}
           </div>
         )}
+        {scenario === 'flick' && (
+          <>
+            <div className="physics-lab-stack-count" aria-label="弹射工具">
+              <span>TOOL</span>
+              {(['launch', 'push'] as const).map(nextTool => (
+                <button
+                  key={nextTool}
+                  className={flickTool === nextTool ? 'is-active' : ''}
+                  onClick={() => setFlickTool(nextTool)}
+                >
+                  {nextTool === 'launch'
+                    ? (lang === 'zh' ? '预设弹射' : 'Preset launch')
+                    : (lang === 'zh' ? '自由推拨' : 'Free push')}
+                </button>
+              ))}
+            </div>
+            <div className="physics-lab-stack-count" aria-label="弹射预设">
+              <span>PRESET · Q / E</span>
+              {([
+                ['short-edge', lang === 'zh' ? '短边' : 'Short edge'],
+                ['long-edge-quarter', lang === 'zh' ? '长边¼' : 'Long edge ¼'],
+                ['card-back-half', lang === 'zh' ? '卡背½' : 'Back half'],
+              ] as const).map(([nextPreset, label]) => (
+                <button
+                  key={nextPreset}
+                  className={launchPreset === nextPreset ? 'is-active' : ''}
+                  onClick={() => setLaunchPreset(nextPreset)}
+                  disabled={flickTool === 'push'}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="physics-lab-stack-count" aria-label="弹射牌堆张数">
+              <span>AMMO CARDS</span>
+              {([1, 2, 3, 6] as const).map(count => (
+                <button
+                  key={count}
+                  className={ammoCount === count ? 'is-active' : ''}
+                  onClick={() => {
+                    setAmmoCount(count);
+                    reset();
+                  }}
+                >
+                  {count}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <dl>
           <div><dt>RUNS</dt><dd>{metrics.runs}</dd></div>
           <div><dt>TUNNELS</dt><dd className={metrics.tunnels ? 'is-danger' : ''}>{metrics.tunnels}</dd></div>
@@ -874,12 +1134,17 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
         {scenario === 'flick' && (
           <>
             <div className="physics-lab-telemetry">
-              <span>FLICK · {flickTelemetry.status.toUpperCase()}</span>
+              <span>{flickTool === 'launch' ? 'LAUNCH' : 'PUSH'} · {flickTelemetry.status.toUpperCase()}</span>
               <strong>{Math.round(flickTelemetry.power * 100)}%</strong>
-              <small>GESTURE {flickTelemetry.gestureSpeed.toFixed(0)} px/s</small>
+              <small>PRESET {flickTelemetry.preset}</small>
+              <small>MEMBERS {flickTelemetry.memberCount || '—'}</small>
+              <small>TOTAL IMPULSE {flickTelemetry.totalImpulse.toFixed(2)}</small>
+              <small>PER CARD {flickTelemetry.memberImpulse.toFixed(2)}</small>
+              {flickTool === 'push' && (
+                <small>GESTURE {flickTelemetry.gestureSpeed.toFixed(0)} px/s</small>
+              )}
               <small>LINEAR {flickTelemetry.linearSpeed.toFixed(2)}</small>
               <small>ANGULAR {flickTelemetry.angularSpeed.toFixed(2)}</small>
-              <small>IMPULSE {flickTelemetry.record?.impulseMagnitude.toFixed(2) ?? '—'}</small>
               <small>TARGET {targetHit == null ? '—' : ['近', '中', '远'][targetHit - 1]}</small>
               <small>
                 SEQ {flickTelemetry.intent?.sequenceId.slice(0, 8) ?? '—'}
@@ -940,7 +1205,9 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
                 <FlickLabScene
                   cardSize={cardSize}
                   runId={runId}
-                  onGestureActive={setGestureActive}
+                  preset={launchPreset}
+                  tool={flickTool}
+                  ammoCount={ammoCount}
                   onTelemetry={updateFlickTelemetry}
                   onMetric={updateMetric}
                   onTargetHit={setTargetHit}
@@ -958,7 +1225,7 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
             </RapierPhysics>
           </Suspense>
           <FpsSampler onAverage={averageFps => updateMetric({ averageFps })} />
-          <OrbitControls makeDefault target={[0, 1.4, 0]} enabled={!gestureActive} />
+          <OrbitControls makeDefault target={[0, 1.4, 0]} />
         </Canvas>
       </section>
     </main>

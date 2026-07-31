@@ -136,9 +136,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const actionLabels: Record<InputAction, string> = lang === 'zh'
     ? {
         'tool.place': '放置工具',
-        'tool.move': '移动工具',
+        'tool.push': '推拨工具',
         'tool.delete': '删除工具',
         'tool.launch': '弹射工具',
+        'launch.presetPrevious': '上一个弹射预设',
+        'launch.presetNext': '下一个弹射预设',
         'mode.togglePrecision': '切换快速/精准模式',
         'card.yawLeft': '水平左转',
         'card.yawRight': '水平右转',
@@ -166,9 +168,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       }
     : {
         'tool.place': 'Place tool',
-        'tool.move': 'Move tool',
+        'tool.push': 'Push tool',
         'tool.delete': 'Delete tool',
         'tool.launch': 'Launch tool',
+        'launch.presetPrevious': 'Previous launch preset',
+        'launch.presetNext': 'Next launch preset',
         'mode.togglePrecision': 'Toggle quick/precision',
         'card.yawLeft': 'Yaw left',
         'card.yawRight': 'Yaw right',
@@ -198,7 +202,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const controlGroups: Array<{ title: string; actions: InputAction[] }> = [
     {
       title: lang === 'zh' ? '工具与历史' : 'Tools & history',
-      actions: ['tool.place', 'tool.move', 'tool.delete', 'tool.launch', 'mode.togglePrecision', 'history.undo', 'history.redo'],
+      actions: ['tool.place', 'tool.push', 'tool.delete', 'tool.launch', 'mode.togglePrecision', 'history.undo', 'history.redo'],
+    },
+    {
+      title: lang === 'zh' ? '弹射预设' : 'Launch presets',
+      actions: ['launch.presetPrevious', 'launch.presetNext'],
     },
     {
       title: lang === 'zh' ? '纸牌姿态' : 'Card pose',

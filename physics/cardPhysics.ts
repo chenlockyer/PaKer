@@ -15,6 +15,9 @@ export interface CardPhysicsHandle {
   sleep: () => void;
   applyForceAtPoint: (force: PhysicsVector3, point: PhysicsVector3) => void;
   applyImpulseAtPoint: (impulse: PhysicsVector3, point: PhysicsVector3) => void;
+  getMass: () => number;
+  getDamping: () => { linear: number; angular: number };
+  setDamping: (linear: number, angular: number) => void;
   getSnapshot: () => CardPhysicsSnapshot;
 }
 
@@ -47,6 +50,15 @@ export const createRapierCardPhysicsHandle = (
     { x: point[0], y: point[1], z: point[2] },
     true,
   ),
+  getMass: () => body.mass(),
+  getDamping: () => ({
+    linear: body.linearDamping(),
+    angular: body.angularDamping(),
+  }),
+  setDamping: (linear, angular) => {
+    body.setLinearDamping(linear);
+    body.setAngularDamping(angular);
+  },
   getSnapshot: () => snapshotRapierBody(body),
 });
 

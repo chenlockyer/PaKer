@@ -10,9 +10,11 @@ import React, {
 
 export type InputAction =
   | 'tool.place'
-  | 'tool.move'
+  | 'tool.push'
   | 'tool.delete'
   | 'tool.launch'
+  | 'launch.presetPrevious'
+  | 'launch.presetNext'
   | 'mode.togglePrecision'
   | 'card.yawLeft'
   | 'card.yawRight'
@@ -61,9 +63,11 @@ export interface InputActionEvent {
 
 export const ACTIONS: InputAction[] = [
   'tool.place',
-  'tool.move',
+  'tool.push',
   'tool.delete',
   'tool.launch',
+  'launch.presetPrevious',
+  'launch.presetNext',
   'mode.togglePrecision',
   'card.yawLeft',
   'card.yawRight',
@@ -97,9 +101,11 @@ export const ACTIONS: InputAction[] = [
 
 export const RECOMMENDED_BINDINGS: Record<InputAction, KeyBinding> = {
   'tool.place': { code: 'Digit1' },
-  'tool.move': { code: 'Digit2' },
+  'tool.push': { code: 'Digit2' },
   'tool.delete': { code: 'Digit3' },
   'tool.launch': { code: 'Digit4' },
+  'launch.presetPrevious': { code: 'KeyQ' },
+  'launch.presetNext': { code: 'KeyE' },
   'mode.togglePrecision': { code: 'Tab' },
   'card.yawLeft': { code: 'KeyQ' },
   'card.yawRight': { code: 'KeyE' },
@@ -134,7 +140,7 @@ export const RECOMMENDED_BINDINGS: Record<InputAction, KeyBinding> = {
 export const LEGACY_BINDINGS: Record<InputAction, KeyBinding> = {
   ...RECOMMENDED_BINDINGS,
   'tool.place': { code: 'Escape' },
-  'tool.move': { code: 'KeyM' },
+  'tool.push': { code: 'KeyM' },
   'tool.delete': { code: 'Delete' },
   'tool.launch': { code: 'KeyG' },
   'card.tiltForward': { code: 'KeyR' },
@@ -159,7 +165,7 @@ export const LEGACY_BINDINGS: Record<InputAction, KeyBinding> = {
 };
 
 const STORAGE_KEY = 'hoc_input_settings_v1';
-const INPUT_SCHEMA_VERSION = 5;
+const INPUT_SCHEMA_VERSION = 6;
 type Listener = (event: InputActionEvent) => void;
 
 interface StoredInputSettings {
@@ -199,12 +205,20 @@ const loadSettings = (): StoredInputSettings => {
       return { version: INPUT_SCHEMA_VERSION, profile, bindings: cloneBindings(RECOMMENDED_BINDINGS) };
     }
     const defaults = profile === 'legacy' ? LEGACY_BINDINGS : RECOMMENDED_BINDINGS;
+    const storedBindings = {
+      ...((parsed.bindings ?? {}) as Record<string, KeyBinding>),
+    };
+    // v5 and earlier called free push "move". Preserve custom bindings.
+    if (!storedBindings['tool.push'] && storedBindings['tool.move']) {
+      storedBindings['tool.push'] = storedBindings['tool.move'];
+    }
+    delete storedBindings['tool.move'];
     return {
       version: INPUT_SCHEMA_VERSION,
       profile,
       bindings: {
         ...cloneBindings(defaults),
-        ...(parsed.bindings ?? {}),
+        ...storedBindings,
       },
     };
   } catch {

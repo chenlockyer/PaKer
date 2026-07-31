@@ -342,7 +342,7 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 }
 .tool-dock button.is-locked { background: var(--accent-soft); color: var(--accent-ink); }
 .tool-symbol, .physics-indicator { grid-row: 1 / 3; font-size: 19px; text-align: center; }
-.move-symbol { font-size: 16px; }
+.push-symbol { font-size: 17px; }
 .launch-symbol { color: #e66a2c; transform: rotate(-12deg); }
 .tool-dock button.is-launch .launch-symbol { color: #fff; }
 .tool-dock strong { align-self: end; font-size: 10px; }
@@ -351,17 +351,40 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .tool-dock .is-active kbd { border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.13); color: #fff; box-shadow: none; }
 .dock-divider { width: 1px; margin: 5px 3px; background: var(--line); }
 .launch-mode-callout {
-  position: absolute; left: 50%; bottom: 138px; display: grid; gap: 3px;
+  position: absolute; left: 50%; bottom: 138px; display: grid; gap: 7px;
   min-width: 300px; transform: translateX(-50%); padding: 9px 13px;
   border: 1px solid color-mix(in srgb, #e66a2c 45%, var(--line)); border-radius: 7px;
   background: color-mix(in srgb, var(--surface) 94%, transparent);
-  color: var(--muted); box-shadow: var(--shadow-small); pointer-events: none;
+  color: var(--muted); box-shadow: var(--shadow-small); pointer-events: auto;
   text-align: center; backdrop-filter: blur(8px);
 }
 .launch-mode-callout strong { color: #c65320; font-size: 11px; letter-spacing: .08em; }
 .launch-mode-callout span { font-size: 10px; }
 .launch-mode-callout.is-blocked { border-color: var(--danger); }
 .launch-mode-callout.is-blocked strong { color: var(--danger); }
+.launch-mode-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.launch-mode-heading > span { display: flex; gap: 4px; }
+.launch-mode-heading kbd { transform: scale(.85); }
+.launch-preset-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.launch-preset-selector button {
+  height: 42px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--surface-hover); color: var(--muted); cursor: pointer;
+}
+.launch-preset-selector button:hover:not(:disabled) { border-color: #e66a2c; color: #c65320; }
+.launch-preset-selector button.is-active {
+  border-color: #e66a2c; background: color-mix(in srgb, #e66a2c 13%, var(--surface)); color: #c65320;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #e66a2c 22%, transparent);
+}
+.launch-preset-selector button:disabled { cursor: not-allowed; opacity: .45; }
+.launch-preset-icon { display: block; width: 56px; height: 38px; margin: auto; overflow: visible; }
+.launch-card-shape { fill: var(--surface); stroke: currentColor; stroke-width: 1.35; }
+.launch-card-back { fill: #356eb7; stroke: #24528d; stroke-width: 1; }
+.launch-card-divider { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 1; stroke-dasharray: 2 2; }
+.launch-contact-dot { fill: #e66a2c; stroke: var(--surface); stroke-width: 1; }
+.launch-axis-arrow, .launch-lift-arrow, .launch-spin-mark {
+  fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.launch-mode-hint { color: var(--muted); }
 
 /* Contextual controls and preset wheel */
 .context-controls {

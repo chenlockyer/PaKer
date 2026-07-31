@@ -12,40 +12,42 @@ import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   CARD_DIMENSIONS,
+  CardLaunchRequest,
   CardData,
   CardSize,
   type LaunchGestureSample,
   type LaunchIntent,
-  type LaunchRecord,
+  type LaunchPreset,
   LiveCardTransform,
   PointerMode,
 } from '../types';
 import { playCollisionSound } from '../services/audioService';
-import { createRapierCardPhysicsHandle } from '../physics/cardPhysics';
+import {
+  createRapierCardPhysicsHandle,
+  type CardPhysicsHandle,
+} from '../physics/cardPhysics';
 import {
   isLaunchGesturePastDeadZone,
   resolveLaunchGesture,
-  resolveLaunchImpulseMagnitude,
+  resolvePowerMeter,
+  resolvePushImpulseMagnitude,
+  resolveLaunchTarget,
 } from '../physics/launchGesture';
 
 interface CardProps {
   data: CardData;
   pointerMode?: PointerMode;
   onRemove?: () => void;
-  onDragStart?: () => void;
-  onQuickMove?: () => void;
-  isDragging?: boolean;
   interactionEnabled?: boolean;
   windStrength?: number;
   cardSize: CardSize;
   onTransformChange?: (id: string, transform: LiveCardTransform) => void;
-  launchEnabled?: boolean;
-  onArmForLaunch?: (id: string) => void;
-  onLaunchStateChange?: (id: string, active: boolean) => void;
-  onLaunch?: (record: LaunchRecord) => void;
+  launchPreset: LaunchPreset;
+  onPhysicsHandleChange?: (id: string, handle: CardPhysicsHandle | null) => void;
+  onLaunchRequest?: (request: CardLaunchRequest) => void;
 }
 
-interface ActiveLaunchGesture {
+interface ActivePushGesture {
   sequenceId: string;
   pointerId: number;
   pointerType: LaunchIntent['pointerType'];
@@ -55,6 +57,23 @@ interface ActiveLaunchGesture {
   startWorld: THREE.Vector3;
   currentWorld: THREE.Vector3;
   samples: LaunchGestureSample[];
+  captureTarget: PointerCaptureTarget;
+}
+
+interface ActiveLaunchCharge {
+  sequenceId: string;
+  pointerId: number;
+  pointerType: LaunchIntent['pointerType'];
+  startedAt: number;
+  contactLocal: THREE.Vector3;
+  directionLocal: THREE.Vector3;
+  captureTarget: PointerCaptureTarget;
+}
+
+interface PointerCaptureTarget {
+  setPointerCapture?: (pointerId: number) => void;
+  releasePointerCapture?: (pointerId: number) => void;
+  hasPointerCapture?: (pointerId: number) => boolean;
 }
 
 const CardLaunchPreview = ({
@@ -109,6 +128,50 @@ const CardLaunchPreview = ({
           <meshBasicMaterial color="#e66a2c" transparent opacity={0.75 - index * 0.16} />
         </mesh>
       ))}
+    </group>
+  );
+};
+
+const LaunchChargePreview = ({
+  contact,
+  direction,
+  power,
+  cameraQuaternion,
+}: {
+  contact: THREE.Vector3;
+  direction: THREE.Vector3;
+  power: number;
+  cameraQuaternion: THREE.Quaternion;
+}) => {
+  const end = contact.clone().add(direction.clone().multiplyScalar(0.9));
+  const arrowRotation = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    direction,
+  );
+  return (
+    <group>
+      <mesh position={contact}>
+        <sphereGeometry args={[0.065, 14, 10]} />
+        <meshBasicMaterial color="#f59e0b" depthTest={false} />
+      </mesh>
+      <Line points={[contact, end]} color="#e66a2c" lineWidth={4} depthTest={false} />
+      <mesh position={end} quaternion={arrowRotation}>
+        <coneGeometry args={[0.09, 0.26, 14]} />
+        <meshBasicMaterial color="#e66a2c" depthTest={false} />
+      </mesh>
+      <group
+        position={contact.clone().add(new THREE.Vector3(0, 0.35, 0))}
+        quaternion={cameraQuaternion}
+      >
+        <mesh>
+          <planeGeometry args={[1.1, 0.13]} />
+          <meshBasicMaterial color="#17202b" transparent opacity={0.86} depthTest={false} />
+        </mesh>
+        <mesh position={[-0.54 + power * 1.08, 0, 0.012]}>
+          <circleGeometry args={[0.075, 18]} />
+          <meshBasicMaterial color="#f59e0b" depthTest={false} />
+        </mesh>
+      </group>
     </group>
   );
 };
@@ -182,22 +245,14 @@ const Card: React.FC<CardProps> = ({
   data, 
   pointerMode = PointerMode.PLACE, 
   onRemove,
-  onDragStart,
-  onQuickMove,
-  isDragging = false,
   interactionEnabled = true,
   windStrength = 0,
   cardSize,
   onTransformChange,
-  launchEnabled = false,
-  onArmForLaunch,
-  onLaunchStateChange,
-  onLaunch,
+  launchPreset,
+  onPhysicsHandleChange,
+  onLaunchRequest,
 }) => {
-  // If dragging, we temporarily remove from physics/visual scene effectively
-  // But we can't unmount component entirely or hook ordering changes.
-  // Instead we sleep physics and hide mesh.
-
   const dimensions = CARD_DIMENSIONS[cardSize];
   const geometry = useMemo(() => getCardGeometry(cardSize), [cardSize]);
   const bodyRef = useRef<RapierRigidBody>(null);
@@ -207,20 +262,23 @@ const Card: React.FC<CardProps> = ({
   const physicsPositionRef = React.useRef<[number, number, number]>(data.position);
   const physicsRotationRef = React.useRef<[number, number, number]>(data.rotation);
   const transformSampleTimeRef = React.useRef(0);
-  const launchGestureRef = useRef<ActiveLaunchGesture | null>(null);
+  const pushGestureRef = useRef<ActivePushGesture | null>(null);
+  const launchChargeRef = useRef<ActiveLaunchCharge | null>(null);
   const launchedSequencesRef = useRef(new Set<string>());
-  const launchedRef = useRef(false);
-  const launchStartedAtRef = useRef(0);
-  const launchStableAtRef = useRef<number | null>(null);
   const [launchPreview, setLaunchPreview] = useState<{
     contact: THREE.Vector3;
     current: THREE.Vector3;
     power: number;
   } | null>(null);
+  const [chargePreview, setChargePreview] = useState<{
+    contact: THREE.Vector3;
+    direction: THREE.Vector3;
+    power: number;
+  } | null>(null);
 
   useFrame(({ clock }) => {
     const body = bodyRef.current;
-    if (!body || isDragging) return;
+    if (!body) return;
     const position = body.translation();
     const quaternion = body.rotation();
     const euler = new THREE.Euler().setFromQuaternion(
@@ -230,25 +288,22 @@ const Card: React.FC<CardProps> = ({
     physicsPositionRef.current = [position.x, position.y, position.z];
     physicsRotationRef.current = [euler.x, euler.y, euler.z];
 
-    if (launchedRef.current) {
-      const linear = body.linvel();
-      const angular = body.angvel();
-      const linearSpeed = Math.hypot(linear.x, linear.y, linear.z);
-      const angularSpeed = Math.hypot(angular.x, angular.y, angular.z);
-      const nowSeconds = performance.now() / 1000;
-      if (linearSpeed < 0.08 && angularSpeed < 0.08) {
-        launchStableAtRef.current ??= nowSeconds;
-      } else {
-        launchStableAtRef.current = null;
-      }
-      const settled = (
-        launchStableAtRef.current != null &&
-        nowSeconds - launchStableAtRef.current >= 0.5
-      ) || nowSeconds - launchStartedAtRef.current >= 6;
-      if (settled) {
-        launchedRef.current = false;
-        onLaunchStateChange?.(data.id, false);
-      }
+    const charge = launchChargeRef.current;
+    if (charge) {
+      const quaternion = new THREE.Quaternion(
+        body.rotation().x,
+        body.rotation().y,
+        body.rotation().z,
+        body.rotation().w,
+      );
+      const origin = new THREE.Vector3(position.x, position.y, position.z);
+      const contact = charge.contactLocal.clone().applyQuaternion(quaternion).add(origin);
+      const direction = charge.directionLocal.clone().applyQuaternion(quaternion).normalize();
+      setChargePreview({
+        contact,
+        direction,
+        power: resolvePowerMeter(performance.now() - charge.startedAt),
+      });
     }
 
     if (clock.elapsedTime - transformSampleTimeRef.current >= 0.05) {
@@ -259,7 +314,7 @@ const Card: React.FC<CardProps> = ({
       });
     }
 
-    if (windStrength <= 0 || data.locked || isDragging) return;
+    if (windStrength <= 0 || data.locked) return;
 
     const gust = windStrength * (0.8 + Math.sin(clock.elapsedTime * 2.4) * 0.2);
     const [x, y, z] = physicsPositionRef.current;
@@ -270,26 +325,17 @@ const Card: React.FC<CardProps> = ({
     );
   });
 
-  // Effect 1: Handle Position Teleporting (Sync React State -> Physics World)
-  // Only runs when dragging status changes or the defined position VALUES change (Placement/Move)
-  // We decompose dependencies to avoid re-running when just 'locked' changes (which preserves physics settling)
+  // Sync explicit scene-state changes (new card, load, undo) into Rapier.
   useEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
-    if (isDragging) {
-      body.setLinvel({ x: 0, y: 0, z: 0 }, false);
-      body.setAngvel({ x: 0, y: 0, z: 0 }, false);
-      body.setEnabled(false);
-    } else {
-      const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...data.rotation, 'XYZ'));
-      body.setEnabled(true);
-      body.setTranslation({ x: data.position[0], y: data.position[1], z: data.position[2] }, false);
-      body.setRotation(quaternion, false);
-      body.setLinvel({ x: 0, y: 0, z: 0 }, false);
-      body.setAngvel({ x: 0, y: 0, z: 0 }, false);
-    }
+    const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...data.rotation, 'XYZ'));
+    body.setEnabled(true);
+    body.setTranslation({ x: data.position[0], y: data.position[1], z: data.position[2] }, false);
+    body.setRotation(quaternion, false);
+    body.setLinvel({ x: 0, y: 0, z: 0 }, false);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, false);
   }, [
-    isDragging,
     data.position[0], data.position[1], data.position[2], 
     data.rotation[0], data.rotation[1], data.rotation[2]
   ]);
@@ -298,14 +344,32 @@ const Card: React.FC<CardProps> = ({
   // Only runs when locked state changes
   useEffect(() => {
     const body = bodyRef.current;
-    if (!body || isDragging) return;
+    if (!body) return;
     body.setLinvel({ x: 0, y: data.locked ? 0 : 0.01, z: 0 }, !data.locked);
     body.setAngvel({ x: 0, y: 0, z: 0 }, false);
     body.setBodyType(
       data.locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
       !data.locked,
     );
-  }, [data.locked, isDragging, rapier.RigidBodyType.Dynamic, rapier.RigidBodyType.Fixed]);
+  }, [data.locked, rapier.RigidBodyType.Dynamic, rapier.RigidBodyType.Fixed]);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const handle = createRapierCardPhysicsHandle(body, locked => {
+      body.setBodyType(
+        locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
+        true,
+      );
+    });
+    onPhysicsHandleChange?.(data.id, handle);
+    return () => onPhysicsHandleChange?.(data.id, null);
+  }, [
+    data.id,
+    onPhysicsHandleChange,
+    rapier.RigidBodyType.Dynamic,
+    rapier.RigidBodyType.Fixed,
+  ]);
 
   // Texture Gen
   const texture = useMemo(
@@ -327,31 +391,46 @@ const Card: React.FC<CardProps> = ({
     setHovered(false);
   };
 
-  const cancelLaunchGesture = React.useCallback(() => {
-    if (!launchGestureRef.current) return;
-    launchGestureRef.current = null;
-    setLaunchPreview(null);
-    onLaunchStateChange?.(data.id, false);
-  }, [data.id, onLaunchStateChange]);
-
-  useEffect(() => {
-    window.addEventListener('blur', cancelLaunchGesture);
-    return () => window.removeEventListener('blur', cancelLaunchGesture);
-  }, [cancelLaunchGesture]);
-
-  useEffect(() => {
-    if (pointerMode !== PointerMode.LAUNCH) cancelLaunchGesture();
-  }, [cancelLaunchGesture, pointerMode]);
-
-  useEffect(() => () => {
-    if (launchGestureRef.current || launchedRef.current) {
-      onLaunchStateChange?.(data.id, false);
+  const cancelActiveGesture = React.useCallback(() => {
+    const push = pushGestureRef.current;
+    const charge = launchChargeRef.current;
+    if (
+      push &&
+      (!push.captureTarget.hasPointerCapture || push.captureTarget.hasPointerCapture(push.pointerId))
+    ) {
+      push.captureTarget.releasePointerCapture?.(push.pointerId);
     }
-  }, [data.id, onLaunchStateChange]);
+    if (
+      charge &&
+      (!charge.captureTarget.hasPointerCapture || charge.captureTarget.hasPointerCapture(charge.pointerId))
+    ) {
+      charge.captureTarget.releasePointerCapture?.(charge.pointerId);
+    }
+    pushGestureRef.current = null;
+    launchChargeRef.current = null;
+    setLaunchPreview(null);
+    setChargePreview(null);
+  }, []);
 
-  const sampleLaunchPointer = (
+  useEffect(() => {
+    const cancelOnEscape = (event: KeyboardEvent) => {
+      if (event.code === 'Escape') cancelActiveGesture();
+    };
+    window.addEventListener('blur', cancelActiveGesture);
+    window.addEventListener('keydown', cancelOnEscape);
+    return () => {
+      window.removeEventListener('blur', cancelActiveGesture);
+      window.removeEventListener('keydown', cancelOnEscape);
+    };
+  }, [cancelActiveGesture]);
+
+  useEffect(() => {
+    cancelActiveGesture();
+  }, [cancelActiveGesture, data.locked, interactionEnabled, launchPreset, pointerMode]);
+
+  const samplePushPointer = (
     event: ThreeEvent<PointerEvent>,
-    gesture: ActiveLaunchGesture,
+    gesture: ActivePushGesture,
   ) => {
     const now = performance.now();
     gesture.samples.push({ x: event.clientX, y: event.clientY, time: now });
@@ -372,14 +451,64 @@ const Card: React.FC<CardProps> = ({
     return resolution;
   };
 
-  const startLaunchGesture = (event: ThreeEvent<PointerEvent>) => {
+  const pointerTypeOf = (event: ThreeEvent<PointerEvent>) => (
+    event.pointerType === 'touch' || event.pointerType === 'pen'
+      ? event.pointerType
+      : 'mouse'
+  ) as LaunchIntent['pointerType'];
+
+  const capturePointer = (event: ThreeEvent<PointerEvent>) => {
+    const target = event.target as unknown as PointerCaptureTarget;
+    target.setPointerCapture?.(event.pointerId);
+    return target;
+  };
+
+  const releasePointer = (event: ThreeEvent<PointerEvent>) => {
+    (event.target as unknown as PointerCaptureTarget).releasePointerCapture?.(event.pointerId);
+  };
+
+  const startLaunchCharge = (event: ThreeEvent<PointerEvent>) => {
     if (
       event.button !== 0 ||
-      !launchEnabled ||
       data.locked ||
-      data.role === 'core' ||
-      launchGestureRef.current ||
-      launchedRef.current ||
+      launchChargeRef.current ||
+      !meshRef.current
+    ) return;
+    const clickLocal = meshRef.current.worldToLocal(event.point.clone());
+    const target = resolveLaunchTarget(launchPreset, clickLocal.toArray(), dimensions);
+    if (!target.valid) return;
+    const startedAt = performance.now();
+    const captureTarget = capturePointer(event);
+    launchChargeRef.current = {
+      sequenceId: crypto.randomUUID(),
+      pointerId: event.pointerId,
+      pointerType: pointerTypeOf(event),
+      startedAt,
+      contactLocal: new THREE.Vector3(...target.contactLocal),
+      directionLocal: new THREE.Vector3(...target.directionLocal),
+      captureTarget,
+    };
+    const body = bodyRef.current;
+    const rotation = body?.rotation();
+    const translation = body?.translation();
+    const quaternion = rotation
+      ? new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w)
+      : meshRef.current.getWorldQuaternion(new THREE.Quaternion());
+    const origin = translation
+      ? new THREE.Vector3(translation.x, translation.y, translation.z)
+      : meshRef.current.getWorldPosition(new THREE.Vector3());
+    setChargePreview({
+      contact: new THREE.Vector3(...target.contactLocal).applyQuaternion(quaternion).add(origin),
+      direction: new THREE.Vector3(...target.directionLocal).applyQuaternion(quaternion).normalize(),
+      power: 0,
+    });
+  };
+
+  const startPushGesture = (event: ThreeEvent<PointerEvent>) => {
+    if (
+      event.button !== 0 ||
+      data.locked ||
+      pushGestureRef.current ||
       !meshRef.current
     ) return;
     const contactWorld = event.point.clone();
@@ -389,93 +518,81 @@ const Card: React.FC<CardProps> = ({
       cameraDirection,
       contactWorld,
     );
-    const pointerType = (
-      event.pointerType === 'touch' || event.pointerType === 'pen'
-        ? event.pointerType
-        : 'mouse'
-    ) as LaunchIntent['pointerType'];
-    launchGestureRef.current = {
+    const captureTarget = capturePointer(event);
+    pushGestureRef.current = {
       sequenceId: crypto.randomUUID(),
       pointerId: event.pointerId,
-      pointerType,
+      pointerType: pointerTypeOf(event),
       contactWorld,
       contactLocal,
       plane,
       startWorld: contactWorld.clone(),
       currentWorld: contactWorld.clone(),
       samples: [{ x: event.clientX, y: event.clientY, time: performance.now() }],
+      captureTarget,
     };
-    if (data.role !== 'ammo') onArmForLaunch?.(data.id);
-    onLaunchStateChange?.(data.id, true);
     setLaunchPreview({ contact: contactWorld.clone(), current: contactWorld.clone(), power: 0 });
-    (event.target as unknown as { setPointerCapture?: (pointerId: number) => void })
-      .setPointerCapture?.(event.pointerId);
   };
 
-  const moveLaunchGesture = (event: ThreeEvent<PointerEvent>) => {
-    const gesture = launchGestureRef.current;
+  const moveActiveGesture = (event: ThreeEvent<PointerEvent>) => {
+    const charge = launchChargeRef.current;
+    if (charge?.pointerId === event.pointerId) {
+      return;
+    }
+    const gesture = pushGestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     event.stopPropagation();
-    sampleLaunchPointer(event, gesture);
+    samplePushPointer(event, gesture);
   };
 
-  const finishLaunchGesture = (event: ThreeEvent<PointerEvent>) => {
-    const gesture = launchGestureRef.current;
+  const finishActiveGesture = (event: ThreeEvent<PointerEvent>) => {
+    const charge = launchChargeRef.current;
+    if (charge?.pointerId === event.pointerId) {
+      event.stopPropagation();
+      launchChargeRef.current = null;
+      setChargePreview(null);
+      releasePointer(event);
+      if (!interactionEnabled || data.locked || pointerMode !== PointerMode.LAUNCH) return;
+      if (launchedSequencesRef.current.has(charge.sequenceId)) return;
+      launchedSequencesRef.current.add(charge.sequenceId);
+      onLaunchRequest?.({
+        sequenceId: charge.sequenceId,
+        primaryCardId: data.id,
+        preset: launchPreset,
+        contactPointLocal: charge.contactLocal.toArray(),
+        directionLocal: charge.directionLocal.toArray(),
+        meterPower: resolvePowerMeter(performance.now() - charge.startedAt),
+        pointerType: charge.pointerType,
+      });
+      return;
+    }
+
+    const gesture = pushGestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     event.stopPropagation();
-    const resolution = sampleLaunchPointer(event, gesture);
-    launchGestureRef.current = null;
+    const resolution = samplePushPointer(event, gesture);
+    pushGestureRef.current = null;
     setLaunchPreview(null);
-    (event.target as unknown as { releasePointerCapture?: (pointerId: number) => void })
-      .releasePointerCapture?.(event.pointerId);
-
+    releasePointer(event);
+    if (!interactionEnabled || data.locked || pointerMode !== PointerMode.PUSH) return;
     const worldDelta = gesture.currentWorld.clone().sub(gesture.startWorld);
     if (
       !isLaunchGesturePastDeadZone(gesture.samples, Math.min(size.width, size.height)) ||
       worldDelta.lengthSq() < 0.0001
-    ) {
-      onLaunchStateChange?.(data.id, false);
-      return;
-    }
+    ) return;
     const body = bodyRef.current;
-    if (!body || launchedSequencesRef.current.has(gesture.sequenceId)) {
-      onLaunchStateChange?.(data.id, false);
-      return;
-    }
+    if (!body || launchedSequencesRef.current.has(gesture.sequenceId)) return;
     launchedSequencesRef.current.add(gesture.sequenceId);
     const direction = worldDelta.normalize();
-    const impulseMagnitude = resolveLaunchImpulseMagnitude(resolution.power, 0.25, 2.45);
+    const impulseMagnitude = resolvePushImpulseMagnitude(resolution.rawPower);
     const impulse = direction.multiplyScalar(impulseMagnitude);
-    const intent: LaunchIntent = {
-      sequenceId: gesture.sequenceId,
-      cardId: data.id,
-      contactPointWorld: gesture.contactWorld.toArray(),
-      contactPointLocal: gesture.contactLocal.toArray(),
-      directionWorld: direction.clone().normalize().toArray(),
-      power: resolution.power,
-      gestureSpeed: resolution.gestureSpeed,
-      pointerType: gesture.pointerType,
-    };
     const handle = createRapierCardPhysicsHandle(body, locked => {
       body.setBodyType(
         locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
         true,
       );
     });
-    const snapshotBefore = handle.getSnapshot();
-    handle.setLocked(false);
-    handle.setVelocity([0, 0, 0], [0, 0, 0]);
     handle.applyImpulseAtPoint(impulse.toArray(), gesture.contactWorld.toArray());
-    onLaunch?.({
-      intent,
-      impulse: impulse.toArray(),
-      impulseMagnitude,
-      snapshotBefore,
-      createdAt: Date.now(),
-    });
-    launchedRef.current = true;
-    launchStartedAtRef.current = performance.now() / 1000;
-    launchStableAtRef.current = null;
   };
 
   const handleClick = (e: any) => {
@@ -487,21 +604,16 @@ const Card: React.FC<CardProps> = ({
   };
 
   const handlePointerDown = (e: any) => {
-    e.stopPropagation();
-    if (!interactionEnabled) return;
+    if (!interactionEnabled || e.button !== 0) return;
     if (pointerMode === PointerMode.LAUNCH) {
-      startLaunchGesture(e as ThreeEvent<PointerEvent>);
+      e.stopPropagation();
+      startLaunchCharge(e as ThreeEvent<PointerEvent>);
       return;
     }
-    if (pointerMode === PointerMode.MOVE && onDragStart) {
-      // Capture pointer? R3F handles this mostly, but logic is in PhysicsWorld
-      onDragStart();
+    if (pointerMode === PointerMode.PUSH) {
+      e.stopPropagation();
+      startPushGesture(e as ThreeEvent<PointerEvent>);
     }
-  };
-
-  const handleDoubleClick = (e: any) => {
-    e.stopPropagation();
-    if (interactionEnabled && pointerMode !== PointerMode.LAUNCH && onQuickMove) onQuickMove();
   };
 
   // Use the original light-reactive paper material so cards retain depth and
@@ -509,11 +621,11 @@ const Card: React.FC<CardProps> = ({
   let emissiveColor = 'black';
   let emissiveIntensity = 0;
   
-  if (hovered && !isDragging) {
+  if (hovered) {
     if (pointerMode === PointerMode.DELETE) {
       emissiveColor = '#ef4444';
       emissiveIntensity = 0.6;
-    } else if (pointerMode === PointerMode.MOVE) {
+    } else if (pointerMode === PointerMode.PUSH) {
       emissiveColor = '#3b82f6';
       emissiveIntensity = 0.6;
     }
@@ -527,8 +639,8 @@ const Card: React.FC<CardProps> = ({
       colliders={false}
       position={data.position}
       rotation={data.rotation}
-      linearDamping={data.role === 'ammo' ? 0.08 : 0.5}
-      angularDamping={data.role === 'ammo' ? 0.08 : 0.5}
+      linearDamping={0.5}
+      angularDamping={0.5}
       canSleep
       ccd={!data.locked}
       additionalSolverIterations={4}
@@ -550,12 +662,11 @@ const Card: React.FC<CardProps> = ({
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
         onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
         onPointerDown={handlePointerDown}
-        onPointerMove={moveLaunchGesture}
-        onPointerUp={finishLaunchGesture}
-        onPointerCancel={cancelLaunchGesture}
-        visible={!isDragging}
+        onPointerMove={moveActiveGesture}
+        onPointerUp={finishActiveGesture}
+        onPointerCancel={cancelActiveGesture}
+        onLostPointerCapture={cancelActiveGesture}
       >
         <primitive object={geometry} attach="geometry" />
         <meshStandardMaterial color="#f0f0f0" attach="material-0" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
@@ -571,6 +682,14 @@ const Card: React.FC<CardProps> = ({
         cameraQuaternion={camera.quaternion}
       />
     )}
+    {chargePreview && (
+      <LaunchChargePreview
+        contact={chargePreview.contact}
+        direction={chargePreview.direction}
+        power={chargePreview.power}
+        cameraQuaternion={camera.quaternion}
+      />
+    )}
     </>
   );
 };
@@ -578,13 +697,11 @@ const Card: React.FC<CardProps> = ({
 export default React.memo(Card, (previous, next) =>
   previous.data === next.data &&
   previous.pointerMode === next.pointerMode &&
-  previous.isDragging === next.isDragging &&
   previous.interactionEnabled === next.interactionEnabled &&
   previous.windStrength === next.windStrength &&
   previous.cardSize === next.cardSize &&
   previous.onTransformChange === next.onTransformChange &&
-  previous.launchEnabled === next.launchEnabled &&
-  previous.onArmForLaunch === next.onArmForLaunch &&
-  previous.onLaunchStateChange === next.onLaunchStateChange &&
-  previous.onLaunch === next.onLaunch
+  previous.launchPreset === next.launchPreset &&
+  previous.onPhysicsHandleChange === next.onPhysicsHandleChange &&
+  previous.onLaunchRequest === next.onLaunchRequest
 );

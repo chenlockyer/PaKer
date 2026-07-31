@@ -10,6 +10,59 @@ export interface LaunchGestureResolution {
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
+export const DEFAULT_LAUNCH_MINIMUM_IMPULSE = 0.25;
+export const DEFAULT_LAUNCH_MAXIMUM_IMPULSE = 2.45;
+export const DEFAULT_PUSH_MINIMUM_IMPULSE = 0.02;
+export const DEFAULT_PUSH_MAXIMUM_IMPULSE = 0.45;
+export const DEFAULT_LAUNCH_METER_ONE_WAY_MS = 1200;
+
+const interpolateImpulseRange = (
+  power: number,
+  minimumImpulse: number,
+  maximumImpulse: number,
+) => {
+  const minimum = Math.max(0, Math.min(minimumImpulse, maximumImpulse));
+  const maximum = Math.max(minimum, maximumImpulse);
+  return minimum + clamp01(power) * (maximum - minimum);
+};
+
+/**
+ * Deterministic 0 -> 1 -> 0 power meter. elapsedMs is measured from pointer
+ * down; oneWayDurationMs controls each half of the cycle.
+ */
+export const resolveLaunchMeterPower = (
+  elapsedMs: number,
+  oneWayDurationMs = DEFAULT_LAUNCH_METER_ONE_WAY_MS,
+) => {
+  if (!Number.isFinite(elapsedMs) || !Number.isFinite(oneWayDurationMs)) return 0;
+  const duration = Math.max(1, oneWayDurationMs);
+  const elapsed = Math.max(0, elapsedMs);
+  const phase = (elapsed % (duration * 2)) / duration;
+  return phase <= 1 ? phase : 2 - phase;
+};
+
+export const resolvePowerMeter = resolveLaunchMeterPower;
+
+export const resolveFormalLaunchImpulseMagnitude = (
+  meterPower: number,
+  minimumImpulse = DEFAULT_LAUNCH_MINIMUM_IMPULSE,
+  maximumImpulse = DEFAULT_LAUNCH_MAXIMUM_IMPULSE,
+) => resolveLaunchImpulseMagnitude(
+  meterPower,
+  minimumImpulse,
+  maximumImpulse,
+);
+
+export const resolvePushImpulseMagnitude = (
+  rawPower: number,
+  minimumImpulse = DEFAULT_PUSH_MINIMUM_IMPULSE,
+  maximumImpulse = DEFAULT_PUSH_MAXIMUM_IMPULSE,
+) => interpolateImpulseRange(
+  Math.pow(clamp01(Number.isFinite(rawPower) ? rawPower : 0), 1.6),
+  minimumImpulse,
+  maximumImpulse,
+);
+
 export const resolveCardRole = (role?: CardRole): CardRole => role ?? 'structure';
 
 export const canLaunchCardRole = (role?: CardRole) => resolveCardRole(role) === 'ammo';
@@ -55,10 +108,40 @@ export const isLaunchGesturePastDeadZone = (
 
 export const resolveLaunchImpulseMagnitude = (
   power: number,
-  minimumImpulse: number,
-  maximumImpulse: number,
+  minimumImpulse = DEFAULT_LAUNCH_MINIMUM_IMPULSE,
+  maximumImpulse = DEFAULT_LAUNCH_MAXIMUM_IMPULSE,
 ) => {
-  const minimum = Math.max(0, Math.min(minimumImpulse, maximumImpulse));
-  const maximum = Math.max(minimum, maximumImpulse);
-  return minimum + clamp01(power) * (maximum - minimum);
+  const curvedPower = Math.pow(clamp01(Number.isFinite(power) ? power : 0), 1.6);
+  return interpolateImpulseRange(curvedPower, minimumImpulse, maximumImpulse);
 };
+
+export {
+  areCardsStackNeighbors,
+  distributeImpulseByMass,
+  distributeImpulseMagnitudeByMass,
+  distributeImpulseVectorByMass,
+  findStackedCardIds,
+  getLaunchPresetCandidates,
+  isCardBackContact,
+  localPointToWorld,
+  quaternionToWorldDirection,
+  quaternionToWorldVector,
+  resolveLaunchTarget,
+  resolveLaunchStack,
+  snapLaunchPresetContact,
+  worldDirectionFromQuaternion,
+} from './launchPresets';
+
+export type {
+  LaunchCardDimensions,
+  LaunchPreset,
+  LaunchPresetCandidate,
+  LaunchQuaternion,
+  LaunchTarget,
+  LaunchStackCard,
+  LaunchStackOptions,
+  LaunchVector3,
+  MassImpulseShare,
+  MassImpulseVectorShare,
+  SnappedLaunchPreset,
+} from './launchPresets';

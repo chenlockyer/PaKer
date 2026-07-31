@@ -12,6 +12,11 @@ export interface CardData {
 
 export type CardRole = 'structure' | 'ammo' | 'core';
 
+export type LaunchPreset =
+  | 'short-edge'
+  | 'long-edge-quarter'
+  | 'card-back-half';
+
 export interface LaunchGestureSample {
   x: number;
   y: number;
@@ -20,13 +25,22 @@ export interface LaunchGestureSample {
 
 export interface LaunchIntent {
   sequenceId: string;
-  cardId: string;
-  contactPointWorld: [number, number, number];
-  contactPointLocal: [number, number, number];
-  directionWorld: [number, number, number];
-  power: number;
-  gestureSpeed: number;
+  primaryCardId: string;
+  cardIds: string[];
+  preset: LaunchPreset;
+  meterPower: number;
+  totalImpulseMagnitude: number;
   pointerType: 'mouse' | 'touch' | 'pen';
+}
+
+export interface CardLaunchRequest {
+  sequenceId: string;
+  primaryCardId: string;
+  preset: LaunchPreset;
+  contactPointLocal: [number, number, number];
+  directionLocal: [number, number, number];
+  meterPower: number;
+  pointerType: LaunchIntent['pointerType'];
 }
 
 export interface LaunchPhysicsSnapshot {
@@ -40,10 +54,17 @@ export interface LaunchPhysicsSnapshot {
 
 export interface LaunchRecord {
   intent: LaunchIntent;
-  impulse: [number, number, number];
-  impulseMagnitude: number;
-  snapshotBefore: LaunchPhysicsSnapshot;
+  members: LaunchMemberRecord[];
   createdAt: number;
+}
+
+export interface LaunchMemberRecord {
+  cardId: string;
+  contactPointLocal: [number, number, number];
+  contactPointWorld: [number, number, number];
+  directionWorld: [number, number, number];
+  impulse: [number, number, number];
+  snapshotBefore: LaunchPhysicsSnapshot;
 }
 
 export interface LiveCardTransform {
@@ -199,7 +220,7 @@ export enum InteractionMode {
 export enum PointerMode {
   PLACE = 'PLACE',
   DELETE = 'DELETE',
-  MOVE = 'MOVE',
+  PUSH = 'PUSH',
   LAUNCH = 'LAUNCH'
 }
 
