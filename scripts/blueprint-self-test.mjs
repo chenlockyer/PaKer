@@ -71,6 +71,18 @@ try {
   };
   const worldCards = service.getBlueprintWorldCards(guide);
   const target = worldCards[0];
+  const instantiated = service.instantiateBlueprintCards(blueprint, {
+    origin: guide.origin,
+    yaw: guide.yaw,
+    locked: true,
+    idFactory: (sourceId, order) => `placed-${order}-${sourceId}`,
+  });
+  assert.equal(instantiated.length, blueprint.cardCount);
+  assert.equal(instantiated[0].id, 'placed-0-card-1');
+  assert.equal(instantiated[0].locked, true);
+  assert.deepEqual(instantiated[0].position, target.position);
+  assert.equal(instantiated[0].suit, card.suit);
+  assert.equal(instantiated[0].rank, card.rank);
   const targetEuler = new THREE.Euler().setFromQuaternion(
     new THREE.Quaternion(...target.quaternion),
     'XYZ',

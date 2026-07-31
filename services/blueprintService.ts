@@ -206,6 +206,50 @@ export const getBlueprintWorldCards = (
   });
 };
 
+export interface InstantiateBlueprintOptions {
+  origin?: [number, number, number];
+  yaw?: number;
+  locked: boolean;
+  idFactory?: (sourceId: string, order: number) => string;
+}
+
+/**
+ * Restores a blueprint snapshot as real scene cards. IDs are regenerated so a
+ * blueprint can be placed repeatedly without colliding with its source cards.
+ */
+export const instantiateBlueprintCards = (
+  blueprint: Blueprint,
+  options: InstantiateBlueprintOptions,
+): CardData[] => {
+  const origin = options.origin ?? [0, 0, 0];
+  const yaw = options.yaw ?? 0;
+  const sourceById = new Map(blueprint.snapshot.cards.map(card => [card.id, card]));
+  const placementToken = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const idFactory = options.idFactory ?? ((sourceId: string, order: number) =>
+    `placed_${placementToken}_${order}_${sourceId}`
+  );
+
+  return getBlueprintWorldCards({ blueprint, origin, yaw })
+    .sort((left, right) => left.order - right.order)
+    .flatMap(worldCard => {
+      const source = sourceById.get(worldCard.id);
+      if (!source) return [];
+      const euler = new THREE.Euler().setFromQuaternion(
+        new THREE.Quaternion(...worldCard.quaternion).normalize(),
+        'XYZ',
+      );
+      return [{
+        id: idFactory(source.id, source.order),
+        position: [...worldCard.position],
+        rotation: [euler.x, euler.y, euler.z],
+        suit: source.suit,
+        rank: source.rank,
+        color: source.color,
+        locked: options.locked,
+      } satisfies CardData];
+    });
+};
+
 const structuralAngleErrorDegrees = (
   targetQuaternion: THREE.Quaternion,
   playerQuaternion: THREE.Quaternion,

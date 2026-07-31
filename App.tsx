@@ -48,6 +48,7 @@ import {
   createBlueprint,
   createBlueprintSnapshot,
   createRecordedBlueprintSteps,
+  instantiateBlueprintCards,
   loadBlueprints,
   persistBlueprints,
 } from './services/blueprintService';
@@ -220,8 +221,8 @@ const App: React.FC = () => {
     position: [0, 8, 12],
     target: [0, 0, 0],
   });
-  const undoHistoryRef = useRef<CardData[][]>([]);
-  const redoHistoryRef = useRef<CardData[][]>([]);
+  const undoHistoryRef = useRef<Array<{ cards: CardData[]; cardSize: CardSize }>>([]);
+  const redoHistoryRef = useRef<Array<{ cards: CardData[]; cardSize: CardSize }>>([]);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
   const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
   const [challengePhase, setChallengePhase] = useState<ChallengePhase>(ChallengePhase.BUILDING);
@@ -255,10 +256,13 @@ const App: React.FC = () => {
     draggingCardId,
   };
 
-  const recordCardHistory = useCallback((snapshot: CardData[]) => {
-    undoHistoryRef.current = [...undoHistoryRef.current.slice(-49), snapshot];
+  const recordCardHistory = useCallback((snapshot: CardData[], snapshotCardSize = cardSize) => {
+    undoHistoryRef.current = [
+      ...undoHistoryRef.current.slice(-49),
+      { cards: snapshot, cardSize: snapshotCardSize },
+    ];
     redoHistoryRef.current = [];
-  }, []);
+  }, [cardSize]);
 
   const resetCardHistory = useCallback(() => {
     undoHistoryRef.current = [];
@@ -818,12 +822,66 @@ const App: React.FC = () => {
   }, []);
 
   const testBlueprintFromStart = useCallback((blueprint: Blueprint) => {
-    if (cards.length > 0) recordCardHistory(cards);
+    recordCardHistory(cards.map(card => {
+      const transform = liveCardTransformsRef.current.get(card.id);
+      return transform
+        ? {
+            ...card,
+            position: [...transform.position],
+            rotation: [...transform.rotation],
+          }
+        : { ...card };
+    }));
     setCards([]);
     liveCardTransformsRef.current.clear();
     setIsFreezeMode(false);
     startBlueprintGuide(blueprint);
   }, [cards, recordCardHistory, startBlueprintGuide]);
+
+  const quickPlaceBlueprint = useCallback((blueprint: Blueprint) => {
+    if (gameMode !== GameMode.FREE) return;
+    if (
+      cards.length > 0 &&
+      !confirm(lang === 'zh'
+        ? '一键放置会清空并替换当前建筑，是否继续？'
+        : 'Quick place will clear and replace the current build. Continue?')
+    ) return;
+
+    const placedCards = instantiateBlueprintCards(blueprint, {
+      origin: [0, 0, 0],
+      yaw: 0,
+      locked: isFreezeMode,
+    });
+    if (placedCards.length === 0) return;
+    recordCardHistory(cards.map(card => {
+      const transform = liveCardTransformsRef.current.get(card.id);
+      return transform
+        ? {
+            ...card,
+            position: [...transform.position],
+            rotation: [...transform.rotation],
+          }
+        : { ...card };
+    }));
+
+    liveCardTransformsRef.current.clear();
+    placedCards.forEach(card => {
+      liveCardTransformsRef.current.set(card.id, {
+        position: [...card.position],
+        rotation: [...card.rotation],
+      });
+    });
+    setCardSize(blueprint.cardSize);
+    setCards(placedCards);
+    setDraggingCardId(null);
+    setPointerMode(PointerMode.PLACE);
+    setBlueprintGuide(null);
+    setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+    setBlueprintRecording(null);
+    blueprintCheckpointRef.current = [];
+    blueprintCheckpointReadyRef.current = false;
+    setShowBlueprintStudio(false);
+  }, [cards, gameMode, isFreezeMode, lang, recordCardHistory]);
 
   const placeBlueprintOrigin = useCallback((origin: [number, number, number]) => {
     blueprintCheckpointRef.current = cards.map(card => {
@@ -1085,22 +1143,30 @@ const App: React.FC = () => {
     const previous = undoHistoryRef.current.pop();
     if (!previous) return;
     setCards(current => {
-      redoHistoryRef.current = [...redoHistoryRef.current.slice(-49), current];
-      return previous;
+      redoHistoryRef.current = [
+        ...redoHistoryRef.current.slice(-49),
+        { cards: current, cardSize },
+      ];
+      return previous.cards;
     });
+    setCardSize(previous.cardSize);
     setDraggingCardId(null);
-  }, [challengePhase, gameMode]);
+  }, [cardSize, challengePhase, gameMode]);
 
   const redoCards = useCallback(() => {
     if (gameMode === GameMode.CHALLENGE && challengePhase !== ChallengePhase.BUILDING) return;
     const next = redoHistoryRef.current.pop();
     if (!next) return;
     setCards(current => {
-      undoHistoryRef.current = [...undoHistoryRef.current.slice(-49), current];
-      return next;
+      undoHistoryRef.current = [
+        ...undoHistoryRef.current.slice(-49),
+        { cards: current, cardSize },
+      ];
+      return next.cards;
     });
+    setCardSize(next.cardSize);
     setDraggingCardId(null);
-  }, [challengePhase, gameMode]);
+  }, [cardSize, challengePhase, gameMode]);
 
   useEffect(() => {
     if (challengePhase !== ChallengePhase.COUNTDOWN) return;
@@ -1483,6 +1549,8 @@ const App: React.FC = () => {
         onDelete={deleteBlueprint}
         onImport={importBlueprint}
         onUse={startBlueprintGuide}
+        onQuickPlace={quickPlaceBlueprint}
+        quickPlaceEnabled={gameMode === GameMode.FREE && interactionEnabled}
         onTest={testBlueprintFromStart}
         onUpdate={updateBlueprint}
         onStartRecording={startBlueprintRecording}

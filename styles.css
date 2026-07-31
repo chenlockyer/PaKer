@@ -820,6 +820,9 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .blueprint-card footer button:hover { background: var(--surface-hover); color: var(--ink); }
 .blueprint-card footer .danger-text:hover { color: var(--danger); }
 .blueprint-card footer .blueprint-use { color: var(--accent-ink); font-weight: 800; }
+.blueprint-card footer .blueprint-quick-place { color: var(--accent-ink); font-weight: 900; background: var(--accent-soft); }
+.blueprint-card footer .blueprint-quick-place:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.blueprint-card footer button:disabled { cursor: not-allowed; opacity: .42; }
 
 /* Blueprint step editor */
 .blueprint-editor { min-height: 0; display: grid; grid-template-columns: 310px 1fr; overflow: hidden; }

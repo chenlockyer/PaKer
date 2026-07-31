@@ -30,6 +30,8 @@ interface BlueprintStudioProps {
   onDelete: (id: string) => void;
   onImport: (blueprint: Blueprint) => void;
   onUse: (blueprint: Blueprint) => void;
+  onQuickPlace: (blueprint: Blueprint) => void;
+  quickPlaceEnabled: boolean;
   onTest: (blueprint: Blueprint) => void;
   onUpdate: (blueprint: Blueprint) => void;
   onStartRecording: () => void;
@@ -170,6 +172,8 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
   onDelete,
   onImport,
   onUse,
+  onQuickPlace,
+  quickPlaceEnabled,
   onTest,
   onUpdate,
   onStartRecording,
@@ -476,6 +480,16 @@ const BlueprintStudio: React.FC<BlueprintStudioProps> = ({
                       )}
                     </div>
                     <footer>
+                      <button
+                        className="blueprint-quick-place"
+                        onClick={() => onQuickPlace(blueprint)}
+                        disabled={!quickPlaceEnabled || blueprint.snapshot.cards.length === 0}
+                        title={!quickPlaceEnabled
+                          ? (lang === 'zh' ? '仅可在自由建造模式中使用' : 'Available in free build only')
+                          : undefined}
+                      >
+                        {lang === 'zh' ? '一键放置' : 'Quick place'}
+                      </button>
                       <button
                         className="blueprint-use"
                         onClick={() => onUse(blueprint)}
