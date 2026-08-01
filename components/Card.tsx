@@ -144,6 +144,12 @@ const LaunchChargePreview = ({
   cameraQuaternion: THREE.Quaternion;
 }) => {
   const end = contact.clone().add(direction.clone().multiplyScalar(0.9));
+  const clampedPower = THREE.MathUtils.clamp(power, 0, 1);
+  const meterWidth = 1.04;
+  const fillWidth = Math.max(0.001, meterWidth * clampedPower);
+  const meterLeft = -meterWidth / 2;
+  const cursorX = meterLeft + meterWidth * clampedPower;
+  const fillColor = `hsl(${125 - clampedPower * 70} 82% 50%)`;
   const arrowRotation = new THREE.Quaternion().setFromUnitVectors(
     new THREE.Vector3(0, 1, 0),
     direction,
@@ -163,13 +169,49 @@ const LaunchChargePreview = ({
         position={contact.clone().add(new THREE.Vector3(0, 0.35, 0))}
         quaternion={cameraQuaternion}
       >
-        <mesh>
-          <planeGeometry args={[1.1, 0.13]} />
-          <meshBasicMaterial color="#17202b" transparent opacity={0.86} depthTest={false} />
+        <mesh renderOrder={30}>
+          <planeGeometry args={[1.16, 0.19]} />
+          <meshBasicMaterial
+            color="#718096"
+            transparent
+            opacity={0.74}
+            depthTest={false}
+            depthWrite={false}
+          />
         </mesh>
-        <mesh position={[-0.54 + power * 1.08, 0, 0.012]}>
-          <circleGeometry args={[0.075, 18]} />
-          <meshBasicMaterial color="#f59e0b" depthTest={false} />
+        <mesh position={[0, 0, 0.004]} renderOrder={31}>
+          <planeGeometry args={[1.1, 0.13]} />
+          <meshBasicMaterial
+            color="#f8fafc"
+            transparent
+            opacity={0.94}
+            depthTest={false}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh position={[meterLeft + fillWidth / 2, 0, 0.009]} scale={[fillWidth, 1, 1]} renderOrder={32}>
+          <planeGeometry args={[1, 0.085]} />
+          <meshBasicMaterial color={fillColor} depthTest={false} depthWrite={false} />
+        </mesh>
+        {[-0.26, 0, 0.26].map(tickX => (
+          <mesh key={tickX} position={[tickX, 0, 0.014]} renderOrder={33}>
+            <planeGeometry args={[0.012, 0.072]} />
+            <meshBasicMaterial
+              color="#64748b"
+              transparent
+              opacity={0.48}
+              depthTest={false}
+              depthWrite={false}
+            />
+          </mesh>
+        ))}
+        <mesh position={[cursorX, 0, 0.019]} renderOrder={34}>
+          <circleGeometry args={[0.082, 24]} />
+          <meshBasicMaterial color={fillColor} depthTest={false} depthWrite={false} />
+        </mesh>
+        <mesh position={[cursorX, 0, 0.023]} renderOrder={35}>
+          <circleGeometry args={[0.045, 20]} />
+          <meshBasicMaterial color="#ffffff" depthTest={false} depthWrite={false} />
         </mesh>
       </group>
     </group>
