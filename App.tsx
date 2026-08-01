@@ -806,6 +806,7 @@ const App: React.FC = () => {
       origin: [0, 0, 0],
       yaw: 0,
       placing: !autoPlaceAtCenter,
+      placementAction: 'guide',
       visible: true,
       currentStepIndex: 0,
       assistance: isOfficialTutorial(blueprint) ? 'full' : 'step',
@@ -840,50 +841,69 @@ const App: React.FC = () => {
 
   const quickPlaceBlueprint = useCallback((blueprint: Blueprint) => {
     if (gameMode !== GameMode.FREE) return;
-    if (
-      cards.length > 0 &&
-      !confirm(lang === 'zh'
-        ? '一键放置会清空并替换当前建筑，是否继续？'
-        : 'Quick place will clear and replace the current build. Continue?')
-    ) return;
-
-    const placedCards = instantiateBlueprintCards(blueprint, {
-      origin: [0, 0, 0],
-      yaw: 0,
-      locked: isFreezeMode,
-    });
-    if (placedCards.length === 0) return;
-    recordCardHistory(cards.map(card => {
-      const transform = liveCardTransformsRef.current.get(card.id);
-      return transform
-        ? {
-            ...card,
-            position: [...transform.position],
-            rotation: [...transform.rotation],
-          }
-        : { ...card };
-    }));
-
-    liveCardTransformsRef.current.clear();
-    placedCards.forEach(card => {
-      liveCardTransformsRef.current.set(card.id, {
-        position: [...card.position],
-        rotation: [...card.rotation],
-      });
-    });
-    setCardSize(blueprint.cardSize);
-    setCards(placedCards);
+    if (cards.length > 0 && cardSize !== blueprint.cardSize) {
+      alert(lang === 'zh'
+        ? '当前桌面的卡牌尺寸与蓝图不同。请在同一尺寸的桌面中放置此蓝图。'
+        : 'The cards on the table use a different size. Place this blueprint in a table with the same card size.');
+      return;
+    }
     setDraggingCardId(null);
     setPointerMode(PointerMode.PLACE);
-    setBlueprintGuide(null);
-    setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+    setBlueprintGuide({
+      blueprint,
+      origin: [0, 0, 0],
+      yaw: 0,
+      placing: true,
+      placementAction: 'quick-place',
+      visible: true,
+      currentStepIndex: 0,
+      assistance: 'full',
+    });
+    setBlueprintProgress({
+      ...EMPTY_BLUEPRINT_PROGRESS,
+      total: blueprint.cardCount,
+      currentStepTotal: blueprint.cardCount,
+      activeTargetId: blueprint.snapshot.cards[0]?.id ?? null,
+    });
     setBlueprintRecording(null);
     blueprintCheckpointRef.current = [];
     blueprintCheckpointReadyRef.current = false;
     setShowBlueprintStudio(false);
-  }, [cards, gameMode, isFreezeMode, lang, recordCardHistory]);
+  }, [cardSize, cards.length, gameMode, lang]);
 
   const placeBlueprintOrigin = useCallback((origin: [number, number, number]) => {
+    if (blueprintGuide?.placementAction === 'quick-place') {
+      const placedCards = instantiateBlueprintCards(blueprintGuide.blueprint, {
+        origin,
+        yaw: blueprintGuide.yaw,
+        locked: isFreezeMode,
+      });
+      if (placedCards.length === 0) return;
+      if (cards.length === 0) setCardSize(blueprintGuide.blueprint.cardSize);
+      const currentCards: CardData[] = cards.map(card => {
+        const transform = liveCardTransformsRef.current.get(card.id);
+        return transform
+          ? {
+              ...card,
+              position: [...transform.position] as [number, number, number],
+              rotation: [...transform.rotation] as [number, number, number],
+            }
+          : { ...card };
+      });
+      recordCardHistory(currentCards);
+      placedCards.forEach(card => {
+        liveCardTransformsRef.current.set(card.id, {
+          position: [...card.position],
+          rotation: [...card.rotation],
+        });
+      });
+      setCards([...currentCards, ...placedCards]);
+      setBlueprintGuide(null);
+      setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+      blueprintCheckpointRef.current = [];
+      blueprintCheckpointReadyRef.current = false;
+      return;
+    }
     blueprintCheckpointRef.current = cards.map(card => {
       const transform = liveCardTransformsRef.current.get(card.id);
       return transform
@@ -892,7 +912,7 @@ const App: React.FC = () => {
     });
     blueprintCheckpointReadyRef.current = true;
     setBlueprintGuide(previous => previous ? { ...previous, origin, placing: false } : null);
-  }, [cards]);
+  }, [blueprintGuide, cards, isFreezeMode, recordCardHistory]);
 
   const handleBlueprintProgress = useCallback((progress: BlueprintGuideProgress) => {
     setBlueprintProgress(previous => {

@@ -160,6 +160,7 @@ export interface BlueprintGuideState {
   origin: [number, number, number];
   yaw: number;
   placing: boolean;
+  placementAction?: 'guide' | 'quick-place';
   visible: boolean;
   currentStepIndex: number;
   assistance: BlueprintAssistance;
