@@ -154,8 +154,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         cardMass: ['卡牌质量', 'kg'],
         cardFriction: ['卡牌摩擦', ''],
         floorFriction: ['地板摩擦', ''],
-        launchMinimumImpulse: ['最小弹射冲量', ''],
-        launchMaximumImpulse: ['最大弹射冲量', ''],
+        launchMinimumSpeed: ['最低弹射速度', 'm/s'],
+        launchMaximumSpeed: ['最高弹射速度', 'm/s'],
+        launchMaximumForce: ['手指最大推力', 'N'],
+        launchStrokeDistance: ['弹射加速行程', 'm'],
+        launchMaximumActuationMs: ['最长接触时间', '秒'],
         structureLinearDamping: ['结构线性阻尼', ''],
         structureAngularDamping: ['结构角阻尼', ''],
         flightLinearDamping: ['飞行线性阻尼', ''],
@@ -167,8 +170,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         cardMass: ['Card mass', 'kg'],
         cardFriction: ['Card friction', ''],
         floorFriction: ['Floor friction', ''],
-        launchMinimumImpulse: ['Minimum launch impulse', ''],
-        launchMaximumImpulse: ['Maximum launch impulse', ''],
+        launchMinimumSpeed: ['Minimum launch speed', 'm/s'],
+        launchMaximumSpeed: ['Maximum launch speed', 'm/s'],
+        launchMaximumForce: ['Maximum finger force', 'N'],
+        launchStrokeDistance: ['Acceleration stroke', 'm'],
+        launchMaximumActuationMs: ['Maximum contact time', 's'],
         structureLinearDamping: ['Structure linear damping', ''],
         structureAngularDamping: ['Structure angular damping', ''],
         flightLinearDamping: ['Flight linear damping', ''],
@@ -179,16 +185,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const updatePhysicsDraft = (key: PhysicsSettingKey, displayedValue: number) => {
     if (!Number.isFinite(displayedValue)) return;
-    const rawValue = key === 'meterOneWayDurationMs' ? displayedValue * 1000 : displayedValue;
+    const rawValue = key === 'meterOneWayDurationMs' || key === 'launchMaximumActuationMs'
+      ? displayedValue * 1000
+      : displayedValue;
     const range = PHYSICS_SETTING_RANGES[key];
     const value = Math.min(range.max, Math.max(range.min, rawValue));
     setPhysicsDraft(previous => {
       const next: PhysicsSettings = { ...previous, [key]: value };
-      if (key === 'launchMinimumImpulse' && value > next.launchMaximumImpulse) {
-        next.launchMaximumImpulse = value;
+      if (key === 'launchMinimumSpeed' && value > next.launchMaximumSpeed) {
+        next.launchMaximumSpeed = value;
       }
-      if (key === 'launchMaximumImpulse' && value < next.launchMinimumImpulse) {
-        next.launchMinimumImpulse = value;
+      if (key === 'launchMaximumSpeed' && value < next.launchMinimumSpeed) {
+        next.launchMinimumSpeed = value;
       }
       return next;
     });
@@ -196,7 +204,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const renderPhysicsControl = (key: PhysicsSettingKey) => {
     const range = PHYSICS_SETTING_RANGES[key];
-    const divisor = key === 'meterOneWayDurationMs' ? 1000 : 1;
+    const divisor = key === 'meterOneWayDurationMs' || key === 'launchMaximumActuationMs'
+      ? 1000
+      : 1;
     const value = physicsDraft[key] / divisor;
     const [label, unit] = physicsLabels[key];
     return (
@@ -433,14 +443,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
               <div className="physics-settings-list">
-                {(['cardMass', 'cardFriction', 'floorFriction', 'launchMaximumImpulse'] as PhysicsSettingKey[])
+                {(['cardMass', 'cardFriction', 'floorFriction', 'launchMaximumSpeed'] as PhysicsSettingKey[])
                   .map(renderPhysicsControl)}
               </div>
               <details className="physics-advanced">
                 <summary>{lang === 'zh' ? '高级参数' : 'Advanced parameters'}</summary>
                 <div className="physics-settings-list">
                   {([
-                    'launchMinimumImpulse',
+                    'launchMinimumSpeed',
+                    'launchMaximumForce',
+                    'launchStrokeDistance',
+                    'launchMaximumActuationMs',
                     'structureLinearDamping',
                     'structureAngularDamping',
                     'flightLinearDamping',

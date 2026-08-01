@@ -6,6 +6,7 @@ import {
   CuboidCollider,
   Physics,
   RigidBody,
+  useBeforePhysicsStep,
   useRapier,
   type RapierCollider,
 } from '@react-three/rapier';
@@ -24,6 +25,7 @@ import {
   LaunchMemberRecord,
   LaunchPreset,
   LaunchRecord,
+  LaunchTerminationReason,
   LiveCardTransform,
   RotationPreset,
   InteractionMode,
@@ -39,14 +41,14 @@ import {
 } from '../input/InputContext';
 import type { CardPhysicsHandle } from '../physics/cardPhysics';
 import {
-  distributeImpulseByMass,
   findStackedCardIds,
   getLaunchPresetCandidates,
   localPointToWorld,
   quaternionToWorldVector,
-  resolveLaunchImpulseMagnitude,
+  resolveLaunchTargetSpeed,
   worldDirectionFromQuaternion,
 } from '../physics/launchGesture';
+import { resolveLaunchActuatorStep } from '../physics/launchActuator';
 
 const useRepeatingInputAction = (
   action: InputAction,
@@ -106,6 +108,187 @@ interface PhysicsWorldProps {
   onBlueprintStepComplete: (playerCardIds: string[]) => void;
   onBlueprintStepRegression: (stepIndex: number) => void;
 }
+
+interface ActiveLaunchMember {
+  cardId: string;
+  handle: CardPhysicsHandle;
+  mass: number;
+  contactPointLocal: [number, number, number];
+  contactPointWorld: [number, number, number];
+  directionWorld: [number, number, number];
+  cumulativeImpulse: [number, number, number];
+  snapshotBefore: LaunchMemberRecord['snapshotBefore'];
+}
+
+interface ActiveLaunchSession {
+  intent: LaunchRecord['intent'];
+  directionLocal: [number, number, number];
+  members: ActiveLaunchMember[];
+  totalMass: number;
+  actualStroke: number;
+  durationMs: number;
+  totalImpulseMagnitude: number;
+  workUsed: number;
+  workLimit: number;
+  maximumActuationMs: number;
+  lastPrimaryContactWorld: [number, number, number];
+  createdAt: number;
+}
+
+interface LaunchActuatorControllerProps {
+  sessionsRef: React.MutableRefObject<Map<string, ActiveLaunchSession>>;
+  busyCardIdsRef: React.MutableRefObject<Set<string>>;
+  physicsHandlesRef: React.MutableRefObject<Map<string, CardPhysicsHandle>>;
+  cardsRef: React.MutableRefObject<CardData[]>;
+  onCardLaunch: (record: LaunchRecord) => void;
+}
+
+const dotVector = (left: [number, number, number], right: [number, number, number]) => (
+  left[0] * right[0] + left[1] * right[1] + left[2] * right[2]
+);
+
+const finishLaunchSession = (
+  session: ActiveLaunchSession,
+  reason: LaunchTerminationReason,
+  onCardLaunch: (record: LaunchRecord) => void,
+) => {
+  const members: LaunchMemberRecord[] = session.members.map(member => {
+    let snapshotAfter = member.snapshotBefore;
+    try {
+      snapshotAfter = member.handle.getSnapshot();
+    } catch {
+      // A removed rigid-body keeps its last valid launch snapshot in the record.
+    }
+    return {
+      cardId: member.cardId,
+      contactPointLocal: [...member.contactPointLocal],
+      contactPointWorld: [...member.contactPointWorld],
+      directionWorld: [...member.directionWorld],
+      impulse: [...member.cumulativeImpulse],
+      snapshotBefore: member.snapshotBefore,
+      snapshotAfter,
+    };
+  });
+  onCardLaunch({
+    intent: session.intent,
+    members,
+    totalImpulseMagnitude: session.totalImpulseMagnitude,
+    actualStroke: session.actualStroke,
+    durationMs: session.durationMs,
+    terminationReason: reason,
+    createdAt: session.createdAt,
+  });
+};
+
+const LaunchActuatorController: React.FC<LaunchActuatorControllerProps> = ({
+  sessionsRef,
+  busyCardIdsRef,
+  physicsHandlesRef,
+  cardsRef,
+  onCardLaunch,
+}) => {
+  useBeforePhysicsStep(() => {
+    const fixedDeltaTime = 1 / 60;
+    const lockedIds = new Set(cardsRef.current.filter(card => card.locked).map(card => card.id));
+
+    for (const [sequenceId, session] of sessionsRef.current) {
+      const primary = session.members.find(member => member.cardId === session.intent.primaryCardId);
+      const invalid = !primary || session.members.some(member => (
+        !physicsHandlesRef.current.has(member.cardId) || lockedIds.has(member.cardId)
+      ));
+
+      const complete = (reason: LaunchTerminationReason) => {
+        finishLaunchSession(session, reason, onCardLaunch);
+        sessionsRef.current.delete(sequenceId);
+        session.members.forEach(member => busyCardIdsRef.current.delete(member.cardId));
+      };
+
+      if (invalid || !primary) {
+        complete('invalid-member');
+        continue;
+      }
+
+      const primarySnapshot = primary.handle.getSnapshot();
+      const directionWorld = worldDirectionFromQuaternion(
+        session.directionLocal,
+        primarySnapshot.quaternion,
+      );
+      const primaryContactWorld = localPointToWorld(
+        primary.contactPointLocal,
+        primarySnapshot.position,
+        primarySnapshot.quaternion,
+      );
+      const strokeStep = Math.max(0, dotVector([
+        primaryContactWorld[0] - session.lastPrimaryContactWorld[0],
+        primaryContactWorld[1] - session.lastPrimaryContactWorld[1],
+        primaryContactWorld[2] - session.lastPrimaryContactWorld[2],
+      ], directionWorld));
+      session.actualStroke += strokeStep;
+      session.lastPrimaryContactWorld = primaryContactWorld;
+
+      if (session.actualStroke >= session.intent.strokeLimit) {
+        complete('stroke-complete');
+        continue;
+      }
+      if (session.durationMs >= session.maximumActuationMs) {
+        complete('time-limit');
+        continue;
+      }
+      if (session.workUsed >= session.workLimit - 1e-6) {
+        complete('stroke-complete');
+        continue;
+      }
+
+      let weightedForwardSpeed = 0;
+      for (const member of session.members) {
+        const snapshot = member.handle.getSnapshot();
+        weightedForwardSpeed += dotVector(snapshot.linearVelocity, directionWorld) * member.mass;
+      }
+      const groupForwardSpeed = weightedForwardSpeed / session.totalMass;
+      const step = resolveLaunchActuatorStep({
+        totalMass: session.totalMass,
+        forwardSpeed: groupForwardSpeed,
+        targetSpeed: session.intent.targetSpeed,
+        maximumForce: session.intent.forceLimit,
+        deltaTime: fixedDeltaTime,
+        remainingWork: session.workLimit - session.workUsed,
+      });
+      if (step.impulseMagnitude <= 0) {
+        complete('target-speed');
+        continue;
+      }
+
+      for (const member of session.members) {
+        const snapshot = member.handle.getSnapshot();
+        const contactPointWorld = localPointToWorld(
+          member.contactPointLocal,
+          snapshot.position,
+          snapshot.quaternion,
+        );
+        const share = step.impulseMagnitude * member.mass / session.totalMass;
+        const impulse: [number, number, number] = [
+          directionWorld[0] * share,
+          directionWorld[1] * share,
+          directionWorld[2] * share,
+        ];
+        member.handle.wakeUp();
+        member.handle.applyImpulseAtPoint(impulse, contactPointWorld);
+        member.contactPointWorld = contactPointWorld;
+        member.directionWorld = directionWorld;
+        member.cumulativeImpulse = [
+          member.cumulativeImpulse[0] + impulse[0],
+          member.cumulativeImpulse[1] + impulse[1],
+          member.cumulativeImpulse[2] + impulse[2],
+        ];
+      }
+      session.totalImpulseMagnitude += step.impulseMagnitude;
+      session.workUsed += step.workApplied;
+      session.durationMs += fixedDeltaTime * 1000;
+    }
+  });
+
+  return null;
+};
 
 const WindVisual = ({ strength }: { strength: number }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -657,6 +840,10 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
   const physicsHandlesRef = useRef(new Map<string, CardPhysicsHandle>());
   const launchedSequencesRef = useRef(new Set<string>());
+  const activeLaunchSessionsRef = useRef(new Map<string, ActiveLaunchSession>());
+  const busyLaunchCardIdsRef = useRef(new Set<string>());
+  const cardsRef = useRef(cards);
+  cardsRef.current = cards;
   const flightDampingRef = useRef(new Map<string, {
     startedAt: number;
     stableAt: number | null;
@@ -757,18 +944,16 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
         ) >= minimumNormalDot;
       });
     }
-    if (members.length === 0) return;
+    if (members.length === 0 || members.some(({ card }) => busyLaunchCardIdsRef.current.has(card.id))) {
+      return;
+    }
 
-    const totalImpulseMagnitude = resolveLaunchImpulseMagnitude(
+    const targetSpeed = resolveLaunchTargetSpeed(
       request.meterPower,
-      physicsSettings.launchMinimumImpulse,
-      physicsSettings.launchMaximumImpulse,
+      physicsSettings.launchMinimumSpeed,
+      physicsSettings.launchMaximumSpeed,
     );
-    const shares = distributeImpulseByMass(
-      totalImpulseMagnitude,
-      members.map(({ card }) => ({ id: card.id, mass: card.mass })),
-    );
-    const memberRecords: LaunchMemberRecord[] = [];
+    const activeMembers: ActiveLaunchMember[] = [];
     const nowSeconds = performance.now() / 1000;
     const primarySnapshot = primaryMember?.handle.getSnapshot();
     const primaryDirectionWorld = primarySnapshot
@@ -780,8 +965,6 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     const presetCandidates = getLaunchPresetCandidates(request.preset, dimensions);
 
     for (const { handle, card } of members) {
-      const share = shares.find(candidate => candidate.cardId === card.id);
-      if (!share) continue;
       const snapshotBefore = handle.getSnapshot();
       const memberTarget = presetCandidates.reduce((best, candidate) => {
         const direction = worldDirectionFromQuaternion(
@@ -824,11 +1007,6 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
         snapshotBefore.position,
         snapshotBefore.quaternion,
       );
-      const impulse: [number, number, number] = [
-        directionWorld[0] * share.impulseMagnitude,
-        directionWorld[1] * share.impulseMagnitude,
-        directionWorld[2] * share.impulseMagnitude,
-      ];
       const previousFlight = flightDampingRef.current.get(card.id);
       const originalDamping = previousFlight
         ? {
@@ -841,37 +1019,55 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
         physicsSettings.flightAngularDamping,
       );
       handle.wakeUp();
-      handle.applyImpulseAtPoint(impulse, contactPointWorld);
       flightDampingRef.current.set(card.id, {
         startedAt: nowSeconds,
         stableAt: null,
         originalLinear: originalDamping.linear,
         originalAngular: originalDamping.angular,
       });
-      memberRecords.push({
+      activeMembers.push({
         cardId: card.id,
+        handle,
+        mass: card.mass,
         contactPointLocal: [...contactPointLocal],
         contactPointWorld,
         directionWorld,
-        impulse,
+        cumulativeImpulse: [0, 0, 0],
         snapshotBefore,
       });
     }
+    if (activeMembers.length === 0) return;
+    const activePrimary = activeMembers.find(member => member.cardId === request.primaryCardId);
+    if (!activePrimary) return;
+    const totalMass = activeMembers.reduce((sum, member) => sum + member.mass, 0);
+    if (totalMass <= 0) return;
 
-    onCardLaunch({
+    activeMembers.forEach(member => busyLaunchCardIdsRef.current.add(member.cardId));
+    activeLaunchSessionsRef.current.set(request.sequenceId, {
       intent: {
         sequenceId: request.sequenceId,
         primaryCardId: request.primaryCardId,
-        cardIds: memberRecords.map(member => member.cardId),
+        cardIds: activeMembers.map(member => member.cardId),
         preset: request.preset,
         meterPower: request.meterPower,
-        totalImpulseMagnitude,
+        targetSpeed,
+        forceLimit: physicsSettings.launchMaximumForce,
+        strokeLimit: physicsSettings.launchStrokeDistance,
         pointerType: request.pointerType,
       },
-      members: memberRecords,
+      directionLocal: [...request.directionLocal],
+      members: activeMembers,
+      totalMass,
+      actualStroke: 0,
+      durationMs: 0,
+      totalImpulseMagnitude: 0,
+      workUsed: 0,
+      workLimit: physicsSettings.launchMaximumForce * physicsSettings.launchStrokeDistance,
+      maximumActuationMs: physicsSettings.launchMaximumActuationMs,
+      lastPrimaryContactWorld: [...activePrimary.contactPointWorld],
       createdAt: Date.now(),
     });
-  }, [cardSize, cards, onCardLaunch, physicsSettings]);
+  }, [cardSize, cards, physicsSettings]);
 
   useFrame(({ clock }) => {
     const nowSeconds = performance.now() / 1000;
@@ -947,6 +1143,13 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       allowedLinearError={0.0005}
     >
       <RapierWorldSettings />
+      <LaunchActuatorController
+        sessionsRef={activeLaunchSessionsRef}
+        busyCardIdsRef={busyLaunchCardIdsRef}
+        physicsHandlesRef={physicsHandlesRef}
+        cardsRef={cardsRef}
+        onCardLaunch={onCardLaunch}
+      />
       <ambientLight intensity={0.5} />
       <directionalLight
         position={[10, 20, 10]}

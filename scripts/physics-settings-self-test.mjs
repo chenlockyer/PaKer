@@ -29,16 +29,36 @@ try {
     ...service.DEFAULT_PHYSICS_SETTINGS,
     cardMass: 99,
     cardFriction: -2,
-    launchMinimumImpulse: 1,
-    launchMaximumImpulse: 0.5,
+    launchMinimumSpeed: 30,
+    launchMaximumSpeed: 10,
+    launchMaximumForce: 999,
     meterOneWayDurationMs: Number.NaN,
   });
   assert.equal(normalized.cardMass, 0.5);
   assert.equal(normalized.cardFriction, 0);
-  assert.equal(normalized.launchMinimumImpulse, 0.5);
+  assert.equal(normalized.launchMinimumSpeed, 10);
+  assert.equal(normalized.launchMaximumForce, 400);
   assert.equal(normalized.meterOneWayDurationMs, 1200);
   service.persistPhysicsSettings(storage, normalized);
   assert.deepEqual(service.loadPhysicsSettings(storage), normalized);
+
+  const migrated = service.normalizePhysicsSettings({
+    schemaVersion: 1,
+    cardMass: 0.1,
+    cardFriction: 1,
+    floorFriction: 1.1,
+    launchMinimumImpulse: 0.25,
+    launchMaximumImpulse: 2.45,
+    structureLinearDamping: 0.5,
+    structureAngularDamping: 0.5,
+    flightLinearDamping: 0.08,
+    flightAngularDamping: 0.08,
+    pushMaximumImpulse: 0.45,
+    meterOneWayDurationMs: 1200,
+  });
+  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.launchMinimumSpeed, 2.5);
+  assert.equal(migrated.launchMaximumSpeed, 24.5);
 
   store.set(service.PHYSICS_SETTINGS_STORAGE_KEY, '{broken');
   assert.deepEqual(service.loadPhysicsSettings(storage), service.DEFAULT_PHYSICS_SETTINGS);

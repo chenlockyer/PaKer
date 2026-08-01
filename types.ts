@@ -11,12 +11,15 @@ export interface CardData {
 }
 
 export interface PhysicsSettings {
-  schemaVersion: 1;
+  schemaVersion: 2;
   cardMass: number;
   cardFriction: number;
   floorFriction: number;
-  launchMinimumImpulse: number;
-  launchMaximumImpulse: number;
+  launchMinimumSpeed: number;
+  launchMaximumSpeed: number;
+  launchMaximumForce: number;
+  launchStrokeDistance: number;
+  launchMaximumActuationMs: number;
   structureLinearDamping: number;
   structureAngularDamping: number;
   flightLinearDamping: number;
@@ -44,9 +47,18 @@ export interface LaunchIntent {
   cardIds: string[];
   preset: LaunchPreset;
   meterPower: number;
-  totalImpulseMagnitude: number;
+  targetSpeed: number;
+  forceLimit: number;
+  strokeLimit: number;
   pointerType: 'mouse' | 'touch' | 'pen';
 }
+
+export type LaunchTerminationReason =
+  | 'target-speed'
+  | 'stroke-complete'
+  | 'time-limit'
+  | 'invalid-member'
+  | 'cancelled';
 
 export interface CardLaunchRequest {
   sequenceId: string;
@@ -70,6 +82,10 @@ export interface LaunchPhysicsSnapshot {
 export interface LaunchRecord {
   intent: LaunchIntent;
   members: LaunchMemberRecord[];
+  totalImpulseMagnitude: number;
+  actualStroke: number;
+  durationMs: number;
+  terminationReason: LaunchTerminationReason;
   createdAt: number;
 }
 
@@ -80,6 +96,7 @@ export interface LaunchMemberRecord {
   directionWorld: [number, number, number];
   impulse: [number, number, number];
   snapshotBefore: LaunchPhysicsSnapshot;
+  snapshotAfter: LaunchPhysicsSnapshot;
 }
 
 export interface LiveCardTransform {

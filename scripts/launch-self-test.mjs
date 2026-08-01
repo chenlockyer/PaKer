@@ -73,6 +73,8 @@ try {
   assert.equal(gesture.resolveLaunchMeterPower(-100), 0);
   assert.equal(gesture.resolvePowerMeter(600), 0.5);
   assert.equal(gesture.resolvePowerMeter(600, 600), 1);
+  assert.equal(gesture.resolveLaunchTargetSpeed(0, 2.5, 24.5), 2.5);
+  assert.equal(gesture.resolveLaunchTargetSpeed(1, 2.5, 24.5), 24.5);
   assert.equal(gesture.resolveFormalLaunchImpulseMagnitude(0), 0.25);
   assert.equal(gesture.resolveFormalLaunchImpulseMagnitude(1), 2.45);
   assert.equal(gesture.resolvePushImpulseMagnitude(0), 0.02);
@@ -88,6 +90,60 @@ try {
       < gesture.resolveFormalLaunchImpulseMagnitude(0.5),
     'push must remain much weaker than formal launch',
   );
+
+  // Fixed-stroke actuator: light loads hit the speed cap, heavy loads decay smoothly.
+  const idealSpeeds = [1, 2, 3, 4, 6].map(count =>
+    gesture.resolveIdealActuatorExitSpeed(count * 0.1, 24.5, 150, 0.45),
+  );
+  assert.equal(idealSpeeds[0], 24.5);
+  assert.equal(idealSpeeds[1], 24.5);
+  assert.ok(idealSpeeds[2] / idealSpeeds[0] > 0.8);
+  assert.ok(idealSpeeds[2] / idealSpeeds[0] < 0.95);
+  assert.ok(idealSpeeds[4] / idealSpeeds[0] > 0.55);
+  assert.ok(idealSpeeds[4] / idealSpeeds[0] < 0.75);
+  assert.ok(idealSpeeds.every((speed, index) => index === 0 || speed <= idealSpeeds[index - 1]));
+
+  const forceLimited = gesture.resolveLaunchActuatorStep({
+    totalMass: 0.3,
+    forwardSpeed: 0,
+    targetSpeed: 24.5,
+    maximumForce: 150,
+    deltaTime: 1 / 60,
+  });
+  assert.equal(forceLimited.impulseMagnitude, 2.5);
+  assert.equal(forceLimited.appliedForce, 150);
+  const simulateActuator = totalMass => {
+    let forwardSpeed = 0;
+    let workUsed = 0;
+    const workLimit = 150 * 0.45;
+    for (let stepIndex = 0; stepIndex < 120 && workUsed < workLimit; stepIndex += 1) {
+      const step = gesture.resolveLaunchActuatorStep({
+        totalMass,
+        forwardSpeed,
+        targetSpeed: 24.5,
+        maximumForce: 150,
+        deltaTime: 1 / 60,
+        remainingWork: workLimit - workUsed,
+      });
+      forwardSpeed += step.impulseMagnitude / totalMass;
+      workUsed += step.workApplied;
+      if (step.targetReached || step.impulseMagnitude === 0) break;
+    }
+    return forwardSpeed;
+  };
+  idealSpeeds.forEach((idealSpeed, index) => {
+    const actualSpeed = simulateActuator([1, 2, 3, 4, 6][index] * 0.1);
+    assert.ok(Math.abs(actualSpeed - idealSpeed) < 1e-8);
+  });
+  const targetLimited = gesture.resolveLaunchActuatorStep({
+    totalMass: 0.1,
+    forwardSpeed: 24,
+    targetSpeed: 24.5,
+    maximumForce: 150,
+    deltaTime: 1 / 60,
+  });
+  assert.ok(Math.abs(targetLimited.impulseMagnitude - 0.05) < 1e-10);
+  assert.equal(targetLimited.targetReached, true);
 
   const dimensions = { width: 1.8, height: 2.6, thickness: 0.02 };
   const shortEdge = gesture.getLaunchPresetCandidates('short-edge', dimensions);
@@ -250,7 +306,7 @@ try {
   );
 
   console.log(
-    'Launch self-test passed: meter/push curves, local-axis presets, quaternion transforms, stack grouping, mass distribution, legacy gestures, and repeatability.',
+    'Launch self-test passed: fixed-stroke actuator, meter/push curves, local-axis presets, quaternion transforms, stack grouping, mass distribution, and repeatability.',
   );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });

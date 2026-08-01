@@ -15,6 +15,8 @@ export const DEFAULT_LAUNCH_MAXIMUM_IMPULSE = 2.45;
 export const DEFAULT_PUSH_MINIMUM_IMPULSE = 0.02;
 export const DEFAULT_PUSH_MAXIMUM_IMPULSE = 0.45;
 export const DEFAULT_LAUNCH_METER_ONE_WAY_MS = 1200;
+export const DEFAULT_LAUNCH_MINIMUM_SPEED = 2.5;
+export const DEFAULT_LAUNCH_MAXIMUM_SPEED = 24.5;
 
 const interpolateImpulseRange = (
   power: number,
@@ -42,6 +44,16 @@ export const resolveLaunchMeterPower = (
 };
 
 export const resolvePowerMeter = resolveLaunchMeterPower;
+
+export const resolveLaunchTargetSpeed = (
+  meterPower: number,
+  minimumSpeed = DEFAULT_LAUNCH_MINIMUM_SPEED,
+  maximumSpeed = DEFAULT_LAUNCH_MAXIMUM_SPEED,
+) => interpolateImpulseRange(
+  Math.pow(clamp01(Number.isFinite(meterPower) ? meterPower : 0), 1.6),
+  minimumSpeed,
+  maximumSpeed,
+);
 
 export const resolveFormalLaunchImpulseMagnitude = (
   meterPower: number,
@@ -131,6 +143,11 @@ export {
   snapLaunchPresetContact,
   worldDirectionFromQuaternion,
 } from './launchPresets';
+
+export {
+  resolveIdealActuatorExitSpeed,
+  resolveLaunchActuatorStep,
+} from './launchActuator';
 
 export type {
   LaunchCardDimensions,

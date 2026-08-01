@@ -8,6 +8,7 @@ import {
   Physics as RapierPhysics,
   RigidBody,
   useAfterPhysicsStep,
+  useBeforePhysicsStep,
   useRapier,
   type RapierRigidBody,
 } from '@react-three/rapier';
@@ -20,22 +21,24 @@ import {
   type LaunchMemberRecord,
   type LaunchPreset,
   type LaunchRecord,
+  type LaunchTerminationReason,
 } from '../types';
 import {
   createRapierCardPhysicsHandle,
+  type CardPhysicsHandle,
 } from '../physics/cardPhysics';
 import {
-  distributeImpulseByMass,
   findStackedCardIds,
   isLaunchGesturePastDeadZone,
   localPointToWorld,
-  resolveFormalLaunchImpulseMagnitude,
   resolveLaunchGesture,
   resolveLaunchMeterPower,
+  resolveLaunchTargetSpeed,
   resolveLaunchTarget,
   resolvePushImpulseMagnitude,
   worldDirectionFromQuaternion,
 } from '../physics/launchGesture';
+import { resolveLaunchActuatorStep } from '../physics/launchActuator';
 
 type PhysicsLabScenario = 'drop' | 'stack' | 'impact' | 'flick';
 
@@ -63,24 +66,65 @@ interface FlickTelemetry {
   preset: LaunchPreset;
   linearSpeed: number;
   angularSpeed: number;
+  targetSpeed: number;
+  currentForce: number;
+  actualStroke: number;
+  terminationReason: LaunchTerminationReason | null;
   status: 'ready' | 'charging' | 'aiming' | 'launched' | 'settled' | 'cancelled';
   intent: LaunchIntent | null;
   record: LaunchRecord | null;
 }
 
 interface FlickParameters {
-  minimumImpulse: number;
-  maximumImpulse: number;
+  minimumSpeed: number;
+  maximumSpeed: number;
+  maximumForce: number;
+  strokeDistance: number;
+  maximumActuationMs: number;
   linearDamping: number;
   angularDamping: number;
 }
 
 const DEFAULT_FLICK_PARAMETERS: FlickParameters = {
-  minimumImpulse: 0.25,
-  maximumImpulse: 2.45,
+  minimumSpeed: 2.5,
+  maximumSpeed: 24.5,
+  maximumForce: 150,
+  strokeDistance: 0.45,
+  maximumActuationMs: 250,
   linearDamping: 0.08,
   angularDamping: 0.08,
 };
+
+interface LabActuationMember {
+  cardId: string;
+  handle: CardPhysicsHandle;
+  mass: number;
+  contactPointLocal: [number, number, number];
+  contactPointWorld: [number, number, number];
+  directionWorld: [number, number, number];
+  cumulativeImpulse: [number, number, number];
+  snapshotBefore: LaunchMemberRecord['snapshotBefore'];
+}
+
+interface LabActuationSession {
+  intent: LaunchIntent;
+  directionLocal: [number, number, number];
+  members: LabActuationMember[];
+  totalMass: number;
+  durationMs: number;
+  actualStroke: number;
+  totalImpulseMagnitude: number;
+  workUsed: number;
+  workLimit: number;
+  maximumActuationMs: number;
+  lastPrimaryContactWorld: [number, number, number];
+  createdAt: number;
+}
+
+const dotLaunchVector = (
+  left: [number, number, number],
+  right: [number, number, number],
+) => left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
 
 const EMPTY_METRICS: LabMetrics = {
   runs: 0,
@@ -100,6 +144,10 @@ const EMPTY_FLICK_TELEMETRY: FlickTelemetry = {
   preset: 'short-edge',
   linearSpeed: 0,
   angularSpeed: 0,
+  targetSpeed: 0,
+  currentForce: 0,
+  actualStroke: 0,
+  terminationReason: null,
   status: 'ready',
   intent: null,
   record: null,
@@ -433,7 +481,7 @@ const FlickLabScene = ({
   runId: number;
   preset: LaunchPreset;
   tool: FlickTool;
-  ammoCount: 1 | 2 | 3 | 6;
+  ammoCount: 1 | 2 | 3 | 4 | 6;
   onTelemetry: (telemetry: FlickTelemetry) => void;
   onMetric: (metric: Partial<LabMetrics>) => void;
   onTargetHit: (target: number) => void;
@@ -445,12 +493,13 @@ const FlickLabScene = ({
   const launchChargeRef = useRef<ActiveLaunchCharge | null>(null);
   const pushGestureRef = useRef<ActivePushGesture | null>(null);
   const launchedSequencesRef = useRef(new Set<string>());
+  const actuationSessionsRef = useRef(new Map<string, LabActuationSession>());
   const flightDampingRef = useRef(new Map<string, { startedAt: number; stableAt: number | null }>());
   const telemetryRef = useRef<FlickTelemetry>({ ...EMPTY_FLICK_TELEMETRY, preset });
   const collisionRef = useRef(false);
   const telemetrySampleRef = useRef(0);
   const { camera, size } = useThree();
-  const { rapier } = useRapier();
+  const { rapier, world } = useRapier();
   const [preview, setPreview] = useState<FlickPreview | null>(null);
 
   const cardIdAt = useCallback((index: number) => (
@@ -502,6 +551,153 @@ const FlickLabScene = ({
       power,
       preset,
     });
+  });
+
+  useBeforePhysicsStep(() => {
+    const deltaTime = world.timestep;
+    for (const [sequenceId, session] of actuationSessionsRef.current) {
+      const primary = session.members.find(member => member.cardId === session.intent.primaryCardId);
+      const complete = (reason: LaunchTerminationReason) => {
+        const memberRecords: LaunchMemberRecord[] = session.members.map(member => {
+          let snapshotAfter = member.snapshotBefore;
+          try {
+            snapshotAfter = member.handle.getSnapshot();
+          } catch {
+            // The body may have been removed while the actuator was running.
+          }
+          return {
+            cardId: member.cardId,
+            contactPointLocal: [...member.contactPointLocal],
+            contactPointWorld: [...member.contactPointWorld],
+            directionWorld: [...member.directionWorld],
+            impulse: [...member.cumulativeImpulse],
+            snapshotBefore: member.snapshotBefore,
+            snapshotAfter,
+          };
+        });
+        const record: LaunchRecord = {
+          intent: session.intent,
+          members: memberRecords,
+          totalImpulseMagnitude: session.totalImpulseMagnitude,
+          actualStroke: session.actualStroke,
+          durationMs: session.durationMs,
+          terminationReason: reason,
+          createdAt: session.createdAt,
+        };
+        actuationSessionsRef.current.delete(sequenceId);
+        setPreview(null);
+        emitTelemetry({
+          ...telemetryRef.current,
+          status: 'launched',
+          memberCount: memberRecords.length,
+          totalImpulse: session.totalImpulseMagnitude,
+          memberImpulse: memberRecords.length
+            ? session.totalImpulseMagnitude / memberRecords.length
+            : 0,
+          targetSpeed: session.intent.targetSpeed,
+          currentForce: 0,
+          actualStroke: session.actualStroke,
+          terminationReason: reason,
+          intent: session.intent,
+          record,
+        });
+      };
+
+      if (!primary || session.members.some(member => !bodyRefs.current.has(member.cardId))) {
+        complete('invalid-member');
+        continue;
+      }
+
+      const primarySnapshot = primary.handle.getSnapshot();
+      const directionWorld = worldDirectionFromQuaternion(
+        session.directionLocal,
+        primarySnapshot.quaternion,
+      );
+      const primaryContactWorld = localPointToWorld(
+        primary.contactPointLocal,
+        primarySnapshot.position,
+        primarySnapshot.quaternion,
+      );
+      const displacement: [number, number, number] = [
+        primaryContactWorld[0] - session.lastPrimaryContactWorld[0],
+        primaryContactWorld[1] - session.lastPrimaryContactWorld[1],
+        primaryContactWorld[2] - session.lastPrimaryContactWorld[2],
+      ];
+      session.actualStroke += Math.max(0, dotLaunchVector(displacement, directionWorld));
+      session.lastPrimaryContactWorld = primaryContactWorld;
+      setPreview({
+        contact: new THREE.Vector3(...primaryContactWorld),
+        direction: new THREE.Vector3(...directionWorld),
+        power: session.intent.meterPower,
+        kind: 'launch',
+      });
+
+      if (session.actualStroke >= session.intent.strokeLimit) {
+        complete('stroke-complete');
+        continue;
+      }
+      if (session.durationMs >= session.maximumActuationMs) {
+        complete('time-limit');
+        continue;
+      }
+      if (session.workUsed >= session.workLimit - 1e-6) {
+        complete('stroke-complete');
+        continue;
+      }
+
+      const forwardSpeed = session.members.reduce((sum, member) => (
+        sum + dotLaunchVector(member.handle.getSnapshot().linearVelocity, directionWorld) * member.mass
+      ), 0) / session.totalMass;
+      const step = resolveLaunchActuatorStep({
+        totalMass: session.totalMass,
+        forwardSpeed,
+        targetSpeed: session.intent.targetSpeed,
+        maximumForce: session.intent.forceLimit,
+        deltaTime,
+        remainingWork: session.workLimit - session.workUsed,
+      });
+      if (step.impulseMagnitude <= 0) {
+        complete('target-speed');
+        continue;
+      }
+
+      for (const member of session.members) {
+        const snapshot = member.handle.getSnapshot();
+        const contactPointWorld = localPointToWorld(
+          member.contactPointLocal,
+          snapshot.position,
+          snapshot.quaternion,
+        );
+        const magnitude = step.impulseMagnitude * member.mass / session.totalMass;
+        const impulse: [number, number, number] = [
+          directionWorld[0] * magnitude,
+          directionWorld[1] * magnitude,
+          directionWorld[2] * magnitude,
+        ];
+        member.handle.applyImpulseAtPoint(impulse, contactPointWorld);
+        member.contactPointWorld = contactPointWorld;
+        member.directionWorld = directionWorld;
+        member.cumulativeImpulse = [
+          member.cumulativeImpulse[0] + impulse[0],
+          member.cumulativeImpulse[1] + impulse[1],
+          member.cumulativeImpulse[2] + impulse[2],
+        ];
+      }
+      session.totalImpulseMagnitude += step.impulseMagnitude;
+      session.workUsed += step.workApplied;
+      session.durationMs += deltaTime * 1000;
+      emitTelemetry({
+        ...telemetryRef.current,
+        status: 'launched',
+        targetSpeed: session.intent.targetSpeed,
+        currentForce: step.appliedForce,
+        actualStroke: session.actualStroke,
+        totalImpulse: session.totalImpulseMagnitude,
+        memberImpulse: session.totalImpulseMagnitude / session.members.length,
+        memberCount: session.members.length,
+        intent: session.intent,
+      });
+    }
   });
 
   useAfterPhysicsStep(() => {
@@ -693,20 +889,14 @@ const FlickLabScene = ({
       return body && card ? [{ body, card }] : [];
     });
     if (members.length === 0) return;
-    const totalImpulseMagnitude = resolveFormalLaunchImpulseMagnitude(
+    const targetSpeed = resolveLaunchTargetSpeed(
       meterPower,
-      parameters.minimumImpulse,
-      parameters.maximumImpulse,
+      parameters.minimumSpeed,
+      parameters.maximumSpeed,
     );
-    const shares = distributeImpulseByMass(
-      totalImpulseMagnitude,
-      members.map(({ card }) => ({ id: card.id, mass: card.mass })),
-    );
-    const memberRecords: LaunchMemberRecord[] = [];
+    const activeMembers: LabActuationMember[] = [];
     const now = performance.now() / 1000;
     for (const { body, card } of members) {
-      const share = shares.find(candidate => candidate.cardId === card.id);
-      if (!share) continue;
       const handle = createRapierCardPhysicsHandle(body, locked => {
         body.setBodyType(
           locked ? rapier.RigidBodyType.Fixed : rapier.RigidBodyType.Dynamic,
@@ -723,46 +913,58 @@ const FlickLabScene = ({
         snapshotBefore.position,
         snapshotBefore.quaternion,
       );
-      const impulse: [number, number, number] = [
-        directionWorld[0] * share.impulseMagnitude,
-        directionWorld[1] * share.impulseMagnitude,
-        directionWorld[2] * share.impulseMagnitude,
-      ];
       handle.setDamping(parameters.linearDamping, parameters.angularDamping);
       handle.wakeUp();
-      handle.applyImpulseAtPoint(impulse, contactPointWorld);
       flightDampingRef.current.set(card.id, { startedAt: now, stableAt: null });
-      memberRecords.push({
+      activeMembers.push({
         cardId: card.id,
+        handle,
+        mass: card.mass,
         contactPointLocal: [...charge.contactLocal],
         contactPointWorld,
         directionWorld,
-        impulse,
+        cumulativeImpulse: [0, 0, 0],
         snapshotBefore,
       });
     }
+    const primary = activeMembers.find(member => member.cardId === charge.cardId);
+    const totalMass = activeMembers.reduce((sum, member) => sum + member.mass, 0);
+    if (!primary || totalMass <= 0) return;
     const intent: LaunchIntent = {
       sequenceId: charge.sequenceId,
       primaryCardId: charge.cardId,
-      cardIds: memberRecords.map(member => member.cardId),
+      cardIds: activeMembers.map(member => member.cardId),
       preset,
       meterPower,
-      totalImpulseMagnitude,
+      targetSpeed,
+      forceLimit: parameters.maximumForce,
+      strokeLimit: parameters.strokeDistance,
       pointerType: charge.pointerType,
     };
-    const record: LaunchRecord = { intent, members: memberRecords, createdAt: Date.now() };
+    actuationSessionsRef.current.set(charge.sequenceId, {
+      intent,
+      directionLocal: [...charge.directionLocal],
+      members: activeMembers,
+      totalMass,
+      durationMs: 0,
+      actualStroke: 0,
+      totalImpulseMagnitude: 0,
+      workUsed: 0,
+      workLimit: parameters.maximumForce * parameters.strokeDistance,
+      maximumActuationMs: parameters.maximumActuationMs,
+      lastPrimaryContactWorld: [...primary.contactPointWorld],
+      createdAt: Date.now(),
+    });
     emitTelemetry({
       ...EMPTY_FLICK_TELEMETRY,
       status: 'launched',
       power: meterPower,
-      memberCount: memberRecords.length,
-      totalImpulse: totalImpulseMagnitude,
-      memberImpulse: memberRecords.length > 0
-        ? totalImpulseMagnitude / memberRecords.length
-        : 0,
+      memberCount: activeMembers.length,
+      targetSpeed,
+      currentForce: parameters.maximumForce,
       preset,
       intent,
-      record,
+      record: null,
     });
   };
 
@@ -771,7 +973,6 @@ const FlickLabScene = ({
     if (charge?.pointerId === event.pointerId) {
       event.stopPropagation();
       launchChargeRef.current = null;
-      setPreview(null);
       releasePointer(event);
       launchStack(charge, resolveLaunchMeterPower(performance.now() - charge.startedAt));
       return;
@@ -927,7 +1128,7 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
   );
   const [launchPreset, setLaunchPreset] = useState<LaunchPreset>('short-edge');
   const [flickTool, setFlickTool] = useState<FlickTool>('launch');
-  const [ammoCount, setAmmoCount] = useState<1 | 2 | 3 | 6>(1);
+  const [ammoCount, setAmmoCount] = useState<1 | 2 | 3 | 4 | 6>(1);
   const [slowMotion, setSlowMotion] = useState(false);
   const [targetHit, setTargetHit] = useState<number | null>(null);
   const [launchRecords, setLaunchRecords] = useState<LaunchRecord[]>([]);
@@ -1108,7 +1309,7 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
             </div>
             <div className="physics-lab-stack-count" aria-label="弹射牌堆张数">
               <span>AMMO CARDS</span>
-              {([1, 2, 3, 6] as const).map(count => (
+              {([1, 2, 3, 4, 6] as const).map(count => (
                 <button
                   key={count}
                   className={ammoCount === count ? 'is-active' : ''}
@@ -1140,6 +1341,10 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
               <small>MEMBERS {flickTelemetry.memberCount || '—'}</small>
               <small>TOTAL IMPULSE {flickTelemetry.totalImpulse.toFixed(2)}</small>
               <small>PER CARD {flickTelemetry.memberImpulse.toFixed(2)}</small>
+              <small>TARGET SPEED {flickTelemetry.targetSpeed.toFixed(2)}</small>
+              <small>FORCE {flickTelemetry.currentForce.toFixed(1)}</small>
+              <small>STROKE {flickTelemetry.actualStroke.toFixed(3)}</small>
+              <small>STOP {flickTelemetry.terminationReason ?? '—'}</small>
               {flickTool === 'push' && (
                 <small>GESTURE {flickTelemetry.gestureSpeed.toFixed(0)} px/s</small>
               )}
@@ -1154,8 +1359,11 @@ const PhysicsLab: React.FC<PhysicsLabProps> = ({ lang, cardSize, onClose }) => {
             <div className="physics-lab-parameters">
               <span>LAUNCH PARAMETERS</span>
               {([
-                ['minimumImpulse', 'MIN IMPULSE', 0, 1, 0.05],
-                ['maximumImpulse', 'MAX IMPULSE', 0.5, 5, 0.05],
+                ['minimumSpeed', 'MIN SPEED', 0, 10, 0.1],
+                ['maximumSpeed', 'MAX SPEED', 5, 50, 0.5],
+                ['maximumForce', 'MAX FORCE', 20, 400, 5],
+                ['strokeDistance', 'STROKE', 0.1, 1.5, 0.05],
+                ['maximumActuationMs', 'CONTACT MS', 50, 500, 10],
                 ['linearDamping', 'LINEAR DAMP', 0, 1, 0.01],
                 ['angularDamping', 'ANGULAR DAMP', 0, 1, 0.01],
               ] as const).map(([key, label, min, max, step]) => (
