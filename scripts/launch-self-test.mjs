@@ -72,10 +72,12 @@ try {
   assert.equal(gesture.resolveLaunchMeterPower(3000), 0.5);
   assert.equal(gesture.resolveLaunchMeterPower(-100), 0);
   assert.equal(gesture.resolvePowerMeter(600), 0.5);
+  assert.equal(gesture.resolvePowerMeter(600, 600), 1);
   assert.equal(gesture.resolveFormalLaunchImpulseMagnitude(0), 0.25);
   assert.equal(gesture.resolveFormalLaunchImpulseMagnitude(1), 2.45);
   assert.equal(gesture.resolvePushImpulseMagnitude(0), 0.02);
   assert.equal(gesture.resolvePushImpulseMagnitude(1), 0.45);
+  assert.equal(gesture.resolvePushImpulseMagnitude(1, 0.02, 0.8), 0.8);
   assert.ok(
     gesture.resolveFormalLaunchImpulseMagnitude(0.25)
       < gesture.resolveFormalLaunchImpulseMagnitude(0.5),

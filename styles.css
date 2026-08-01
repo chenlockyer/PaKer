@@ -727,6 +727,21 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .range-list label > span { display: flex; justify-content: space-between; }
 .range-list label b { color: var(--ink); font-family: monospace; }
 .range-list input { width: 100%; margin-top: 8px; accent-color: var(--accent); }
+.physics-settings-section { padding-bottom: 0; }
+.physics-settings-list { display: grid; gap: 18px; margin-top: 24px; }
+.physics-setting-row { display: grid; gap: 8px; color: var(--muted); }
+.physics-setting-row > span { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.physics-setting-row strong { color: var(--ink); font-size: 12px; }
+.physics-setting-row output { font: 700 12px/1 monospace; color: var(--accent-ink); }
+.physics-setting-row > div { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 14px; }
+.physics-setting-row input[type="range"] { width: 100%; accent-color: var(--accent); }
+.physics-number-input { min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); color: var(--ink); font: 700 12px/1 monospace; }
+.physics-advanced { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 18px; }
+.physics-advanced summary { cursor: pointer; color: var(--ink); font-size: 12px; font-weight: 800; }
+.physics-settings-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 10px; margin: 28px -30px 0; padding: 16px 30px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(10px); }
+.physics-settings-actions button { padding: 9px 16px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); color: var(--ink); cursor: pointer; }
+.physics-settings-actions button.primary { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 800; }
+.physics-settings-actions button:disabled { cursor: not-allowed; opacity: .45; }
 .delete-preset { margin-top: 30px; padding: 0; border: 0; background: none; color: var(--danger); font-size: 10px; cursor: pointer; }
 .empty-editor { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--faint); font-size: 11px; }
 

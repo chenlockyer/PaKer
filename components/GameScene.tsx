@@ -19,6 +19,7 @@ import {
   RotationPreset,
   InteractionMode,
   PointerMode,
+  PhysicsSettings,
 } from '../types';
 import { ChallengeTestType } from '../types';
 
@@ -43,6 +44,7 @@ interface GameSceneProps {
   weightMass: number;
   weightDropHeight: number;
   theme: AppTheme;
+  physicsSettings: PhysicsSettings;
   onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
   onCardLaunch: (record: LaunchRecord) => void;
   blueprintGuide: BlueprintGuideState | null;
@@ -221,6 +223,7 @@ const GameScene: React.FC<GameSceneProps> = ({
   weightMass,
   weightDropHeight,
   theme,
+  physicsSettings,
   onCardTransformChange,
   onCardLaunch,
   blueprintGuide,
@@ -291,6 +294,7 @@ const GameScene: React.FC<GameSceneProps> = ({
               testActive={testActive}
               weightMass={weightMass}
               weightDropHeight={weightDropHeight}
+              physicsSettings={physicsSettings}
               onCardTransformChange={onCardTransformChange}
               onCardLaunch={onCardLaunch}
               blueprintGuide={blueprintGuide}

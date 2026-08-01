@@ -5,6 +5,7 @@ import {
   CuboidCollider,
   RigidBody,
   useRapier,
+  type RapierCollider,
   type RapierRigidBody,
 } from '@react-three/rapier';
 import { type ThreeEvent, useFrame, useThree } from '@react-three/fiber';
@@ -20,6 +21,7 @@ import {
   type LaunchPreset,
   LiveCardTransform,
   PointerMode,
+  PhysicsSettings,
 } from '../types';
 import { playCollisionSound } from '../services/audioService';
 import {
@@ -45,6 +47,7 @@ interface CardProps {
   launchPreset: LaunchPreset;
   onPhysicsHandleChange?: (id: string, handle: CardPhysicsHandle | null) => void;
   onLaunchRequest?: (request: CardLaunchRequest) => void;
+  physicsSettings: PhysicsSettings;
 }
 
 interface ActivePushGesture {
@@ -315,10 +318,12 @@ const Card: React.FC<CardProps> = ({
   launchPreset,
   onPhysicsHandleChange,
   onLaunchRequest,
+  physicsSettings,
 }) => {
   const dimensions = CARD_DIMENSIONS[cardSize];
   const geometry = useMemo(() => getCardGeometry(cardSize), [cardSize]);
   const bodyRef = useRef<RapierRigidBody>(null);
+  const colliderRef = useRef<RapierCollider>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const { rapier } = useRapier();
   const { camera, size } = useThree();
@@ -365,7 +370,10 @@ const Card: React.FC<CardProps> = ({
       setChargePreview({
         contact,
         direction,
-        power: resolvePowerMeter(performance.now() - charge.startedAt),
+        power: resolvePowerMeter(
+          performance.now() - charge.startedAt,
+          physicsSettings.meterOneWayDurationMs,
+        ),
       });
     }
 
@@ -624,7 +632,10 @@ const Card: React.FC<CardProps> = ({
         preset: launchPreset,
         contactPointLocal: charge.contactLocal.toArray(),
         directionLocal: charge.directionLocal.toArray(),
-        meterPower: resolvePowerMeter(performance.now() - charge.startedAt),
+        meterPower: resolvePowerMeter(
+          performance.now() - charge.startedAt,
+          physicsSettings.meterOneWayDurationMs,
+        ),
         pointerType: charge.pointerType,
       });
       return;
@@ -647,7 +658,11 @@ const Card: React.FC<CardProps> = ({
     if (!body || launchedSequencesRef.current.has(gesture.sequenceId)) return;
     launchedSequencesRef.current.add(gesture.sequenceId);
     const direction = worldDelta.normalize();
-    const impulseMagnitude = resolvePushImpulseMagnitude(resolution.rawPower);
+    const impulseMagnitude = resolvePushImpulseMagnitude(
+      resolution.rawPower,
+      undefined,
+      physicsSettings.pushMaximumImpulse,
+    );
     const impulse = direction.multiplyScalar(impulseMagnitude);
     const handle = createRapierCardPhysicsHandle(body, locked => {
       body.setBodyType(
@@ -657,6 +672,14 @@ const Card: React.FC<CardProps> = ({
     });
     handle.applyImpulseAtPoint(impulse.toArray(), gesture.contactWorld.toArray());
   };
+
+  useEffect(() => {
+    const collider = colliderRef.current;
+    if (!collider) return;
+    collider.setMass(physicsSettings.cardMass);
+    collider.setFriction(physicsSettings.cardFriction);
+    if (!data.locked) bodyRef.current?.wakeUp();
+  }, [data.locked, physicsSettings.cardFriction, physicsSettings.cardMass]);
 
   const handleClick = (e: any) => {
     e.stopPropagation();
@@ -702,16 +725,17 @@ const Card: React.FC<CardProps> = ({
       colliders={false}
       position={data.position}
       rotation={data.rotation}
-      linearDamping={0.5}
-      angularDamping={0.5}
+      linearDamping={physicsSettings.structureLinearDamping}
+      angularDamping={physicsSettings.structureAngularDamping}
       canSleep
       ccd={!data.locked}
       additionalSolverIterations={4}
     >
       <CuboidCollider
+        ref={colliderRef}
         args={[dimensions.width / 2, dimensions.thickness / 2, dimensions.height / 2]}
-        mass={0.1}
-        friction={1}
+        mass={physicsSettings.cardMass}
+        friction={physicsSettings.cardFriction}
         frictionCombineRule={CoefficientCombineRule.Multiply}
         restitution={0}
         onContactForce={event => {
@@ -766,6 +790,7 @@ export default React.memo(Card, (previous, next) =>
   previous.cardSize === next.cardSize &&
   previous.onTransformChange === next.onTransformChange &&
   previous.launchPreset === next.launchPreset &&
+  previous.physicsSettings === next.physicsSettings &&
   previous.onPhysicsHandleChange === next.onPhysicsHandleChange &&
   previous.onLaunchRequest === next.onLaunchRequest
 );

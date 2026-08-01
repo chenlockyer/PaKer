@@ -7,6 +7,7 @@ import {
   Physics,
   RigidBody,
   useRapier,
+  type RapierCollider,
 } from '@react-three/rapier';
 import { useThree, useFrame, ThreeElements } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
@@ -26,7 +27,8 @@ import {
   LiveCardTransform,
   RotationPreset,
   InteractionMode,
-  PointerMode
+  PointerMode,
+  PhysicsSettings,
 } from '../types';
 import { ChallengeTestType } from '../types';
 import { playPlaceSound } from '../services/audioService';
@@ -95,6 +97,7 @@ interface PhysicsWorldProps {
   testActive: boolean;
   weightMass: number;
   weightDropHeight: number;
+  physicsSettings: PhysicsSettings;
   onCardTransformChange: (id: string, transform: LiveCardTransform) => void;
   onCardLaunch: (record: LaunchRecord) => void;
   blueprintGuide: BlueprintGuideState | null;
@@ -201,22 +204,30 @@ const WeightDropPreview = ({ dropHeight }: { dropHeight: number }) => (
 // The Floor component
 const Floor = ({
   meshRef,
-  cardSize
+  cardSize,
+  friction,
 }: {
   meshRef: React.RefObject<THREE.Mesh>;
   cardSize: CardSize;
+  friction: number;
 }) => {
+  const colliderRef = useRef<RapierCollider>(null);
   const gridCellSize = CARD_DIMENSIONS[cardSize].width / 2;
   const gridDivisions = 100;
   const gridSize = gridCellSize * gridDivisions;
   const gridColor = 0x8492a3;
 
+  useEffect(() => {
+    colliderRef.current?.setFriction(friction);
+  }, [friction]);
+
   return (
     <RigidBody type="fixed" colliders={false}>
       <CuboidCollider
+        ref={colliderRef}
         args={[50, 0.05, 50]}
         position={[0, -0.05, 0]}
-        friction={1.1}
+        friction={friction}
         frictionCombineRule={CoefficientCombineRule.Multiply}
         restitution={0}
       />
@@ -629,6 +640,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   testActive,
   weightMass,
   weightDropHeight,
+  physicsSettings,
   onCardTransformChange,
   onCardLaunch,
   blueprintGuide,
@@ -674,6 +686,26 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       flightDampingRef.current.delete(id);
     }
   }, []);
+
+  useEffect(() => {
+    for (const [id, handle] of physicsHandlesRef.current) {
+      const flight = flightDampingRef.current.get(id);
+      if (flight) {
+        flight.originalLinear = physicsSettings.structureLinearDamping;
+        flight.originalAngular = physicsSettings.structureAngularDamping;
+        handle.setDamping(
+          physicsSettings.flightLinearDamping,
+          physicsSettings.flightAngularDamping,
+        );
+      } else {
+        handle.setDamping(
+          physicsSettings.structureLinearDamping,
+          physicsSettings.structureAngularDamping,
+        );
+      }
+      handle.wakeUp();
+    }
+  }, [physicsSettings]);
 
   const handleLaunchRequest = useCallback((request: CardLaunchRequest) => {
     if (launchedSequencesRef.current.has(request.sequenceId)) return;
@@ -727,7 +759,11 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
     }
     if (members.length === 0) return;
 
-    const totalImpulseMagnitude = resolveLaunchImpulseMagnitude(request.meterPower);
+    const totalImpulseMagnitude = resolveLaunchImpulseMagnitude(
+      request.meterPower,
+      physicsSettings.launchMinimumImpulse,
+      physicsSettings.launchMaximumImpulse,
+    );
     const shares = distributeImpulseByMass(
       totalImpulseMagnitude,
       members.map(({ card }) => ({ id: card.id, mass: card.mass })),
@@ -800,7 +836,10 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
             angular: previousFlight.originalAngular,
           }
         : handle.getDamping();
-      handle.setDamping(0.08, 0.08);
+      handle.setDamping(
+        physicsSettings.flightLinearDamping,
+        physicsSettings.flightAngularDamping,
+      );
       handle.wakeUp();
       handle.applyImpulseAtPoint(impulse, contactPointWorld);
       flightDampingRef.current.set(card.id, {
@@ -832,7 +871,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
       members: memberRecords,
       createdAt: Date.now(),
     });
-  }, [cardSize, cards, onCardLaunch]);
+  }, [cardSize, cards, onCardLaunch, physicsSettings]);
 
   useFrame(({ clock }) => {
     const nowSeconds = performance.now() / 1000;
@@ -922,7 +961,11 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
         shadow-camera-bottom={-20}
       />
       
-      <Floor meshRef={floorRef} cardSize={cardSize} />
+      <Floor
+        meshRef={floorRef}
+        cardSize={cardSize}
+        friction={physicsSettings.floorFriction}
+      />
       {blueprintGuide && (
         <BlueprintProjection
           guide={blueprintGuide}
@@ -960,6 +1003,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
               launchPreset={launchPreset}
               onPhysicsHandleChange={handlePhysicsHandleChange}
               onLaunchRequest={handleLaunchRequest}
+              physicsSettings={physicsSettings}
             />
           );
         })}

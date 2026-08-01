@@ -1,7 +1,13 @@
 /// <reference lib="dom" />
-import React, { useState } from 'react';
-import { AppTheme, CARD_DIMENSIONS, CardSize, RotationPreset, UiScaleSetting } from '../types';
+import React, { useEffect, useState } from 'react';
+import { AppTheme, CARD_DIMENSIONS, CardSize, PhysicsSettings, RotationPreset, UiScaleSetting } from '../types';
 import { UI_SCALE_OPTIONS } from '../services/uiScaleService';
+import {
+  DEFAULT_PHYSICS_SETTINGS,
+  normalizePhysicsSettings,
+  PHYSICS_SETTING_RANGES,
+  physicsSettingsEqual,
+} from '../services/physicsSettingsService';
 import { translations } from '../utils/translations';
 import {
   InputAction,
@@ -26,19 +32,24 @@ interface SettingsModalProps {
   uiScaleSetting: UiScaleSetting;
   setUiScaleSetting: (scale: UiScaleSetting) => void;
   resolvedUiScale: number;
+  physicsSettings: PhysicsSettings;
+  onApplyPhysicsSettings: (settings: PhysicsSettings) => void;
 }
 
-type Tab = 'general' | 'visuals' | 'controls' | 'presets';
+type Tab = 'general' | 'visuals' | 'physics' | 'controls' | 'presets';
+type PhysicsSettingKey = Exclude<keyof PhysicsSettings, 'schemaVersion'>;
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen, onClose, lang, setLang, presets, onAddPreset, onUpdatePreset,
   onDeletePreset, onResetPresets, cardSize, setCardSize, theme, setTheme,
   uiScaleSetting, setUiScaleSetting, resolvedUiScale,
+  physicsSettings, onApplyPhysicsSettings,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [capturingAction, setCapturingAction] = useState<InputAction | null>(null);
   const [bindingError, setBindingError] = useState('');
+  const [physicsDraft, setPhysicsDraft] = useState<PhysicsSettings>(physicsSettings);
   const {
     profile,
     bindings,
@@ -48,6 +59,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     formatBinding,
     findConflict,
   } = useInput();
+  useEffect(() => {
+    if (isOpen) setPhysicsDraft(physicsSettings);
+  }, [isOpen, physicsSettings]);
+
   if (!isOpen) return null;
 
   const t = translations[lang];
@@ -130,8 +145,86 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const tabs: Array<[Tab, string]> = [
     ['general', copy.general], ['visuals', copy.visual],
+    ['physics', lang === 'zh' ? '物理' : 'Physics'],
     ['controls', copy.controls], ['presets', copy.presets],
   ];
+
+  const physicsLabels: Record<PhysicsSettingKey, [string, string]> = lang === 'zh'
+    ? {
+        cardMass: ['卡牌质量', 'kg'],
+        cardFriction: ['卡牌摩擦', ''],
+        floorFriction: ['地板摩擦', ''],
+        launchMinimumImpulse: ['最小弹射冲量', ''],
+        launchMaximumImpulse: ['最大弹射冲量', ''],
+        structureLinearDamping: ['结构线性阻尼', ''],
+        structureAngularDamping: ['结构角阻尼', ''],
+        flightLinearDamping: ['飞行线性阻尼', ''],
+        flightAngularDamping: ['飞行角阻尼', ''],
+        pushMaximumImpulse: ['推拨最大冲量', ''],
+        meterOneWayDurationMs: ['力度条单程时间', '秒'],
+      }
+    : {
+        cardMass: ['Card mass', 'kg'],
+        cardFriction: ['Card friction', ''],
+        floorFriction: ['Floor friction', ''],
+        launchMinimumImpulse: ['Minimum launch impulse', ''],
+        launchMaximumImpulse: ['Maximum launch impulse', ''],
+        structureLinearDamping: ['Structure linear damping', ''],
+        structureAngularDamping: ['Structure angular damping', ''],
+        flightLinearDamping: ['Flight linear damping', ''],
+        flightAngularDamping: ['Flight angular damping', ''],
+        pushMaximumImpulse: ['Maximum push impulse', ''],
+        meterOneWayDurationMs: ['Meter one-way duration', 's'],
+      };
+
+  const updatePhysicsDraft = (key: PhysicsSettingKey, displayedValue: number) => {
+    if (!Number.isFinite(displayedValue)) return;
+    const rawValue = key === 'meterOneWayDurationMs' ? displayedValue * 1000 : displayedValue;
+    const range = PHYSICS_SETTING_RANGES[key];
+    const value = Math.min(range.max, Math.max(range.min, rawValue));
+    setPhysicsDraft(previous => {
+      const next: PhysicsSettings = { ...previous, [key]: value };
+      if (key === 'launchMinimumImpulse' && value > next.launchMaximumImpulse) {
+        next.launchMaximumImpulse = value;
+      }
+      if (key === 'launchMaximumImpulse' && value < next.launchMinimumImpulse) {
+        next.launchMinimumImpulse = value;
+      }
+      return next;
+    });
+  };
+
+  const renderPhysicsControl = (key: PhysicsSettingKey) => {
+    const range = PHYSICS_SETTING_RANGES[key];
+    const divisor = key === 'meterOneWayDurationMs' ? 1000 : 1;
+    const value = physicsDraft[key] / divisor;
+    const [label, unit] = physicsLabels[key];
+    return (
+      <label className="physics-setting-row" key={key}>
+        <span><strong>{label}</strong><output>{value.toFixed(2)}{unit ? ` ${unit}` : ''}</output></span>
+        <div>
+          <input
+            type="range"
+            min={range.min / divisor}
+            max={range.max / divisor}
+            step={range.step / divisor}
+            value={value}
+            onChange={event => updatePhysicsDraft(key, Number(event.target.value))}
+          />
+          <input
+            className="physics-number-input"
+            type="number"
+            min={range.min / divisor}
+            max={range.max / divisor}
+            step={range.step / divisor}
+            value={value}
+            onFocus={event => event.currentTarget.select()}
+            onChange={event => updatePhysicsDraft(key, Number(event.target.value))}
+          />
+        </div>
+      </label>
+    );
+  };
 
   const actionLabels: Record<InputAction, string> = lang === 'zh'
     ? {
@@ -324,6 +417,54 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <small>{CARD_DIMENSIONS[size].millimeters} · {size === CardSize.BRIDGE ? t.narrowCard : t.wideCard}</small>
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'physics' && (
+            <div className="settings-section settings-scroll physics-settings-section">
+              <div className="section-title">
+                <span>01</span>
+                <div>
+                  <h3>{lang === 'zh' ? '物理参数' : 'Physics parameters'}</h3>
+                  <p>{lang === 'zh'
+                    ? '点击应用后，会一次性更新当前桌面和所有游戏模式。'
+                    : 'Apply once to update the current table and every game mode.'}</p>
+                </div>
+              </div>
+              <div className="physics-settings-list">
+                {(['cardMass', 'cardFriction', 'floorFriction', 'launchMaximumImpulse'] as PhysicsSettingKey[])
+                  .map(renderPhysicsControl)}
+              </div>
+              <details className="physics-advanced">
+                <summary>{lang === 'zh' ? '高级参数' : 'Advanced parameters'}</summary>
+                <div className="physics-settings-list">
+                  {([
+                    'launchMinimumImpulse',
+                    'structureLinearDamping',
+                    'structureAngularDamping',
+                    'flightLinearDamping',
+                    'flightAngularDamping',
+                    'pushMaximumImpulse',
+                    'meterOneWayDurationMs',
+                  ] as PhysicsSettingKey[]).map(renderPhysicsControl)}
+                </div>
+              </details>
+              <div className="physics-settings-actions">
+                <button onClick={() => setPhysicsDraft({ ...DEFAULT_PHYSICS_SETTINGS })}>
+                  {lang === 'zh' ? '恢复默认' : 'Restore defaults'}
+                </button>
+                <button
+                  className="primary"
+                  disabled={physicsSettingsEqual(physicsDraft, physicsSettings)}
+                  onClick={() => {
+                    const normalized = normalizePhysicsSettings(physicsDraft);
+                    setPhysicsDraft(normalized);
+                    onApplyPhysicsSettings(normalized);
+                  }}
+                >
+                  {lang === 'zh' ? '应用参数' : 'Apply settings'}
+                </button>
               </div>
             </div>
           )}

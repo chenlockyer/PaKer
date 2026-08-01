@@ -10,6 +10,21 @@ export interface CardData {
   role?: CardRole;
 }
 
+export interface PhysicsSettings {
+  schemaVersion: 1;
+  cardMass: number;
+  cardFriction: number;
+  floorFriction: number;
+  launchMinimumImpulse: number;
+  launchMaximumImpulse: number;
+  structureLinearDamping: number;
+  structureAngularDamping: number;
+  flightLinearDamping: number;
+  flightAngularDamping: number;
+  pushMaximumImpulse: number;
+  meterOneWayDurationMs: number;
+}
+
 export type CardRole = 'structure' | 'ammo' | 'core';
 
 export type LaunchPreset =

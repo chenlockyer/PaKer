@@ -35,6 +35,7 @@ import {
   LevelTutorialCue,
   LaunchPreset,
   LaunchRecord,
+  PhysicsSettings,
 } from './types';
 import { translations } from './utils/translations';
 import {
@@ -91,6 +92,10 @@ import {
   persistGameSave,
   renameManualGameSave,
 } from './services/gameSaveService';
+import {
+  loadPhysicsSettings,
+  persistPhysicsSettings,
+} from './services/physicsSettingsService';
 
 const DEG_10 = Math.PI / 18;
 const PRESET_SCHEMA_VERSION = '5';
@@ -177,6 +182,12 @@ const App: React.FC = () => {
     const savedSize = localStorage.getItem('hoc_card_size');
     return savedSize === CardSize.POKER ? CardSize.POKER : CardSize.BRIDGE;
   });
+  const [physicsSettings, setPhysicsSettings] = useState<PhysicsSettings>(() =>
+    loadPhysicsSettings(localStorage)
+  );
+  const applyPhysicsSettings = useCallback((settings: PhysicsSettings) => {
+    setPhysicsSettings(persistPhysicsSettings(localStorage, settings));
+  }, []);
 
   // --- STATE: GAME DATA ---
   const [presets, setPresets] = useState<RotationPreset[]>(() => {
@@ -1405,6 +1416,7 @@ const App: React.FC = () => {
             weightMass={currentTestStage?.weightMass ?? currentLevel.weightMass ?? 0.45}
             weightDropHeight={challengeTargetHeight + (currentTestStage?.weightDropOffset ?? currentLevel.weightDropOffset ?? 4)}
             theme={theme}
+            physicsSettings={physicsSettings}
             onCardTransformChange={handleCardTransformChange}
             onCardLaunch={handleCardLaunch}
             blueprintGuide={blueprintGuide}
@@ -1517,6 +1529,8 @@ const App: React.FC = () => {
         uiScaleSetting={uiScaleSetting}
         setUiScaleSetting={setUiScaleSetting}
         resolvedUiScale={resolvedUiScale}
+        physicsSettings={physicsSettings}
+        onApplyPhysicsSettings={applyPhysicsSettings}
       />
 
       {saveLibraryMode && (
