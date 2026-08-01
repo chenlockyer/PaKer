@@ -206,6 +206,16 @@ export const getBlueprintWorldCards = (
   });
 };
 
+export const resolveBlueprintPlacementOrigin = (
+  hitPoint: [number, number, number],
+  gridSize = 0.1,
+  surfaceClearance = 0.001,
+): [number, number, number] => [
+  Math.round(hitPoint[0] / gridSize) * gridSize,
+  hitPoint[1] + surfaceClearance,
+  Math.round(hitPoint[2] / gridSize) * gridSize,
+];
+
 export interface InstantiateBlueprintOptions {
   origin?: [number, number, number];
   yaw?: number;

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Edges } from '@react-three/drei';
-import { ThreeEvent, useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   BlueprintGuideProgress,
@@ -13,12 +13,15 @@ import {
   findEarliestBrokenBlueprintStep,
   getBlueprintWorldCards,
   matchCardsToBlueprint,
+  resolveBlueprintPlacementOrigin,
 } from '../services/blueprintService';
 
 interface BlueprintProjectionProps {
   guide: BlueprintGuideState;
   cards: CardData[];
   liveTransformsRef: React.MutableRefObject<Map<string, LiveCardTransform>>;
+  floorRef: React.RefObject<THREE.Mesh>;
+  cardsGroupRef: React.RefObject<THREE.Group>;
   onPlaceOrigin: (origin: [number, number, number]) => void;
   onProgress: (progress: BlueprintGuideProgress) => void;
   onStepComplete: (playerCardIds: string[]) => void;
@@ -44,12 +47,18 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
   guide,
   cards,
   liveTransformsRef,
+  floorRef,
+  cardsGroupRef,
   onPlaceOrigin,
   onProgress,
   onStepComplete,
   onStepRegression,
 }) => {
+  const { camera, gl, raycaster } = useThree();
   const [hoverOrigin, setHoverOrigin] = useState<[number, number, number]>(guide.origin);
+  const hoverOriginRef = useRef<[number, number, number]>(guide.origin);
+  const hasPlacementHitRef = useRef(false);
+  const clickStartRef = useRef<{ x: number; y: number } | null>(null);
   const [matches, setMatches] = useState<BlueprintTargetMatch[]>([]);
   const matchSampleTimeRef = useRef(0);
   const matchSignatureRef = useRef('');
@@ -57,8 +66,37 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
   const regressionCandidateRef = useRef<{ index: number; since: number } | null>(null);
 
   useEffect(() => {
-    if (guide.placing) setHoverOrigin(guide.origin);
+    if (guide.placing) {
+      hoverOriginRef.current = guide.origin;
+      hasPlacementHitRef.current = false;
+      setHoverOrigin(guide.origin);
+    }
   }, [guide.origin, guide.placing]);
+
+  useEffect(() => {
+    if (!guide.placing) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0 || event.target !== gl.domElement) return;
+      clickStartRef.current = { x: event.clientX, y: event.clientY };
+    };
+    const handleClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.target !== gl.domElement || !hasPlacementHitRef.current) return;
+      const start = clickStartRef.current;
+      clickStartRef.current = null;
+      if (!start) return;
+      const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+      if (distance > 5) return;
+      onPlaceOrigin(hoverOriginRef.current);
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('click', handleClick, true);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('click', handleClick, true);
+    };
+  }, [gl.domElement, guide.placing, onPlaceOrigin]);
 
   const projectedGuide = useMemo(
     () => guide.placing ? { ...guide, origin: hoverOrigin } : guide,
@@ -108,7 +146,31 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
     onProgress,
   ]);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock, pointer }) => {
+    if (guide.placing) {
+      const targets: THREE.Object3D[] = [];
+      if (floorRef.current) targets.push(floorRef.current);
+      if (cardsGroupRef.current) targets.push(cardsGroupRef.current);
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObjects(targets, true).find(intersection =>
+        intersection.object.name === 'placement-floor' ||
+        intersection.object.name === 'card-surface'
+      );
+      hasPlacementHitRef.current = Boolean(hit);
+      if (hit) {
+        const nextOrigin = resolveBlueprintPlacementOrigin(hit.point.toArray());
+        const previousOrigin = hoverOriginRef.current;
+        if (
+          nextOrigin[0] !== previousOrigin[0] ||
+          Math.abs(nextOrigin[1] - previousOrigin[1]) > 0.0001 ||
+          nextOrigin[2] !== previousOrigin[2]
+        ) {
+          hoverOriginRef.current = nextOrigin;
+          setHoverOrigin(nextOrigin);
+        }
+      }
+      return;
+    }
     if (guide.placing || clock.elapsedTime - matchSampleTimeRef.current < 0.15) return;
     matchSampleTimeRef.current = clock.elapsedTime;
 
@@ -189,35 +251,8 @@ const BlueprintProjection: React.FC<BlueprintProjectionProps> = ({
   )?.targetId ?? currentStep?.cardIds[0] ?? worldCards[0]?.id ?? null;
   const dimensions = guide.blueprint.cardDimensions;
 
-  const handlePointerMove = (event: ThreeEvent<PointerEvent>) => {
-    event.stopPropagation();
-    setHoverOrigin([
-      Math.round(event.point.x * 10) / 10,
-      0,
-      Math.round(event.point.z * 10) / 10,
-    ]);
-  };
-
-  const handlePlace = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation();
-    onPlaceOrigin(hoverOrigin);
-  };
-
   return (
     <group>
-      {guide.placing && (
-        <mesh
-          position={[0, 0.008, 0]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          onPointerMove={handlePointerMove}
-          onClick={handlePlace}
-          renderOrder={20}
-        >
-          <planeGeometry args={[100, 100]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-      )}
-
       {guide.visible && worldCards.map(target => {
         const match = matchByTarget.get(target.id);
         const status = match?.status ?? 'missing';

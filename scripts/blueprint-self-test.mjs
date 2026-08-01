@@ -71,6 +71,10 @@ try {
   };
   const worldCards = service.getBlueprintWorldCards(guide);
   const target = worldCards[0];
+  assert.deepEqual(
+    service.resolveBlueprintPlacementOrigin([1.24, 2.345, -1.16]),
+    [1.2000000000000002, 2.346, -1.2000000000000002],
+  );
   const instantiated = service.instantiateBlueprintCards(blueprint, {
     origin: guide.origin,
     yaw: guide.yaw,

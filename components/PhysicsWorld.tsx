@@ -220,7 +220,7 @@ const Floor = ({
         frictionCombineRule={CoefficientCombineRule.Multiply}
         restitution={0}
       />
-      <mesh ref={meshRef} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh ref={meshRef} name="placement-floor" receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[100, 100]} />
         <shadowMaterial opacity={0.3} />
         <gridHelper
@@ -928,6 +928,8 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
           guide={blueprintGuide}
           cards={cards}
           liveTransformsRef={liveCardTransformsRef}
+          floorRef={floorRef}
+          cardsGroupRef={cardsGroupRef}
           onPlaceOrigin={onBlueprintPlaceOrigin}
           onProgress={onBlueprintProgress}
           onStepComplete={onBlueprintStepComplete}

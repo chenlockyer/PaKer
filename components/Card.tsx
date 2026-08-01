@@ -657,6 +657,7 @@ const Card: React.FC<CardProps> = ({
       />
       <mesh
         ref={meshRef}
+        name="card-surface"
         castShadow
         receiveShadow={false}
         onPointerOver={handlePointerOver}
