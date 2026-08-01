@@ -191,7 +191,14 @@ const LaunchChargePreview = ({
         </mesh>
         <mesh position={[meterLeft + fillWidth / 2, 0, 0.009]} scale={[fillWidth, 1, 1]} renderOrder={32}>
           <planeGeometry args={[1, 0.085]} />
-          <meshBasicMaterial color={fillColor} depthTest={false} depthWrite={false} />
+          <meshBasicMaterial
+            color={fillColor}
+            transparent
+            opacity={1}
+            depthTest={false}
+            depthWrite={false}
+            toneMapped={false}
+          />
         </mesh>
         {[-0.26, 0, 0.26].map(tickX => (
           <mesh key={tickX} position={[tickX, 0, 0.014]} renderOrder={33}>
@@ -207,11 +214,25 @@ const LaunchChargePreview = ({
         ))}
         <mesh position={[cursorX, 0, 0.019]} renderOrder={34}>
           <circleGeometry args={[0.082, 24]} />
-          <meshBasicMaterial color={fillColor} depthTest={false} depthWrite={false} />
+          <meshBasicMaterial
+            color={fillColor}
+            transparent
+            opacity={1}
+            depthTest={false}
+            depthWrite={false}
+            toneMapped={false}
+          />
         </mesh>
         <mesh position={[cursorX, 0, 0.023]} renderOrder={35}>
           <circleGeometry args={[0.045, 20]} />
-          <meshBasicMaterial color="#ffffff" depthTest={false} depthWrite={false} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={1}
+            depthTest={false}
+            depthWrite={false}
+            toneMapped={false}
+          />
         </mesh>
       </group>
     </group>
