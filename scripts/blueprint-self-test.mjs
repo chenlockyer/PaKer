@@ -210,8 +210,8 @@ try {
   }).includes('invalid-tutorial-cues'));
   assert.equal(levelService.validateLevel(level).id, level.id);
   assert.ok(levelService.getLevelValidationIssues(level).includes('playtest-required'));
-  assert.equal(levelService.getLevelPublishBlockingIssues(level).includes('playtest-required'), false);
-  assert.equal(levelService.publishLevel(level).status, 'published');
+  assert.equal(levelService.getLevelPublishBlockingIssues(level).includes('playtest-required'), true);
+  assert.throws(() => levelService.publishLevel(level), /playtest-required/);
   const verifiedLevel = levelService.markLevelPlaytested(level);
   assert.equal(levelService.publishLevel(verifiedLevel).status, 'published');
   const duplicatedLevel = levelService.duplicateLevel(verifiedLevel);

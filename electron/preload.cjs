@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('desktopAPI', {
   getWindowState: () => ipcRenderer.invoke('desktop:get-window-state'),
   getDisplayMetrics: () => ipcRenderer.invoke('desktop:get-display-metrics'),
   quit: () => ipcRenderer.invoke('desktop:quit'),
+  writeOfficialCampaign: (campaign) => ipcRenderer.invoke('desktop:write-official-campaign', campaign),
   onWindowStateChanged: (listener) => {
     const handler = (_event, state) => listener(state);
     ipcRenderer.on('desktop:window-state', handler);

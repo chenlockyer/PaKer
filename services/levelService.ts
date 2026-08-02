@@ -157,18 +157,37 @@ export const duplicateLevel = (source: LevelDefinition): LevelDefinition => {
   return { ...copy, sourceBlueprintId: source.sourceBlueprintId };
 };
 
-export const getLevelValidationIssues = (level: LevelDefinition): string[] => {
-  const issues: string[] = [];
-  if (!level.name.zh.trim()) issues.push('missing-name');
-  if (level.minCards > level.maxCards) issues.push('invalid-card-limit');
-  if (level.embeddedBlueprint.cardCount > level.maxCards) issues.push('blueprint-exceeds-card-limit');
-  if (!level.testStages?.length || level.testStages.some(stage => stage.duration < 1)) issues.push('invalid-test-stages');
+export type LevelValidationCode =
+  | 'missing-name' | 'invalid-card-limit' | 'blueprint-exceeds-card-limit'
+  | 'invalid-test-stages' | 'blueprint-checksum' | 'incomplete-blueprint-steps'
+  | 'playtest-required' | 'tutorial-duplicate-id' | 'tutorial-missing-text'
+  | 'tutorial-invalid-target' | 'tutorial-invalid-hints' | 'tutorial-missing-preset'
+  | 'tutorial-missing-tool' | 'tutorial-missing-input' | 'tutorial-invalid-card-count'
+  | 'tutorial-invalid-blueprint-step' | 'tutorial-invalid-height';
+
+export interface LevelValidationDetail {
+  code: LevelValidationCode;
+  field?: string;
+  cueId?: string;
+  cueIndex?: number;
+}
+
+export const getLevelValidationDetails = (level: LevelDefinition): LevelValidationDetail[] => {
+  const issues: LevelValidationDetail[] = [];
+  if (!level.name.zh.trim()) issues.push({ code: 'missing-name', field: 'name.zh' });
+  if (level.minCards > level.maxCards) issues.push({ code: 'invalid-card-limit', field: 'minCards' });
+  if (level.embeddedBlueprint.cardCount > level.maxCards) issues.push({ code: 'blueprint-exceeds-card-limit', field: 'maxCards' });
+  if (!level.testStages?.length || level.testStages.some(stage => stage.duration < 1)) issues.push({ code: 'invalid-test-stages', field: 'testStages' });
   if (level.tutorial?.enabled) {
     const cueIds = new Set<string>();
     const validTools = new Set(['PLACE', 'PUSH', 'DELETE', 'LAUNCH']);
-    const invalidCue = level.tutorial.cues.some(cue => {
+    level.tutorial.cues.forEach((cue, cueIndex) => {
+      if (!cue.enabled) return;
+      const add = (code: LevelValidationCode, field: string) => issues.push({ code, field, cueId: cue.id, cueIndex });
       const duplicateId = !cue.id || cueIds.has(cue.id);
       cueIds.add(cue.id);
+      if (duplicateId) add('tutorial-duplicate-id', 'id');
+      if (!cue.text.zh.trim()) add('tutorial-missing-text', 'text.zh');
       const stepIndex = cue.blueprintStepIndex ?? (cue.target.type === 'blueprint-step' ? cue.target.stepIndex : -1);
       const invalidWorldTarget = cue.target.type === 'world' && (
         cue.target.position.length !== 3 || cue.target.position.some(value => !Number.isFinite(value))
@@ -183,32 +202,41 @@ export const getLevelValidationIssues = (level: LevelDefinition): string[] => {
         !Number.isFinite(hint.delayMs) || hint.delayMs < 0 ||
         (index > 0 && hint.delayMs <= cue.hints[index - 1].delayMs)
       );
-      return duplicateId || !cue.text.zh.trim() || invalidTarget || invalidHints ||
-        (cue.kind === 'preset' && !cue.presetId) ||
-        (cue.kind === 'tool' && (!cue.tool || !validTools.has(cue.tool))) ||
-        (cue.kind === 'input' && (!cue.inputAction || !ACTIONS.includes(cue.inputAction as never))) ||
-        (cue.kind === 'card-place' && (!Number.isInteger(cue.cardCount) || (cue.cardCount ?? 0) < 1)) ||
-        (cue.kind === 'blueprint-step' && (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= level.embeddedBlueprint.steps.length)) ||
-        (cue.kind === 'height' && (!Number.isFinite(cue.targetHeight) || (cue.targetHeight ?? 0) <= 0));
+      if (invalidTarget) add('tutorial-invalid-target', 'target');
+      if (invalidHints) add('tutorial-invalid-hints', 'hints');
+      if (cue.kind === 'preset' && !cue.presetId) add('tutorial-missing-preset', 'presetId');
+      if (cue.kind === 'tool' && (!cue.tool || !validTools.has(cue.tool))) add('tutorial-missing-tool', 'tool');
+      if (cue.kind === 'input' && (!cue.inputAction || !ACTIONS.includes(cue.inputAction as never))) add('tutorial-missing-input', 'inputAction');
+      if (cue.kind === 'card-place' && (!Number.isInteger(cue.cardCount) || (cue.cardCount ?? 0) < 1)) add('tutorial-invalid-card-count', 'cardCount');
+      if (cue.kind === 'blueprint-step' && (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= level.embeddedBlueprint.steps.length)) add('tutorial-invalid-blueprint-step', 'blueprintStepIndex');
+      if (cue.kind === 'height' && (!Number.isFinite(cue.targetHeight) || (cue.targetHeight ?? 0) <= 0)) add('tutorial-invalid-height', 'targetHeight');
     });
-    if (invalidCue) issues.push('invalid-tutorial-cues');
   }
-  if (level.blueprintChecksum !== checksumBlueprint(level.embeddedBlueprint)) issues.push('blueprint-checksum');
+  if (level.blueprintChecksum !== checksumBlueprint(level.embeddedBlueprint)) issues.push({ code: 'blueprint-checksum', field: 'embeddedBlueprint' });
   const assigned = new Set(level.embeddedBlueprint.steps.flatMap(step => step.cardIds));
   if (
     level.embeddedBlueprint.steps.length === 0 ||
     level.embeddedBlueprint.steps.some(step => step.cardIds.length === 0) ||
     level.embeddedBlueprint.snapshot.cards.some(card => !assigned.has(card.id))
-  ) issues.push('incomplete-blueprint-steps');
+  ) issues.push({ code: 'incomplete-blueprint-steps', field: 'embeddedBlueprint.steps' });
   if (
     !level.verification?.passed ||
     level.verification.blueprintChecksum !== level.blueprintChecksum
-  ) issues.push('playtest-required');
+  ) issues.push({ code: 'playtest-required', field: 'verification' });
   return issues;
 };
 
+export const getLevelValidationIssues = (level: LevelDefinition): string[] => {
+  const details = getLevelValidationDetails(level);
+  const legacy = details.map(issue => issue.code.startsWith('tutorial-') ? 'invalid-tutorial-cues' : issue.code);
+  return [...new Set(legacy)];
+};
+
+export const getLevelPublishBlockingDetails = (level: LevelDefinition): LevelValidationDetail[] =>
+  getLevelValidationDetails(level);
+
 export const getLevelPublishBlockingIssues = (level: LevelDefinition): string[] =>
-  getLevelValidationIssues(level).filter(issue => issue !== 'playtest-required');
+  getLevelValidationIssues(level);
 
 export const markLevelPlaytested = (level: LevelDefinition): LevelDefinition => ({
   ...level,

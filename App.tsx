@@ -8,6 +8,8 @@ import PhysicsLab from './components/PhysicsLab';
 import SettingsModal from './components/SettingsModal';
 import BlueprintStudio from './components/BlueprintStudio';
 import LevelStudio from './components/LevelStudio';
+import CampaignSelect from './components/CampaignSelect';
+import CampaignResumeModal from './components/CampaignResumeModal';
 import SaveLibraryModal, { SaveLibraryMode } from './components/SaveLibraryModal';
 import {
   Blueprint,
@@ -35,6 +37,9 @@ import {
   LaunchPreset,
   LaunchRecord,
   PhysicsSettings,
+  CampaignDefinition,
+  CampaignProgress,
+  CampaignSession,
 } from './types';
 import { translations } from './utils/translations';
 import {
@@ -83,6 +88,7 @@ import {
 } from './services/uiScaleService';
 import {
   createGameSave,
+  captureLiveCards,
   deleteManualGameSave,
   findGameSave,
   GameSaveData,
@@ -97,6 +103,20 @@ import {
   persistPhysicsSettings,
 } from './services/physicsSettingsService';
 import { useTutorialDirector } from './hooks/useTutorialDirector';
+import {
+  clearActiveCampaign,
+  clearCampaignSession,
+  flattenCampaign,
+  isCampaignEntryUnlocked,
+  isCampaignSessionValid,
+  loadActiveCampaign,
+  loadCampaignProgress,
+  loadCampaignSession,
+  saveActiveCampaign,
+  saveCampaignResult,
+  saveCampaignSession,
+} from './services/campaignService';
+import { DEFAULT_OFFICIAL_CAMPAIGN, loadBundledOfficialCampaign } from './services/officialCampaign';
 
 const DEG_10 = Math.PI / 18;
 const PRESET_SCHEMA_VERSION = '5';
@@ -173,6 +193,8 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showBlueprintStudio, setShowBlueprintStudio] = useState(false);
   const [showLevelStudio, setShowLevelStudio] = useState(false);
+  const [showCampaignSelect, setShowCampaignSelect] = useState(false);
+  const [showCampaignResume, setShowCampaignResume] = useState(false);
   const [lang, setLang] = useState<'en' | 'zh'>('zh');
   const [theme, setTheme] = useState<AppTheme>(() => {
     const savedTheme = localStorage.getItem('hoc_theme');
@@ -226,11 +248,17 @@ const App: React.FC = () => {
   const [blueprintProgress, setBlueprintProgress] = useState<BlueprintGuideProgress>(EMPTY_BLUEPRINT_PROGRESS);
   const [customLevels, setCustomLevels] = useState<LevelDefinition[]>(loadLevels);
   const [activeCustomLevel, setActiveCustomLevel] = useState<LevelDefinition | null>(null);
+  const [officialCampaign, setOfficialCampaign] = useState<CampaignDefinition>(DEFAULT_OFFICIAL_CAMPAIGN);
+  const [activeCampaign, setActiveCampaign] = useState<CampaignDefinition>(() => loadActiveCampaign() ?? DEFAULT_OFFICIAL_CAMPAIGN);
+  const [campaignProgress, setCampaignProgress] = useState<CampaignProgress>(() => loadCampaignProgress((loadActiveCampaign() ?? DEFAULT_OFFICIAL_CAMPAIGN).id));
+  const [activeCampaignEntryId, setActiveCampaignEntryId] = useState<string | null>(null);
   const [completedTutorials, setCompletedTutorials] = useState<Set<string>>(loadTutorialProgress);
   const liveCardTransformsRef = useRef(new Map<string, LiveCardTransform>());
   const launchHistoryRef = useRef<LaunchRecord[]>([]);
   const blueprintCheckpointRef = useRef<CardData[]>([]);
   const blueprintCheckpointReadyRef = useRef(false);
+  const campaignTestCheckpointRef = useRef<CampaignSession | null>(null);
+  const levelPlaytestStartedFromCueRef = useRef(false);
   const cameraHintRef = useRef<BlueprintCameraHint>({
     position: [0, 8, 12],
     target: [0, 0, 0],
@@ -337,6 +365,19 @@ const App: React.FC = () => {
   }, [customLevels]);
 
   useEffect(() => {
+    let active = true;
+    void loadBundledOfficialCampaign().then(campaign => {
+      if (!active) return;
+      setOfficialCampaign(campaign);
+      if (!loadActiveCampaign()) {
+        setActiveCampaign(campaign);
+        setCampaignProgress(loadCampaignProgress(campaign.id));
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     const activeIds = new Set(cards.map(card => card.id));
     for (const id of liveCardTransformsRef.current.keys()) {
       if (!activeIds.has(id)) liveCardTransformsRef.current.delete(id);
@@ -353,8 +394,9 @@ const App: React.FC = () => {
   );
   const playerLevels = customLevels.filter(level => !OFFICIAL_LEVEL_IDS.has(level.id));
   const levelLibrary = [...effectiveOfficialLevels, ...playerLevels];
+  const campaignLevels = flattenCampaign(activeCampaign);
   const currentPreset = presets.find(p => p.id === currentPresetId) || presets[0];
-  const currentLevel = activeCustomLevel ?? effectiveOfficialLevels[currentLevelIndex] ?? effectiveOfficialLevels[0];
+  const currentLevel = activeCustomLevel ?? campaignLevels[currentLevelIndex]?.entry.level ?? effectiveOfficialLevels[0];
   const currentTestStage = currentLevel.testStages[currentTestStageIndex];
   const activeTestType = currentTestStage?.testType ?? currentLevel.testType;
   const activeTestDuration = currentTestStage?.duration ?? currentLevel.testDuration;
@@ -1045,34 +1087,95 @@ const App: React.FC = () => {
     stopBlueprintGuide,
   ]);
 
-  const startChallenge = useCallback(() => {
-    const firstLevel = effectiveOfficialLevels[0];
+  const captureCampaignSession = useCallback((): CampaignSession | null => {
+    if (!activeCampaignEntryId || activeCustomLevel || gameMode !== GameMode.CHALLENGE) return null;
+    const located = campaignLevels.find(item => item.entry.id === activeCampaignEntryId);
+    if (!located) return null;
+    return {
+      schemaVersion: 1,
+      campaignId: activeCampaign.id,
+      campaignPublishRevision: activeCampaign.publishRevision,
+      chapterId: located.chapter.id,
+      levelEntryId: located.entry.id,
+      levelId: located.entry.level.id,
+      levelPublishRevision: located.entry.level.publishRevision,
+      cards: captureLiveCards(cards, liveCardTransformsRef.current),
+      cardSize,
+      currentPresetId,
+      isFreezeMode,
+      blueprint: blueprintGuide ? {
+        origin: [...blueprintGuide.origin], yaw: blueprintGuide.yaw,
+        currentStepIndex: blueprintGuide.currentStepIndex,
+        visible: blueprintGuide.visible,
+        assistance: blueprintGuide.assistance,
+      } : null,
+      tutorialCueId: activeTutorialCue?.id ?? null,
+      savedAt: new Date().toISOString(),
+    };
+  }, [activeCampaign, activeCampaignEntryId, activeCustomLevel, activeTutorialCue?.id, blueprintGuide, campaignLevels, cardSize, cards, currentPresetId, gameMode, isFreezeMode]);
+
+  const launchCampaignEntry = useCallback((entryId: string, session?: CampaignSession | null) => {
+    const index = campaignLevels.findIndex(item => item.entry.id === entryId);
+    if (index < 0) return;
+    const level = campaignLevels[index].entry.level;
     setActiveCustomLevel(null);
-    restartLevelTutorial(firstLevel);
+    setActiveCampaignEntryId(entryId);
     setGameMode(GameMode.CHALLENGE);
-    setCurrentLevelIndex(0);
-    resetChallengeState(firstLevel.testDuration);
-    if (levelUsesBlueprintGuide(firstLevel)) {
-      startBlueprintGuide(firstLevel.embeddedBlueprint, true);
-    } else {
-      stopBlueprintGuide();
-    }
+    setCurrentLevelIndex(index);
+    setCardSize(level.embeddedBlueprint.cardSize);
+    resetChallengeState(level.testDuration);
+    if (levelUsesBlueprintGuide(level)) {
+      startBlueprintGuide(level.embeddedBlueprint, true);
+      if (session?.blueprint) setBlueprintGuide(previous => previous ? { ...previous, ...session.blueprint!, placing: false } : previous);
+    } else stopBlueprintGuide();
+    if (session) {
+      liveCardTransformsRef.current.clear();
+      session.cards.forEach(card => liveCardTransformsRef.current.set(card.id, { position: [...card.position], rotation: [...card.rotation] }));
+      setCards(session.cards.map(card => ({ ...card, position: [...card.position], rotation: [...card.rotation] })));
+      setCardSize(session.cardSize);
+      setCurrentPresetId(presets.some(preset => preset.id === session.currentPresetId) ? session.currentPresetId : DEFAULT_PRESETS[0].id);
+      setIsFreezeMode(session.isFreezeMode);
+      tutorialDirector.start(level, { startCueId: session.tutorialCueId ?? undefined, force: true });
+    } else restartLevelTutorial(level);
+    setShowCampaignSelect(false);
+    setShowCampaignResume(false);
     setAppState(AppState.GAME);
-  }, [effectiveOfficialLevels, resetChallengeState, restartLevelTutorial, startBlueprintGuide, stopBlueprintGuide]);
+  }, [campaignLevels, presets, resetChallengeState, restartLevelTutorial, startBlueprintGuide, stopBlueprintGuide, tutorialDirector.start]);
+
+  const startChallenge = useCallback(() => {
+    const session = loadCampaignSession();
+    if (session && isCampaignSessionValid(session, activeCampaign)) setShowCampaignResume(true);
+    else {
+      if (session) {
+        clearCampaignSession();
+        alert(lang === 'zh' ? '挑战流程或关卡已经更新，旧的中断进度无法安全恢复，请重新开始。' : 'The campaign or level changed. The old session cannot be restored safely; please restart.');
+      }
+      setShowCampaignSelect(true);
+    }
+  }, [activeCampaign, lang]);
+
+  useEffect(() => {
+    if (appState !== AppState.GAME || gameMode !== GameMode.CHALLENGE || activeCustomLevel || !activeCampaignEntryId) return;
+    const persistSession = () => {
+      const session = challengePhase === ChallengePhase.BUILDING
+        ? captureCampaignSession()
+        : campaignTestCheckpointRef.current;
+      if (session) saveCampaignSession(session);
+    };
+    const interval = window.setInterval(persistSession, 30_000);
+    const onVisibility = () => { if (document.visibilityState === 'hidden') persistSession(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', persistSession);
+    window.addEventListener('beforeunload', persistSession);
+    return () => { window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('blur', persistSession); window.removeEventListener('beforeunload', persistSession); };
+  }, [activeCampaignEntryId, activeCustomLevel, appState, captureCampaignSession, challengePhase, gameMode]);
 
   const advanceChallenge = useCallback(() => {
     if (activeCustomLevel) return;
-    const nextLevelIndex = Math.min(currentLevelIndex + 1, effectiveOfficialLevels.length - 1);
-    const nextLevel = effectiveOfficialLevels[nextLevelIndex];
-    setCurrentLevelIndex(nextLevelIndex);
-    resetChallengeState(nextLevel.testDuration);
-    restartLevelTutorial(nextLevel);
-    if (levelUsesBlueprintGuide(nextLevel)) {
-      startBlueprintGuide(nextLevel.embeddedBlueprint, true);
-    } else {
-      stopBlueprintGuide();
-    }
-  }, [activeCustomLevel, currentLevelIndex, effectiveOfficialLevels, resetChallengeState, restartLevelTutorial, startBlueprintGuide, stopBlueprintGuide]);
+    const next = campaignLevels[currentLevelIndex + 1];
+    if (next) launchCampaignEntry(next.entry.id);
+    else setShowCampaignSelect(true);
+  }, [activeCustomLevel, campaignLevels, currentLevelIndex, launchCampaignEntry]);
 
   const saveCustomLevel = useCallback((input: CreateLevelInput, editingId: string | null) => {
     setCustomLevels(previous => {
@@ -1096,6 +1199,7 @@ const App: React.FC = () => {
   }, []);
 
   const playtestCustomLevel = useCallback((level: LevelDefinition, startCueId?: string) => {
+    levelPlaytestStartedFromCueRef.current = Boolean(startCueId);
     setActiveCustomLevel(level);
     setGameMode(GameMode.CHALLENGE);
     setCurrentLevelIndex(0);
@@ -1168,6 +1272,12 @@ const App: React.FC = () => {
       return;
     }
 
+    if (!activeCustomLevel && activeCampaignEntryId) {
+      const checkpoint = captureCampaignSession();
+      campaignTestCheckpointRef.current = checkpoint;
+      if (checkpoint) saveCampaignSession(checkpoint);
+    }
+
     toggleFreezeMode(false);
     setDraggingCardId(null);
     setPointerMode(PointerMode.PLACE);
@@ -1182,7 +1292,10 @@ const App: React.FC = () => {
     currentLevel.minCards,
     currentLevel.requiresBlueprintMatch,
     activeTestDuration,
-    toggleFreezeMode
+    toggleFreezeMode,
+    activeCustomLevel,
+    activeCampaignEntryId,
+    captureCampaignSession,
   ]);
 
   const undoCards = useCallback(() => {
@@ -1288,10 +1401,18 @@ const App: React.FC = () => {
   }, [challengePhase]);
 
   useEffect(() => {
+    if (challengePhase !== ChallengePhase.SUCCESS || activeCustomLevel || !activeCampaignEntryId) return;
+    setCampaignProgress(saveCampaignResult(activeCampaign.id, currentLevel, challengeScore, challengeStars));
+    clearCampaignSession();
+    campaignTestCheckpointRef.current = null;
+  }, [activeCampaign.id, activeCampaignEntryId, activeCustomLevel, challengePhase, challengeScore, challengeStars, currentLevel]);
+
+  useEffect(() => {
     if (
       challengePhase !== ChallengePhase.SUCCESS ||
       !activeCustomLevel ||
-      activeCustomLevel.verification.passed
+      activeCustomLevel.verification.passed ||
+      levelPlaytestStartedFromCueRef.current
     ) return;
     const verified = markLevelPlaytested(activeCustomLevel);
     setActiveCustomLevel(verified);
@@ -1392,6 +1513,10 @@ const App: React.FC = () => {
   }, [inputProfile, interactionEnabled, presets, subscribeInput]);
 
   // --- RENDER ---
+  const storedCampaignSession = loadCampaignSession();
+  const storedSessionLevel = storedCampaignSession && isCampaignSessionValid(storedCampaignSession, activeCampaign)
+    ? campaignLevels.find(item => item.entry.id === storedCampaignSession.levelEntryId)?.entry.level ?? null
+    : null;
   return (
     <div className="app-shell" data-theme={theme}>
       
@@ -1479,6 +1604,10 @@ const App: React.FC = () => {
             lang={lang}
             onOpenSettings={() => setShowSettings(true)}
             onBackToMenu={() => {
+              const campaignSession = challengePhase === ChallengePhase.BUILDING
+                ? captureCampaignSession()
+                : campaignTestCheckpointRef.current;
+              if (campaignSession) saveCampaignSession(campaignSession);
               try {
                 writeGameSave('autosave', {
                   id: 'autosave',
@@ -1494,7 +1623,7 @@ const App: React.FC = () => {
             maxCards={currentLevel.maxCards}
             minCards={currentLevel.minCards}
             levelIndex={currentLevelIndex}
-            levelCount={activeCustomLevel ? 1 : effectiveOfficialLevels.length}
+            levelCount={activeCustomLevel ? 1 : campaignLevels.length}
             levelName={currentLevel.name[lang]}
             levelDescription={`${currentLevel.description[lang]}${activeCustomLevel && activeCustomLevel.testStages.length > 1 ? ` · ${lang === 'zh' ? '测试阶段' : 'Test stage'} ${currentTestStageIndex + 1}/${activeCustomLevel.testStages.length}` : ''}`}
             testType={activeTestType}
@@ -1582,6 +1711,14 @@ const App: React.FC = () => {
           }}
         />
       )}
+      {showCampaignSelect && <CampaignSelect campaign={activeCampaign} progress={campaignProgress} lang={lang} onClose={() => setShowCampaignSelect(false)} onSelect={entryId => {
+        if (!isCampaignEntryUnlocked(activeCampaign, campaignProgress, entryId)) return;
+        const session = loadCampaignSession();
+        if (session && session.levelEntryId !== entryId && !confirm(lang === 'zh' ? '开始其他关卡会替换当前中断进度，是否继续？' : 'Starting another level replaces the unfinished session. Continue?')) return;
+        clearCampaignSession();
+        launchCampaignEntry(entryId);
+      }} />}
+      {showCampaignResume && storedCampaignSession && storedSessionLevel && <CampaignResumeModal level={storedSessionLevel} lang={lang} onContinue={() => launchCampaignEntry(storedCampaignSession.levelEntryId, storedCampaignSession)} onRestart={() => { clearCampaignSession(); launchCampaignEntry(storedCampaignSession.levelEntryId); }} onChapters={() => { setShowCampaignResume(false); setShowCampaignSelect(true); }} />}
 
       {import.meta.env.DEV && appState === AppState.PHYSICS_LAB && (
         <PhysicsLab
@@ -1632,6 +1769,23 @@ const App: React.FC = () => {
         }}
         onImport={importCustomLevel}
         onPlay={playtestCustomLevel}
+        campaign={activeCampaign}
+        onApplyCampaign={campaign => {
+          saveActiveCampaign(campaign);
+          setActiveCampaign(campaign);
+          setCampaignProgress(loadCampaignProgress(campaign.id));
+        }}
+        onRestoreCampaign={() => {
+          clearActiveCampaign();
+          clearCampaignSession();
+          setActiveCampaign(officialCampaign);
+          setCampaignProgress(loadCampaignProgress(officialCampaign.id));
+          return officialCampaign;
+        }}
+        onPreviewCampaignLevel={(campaign, levelEntryId) => {
+          const match = flattenCampaign(campaign).find(item => item.entry.id === levelEntryId);
+          if (match) playtestCustomLevel(match.entry.level);
+        }}
         onClose={() => setShowLevelStudio(false)}
       />
     </div>

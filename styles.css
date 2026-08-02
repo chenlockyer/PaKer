@@ -23,6 +23,38 @@
   --ui-scale: 1;
 }
 
+/* Chapter campaign authoring and progression */
+.level-publish-check { margin: 12px 20px; padding: 12px; display: grid; gap: 6px; border: 1px solid #e0b45a; border-radius: 10px; background: #fff8e7; color: #4d3b1c; }
+.level-publish-check button { text-align: left; border: 0; border-radius: 7px; padding: 8px 10px; background: rgba(255,255,255,.78); color: inherit; }
+.campaign-studio { padding: 18px; overflow: auto; display: grid; gap: 16px; }
+.campaign-toolbar { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+.campaign-toolbar label { display: grid; gap: 5px; }
+.campaign-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
+.campaign-chapters { display: grid; gap: 14px; }
+.campaign-chapter { padding: 14px; border: 1px solid var(--border-color, #cbd5df); border-radius: 12px; background: rgba(255,255,255,.72); }
+.campaign-chapter.is-disabled, .campaign-entry.is-disabled { opacity: .52; }
+.campaign-chapter > header { display: grid; grid-template-columns: minmax(180px,1fr) auto repeat(5,auto); gap: 6px; align-items: center; }
+.campaign-chapter textarea { width: 100%; min-height: 48px; margin: 8px 0; }
+.campaign-levels { display: grid; gap: 6px; margin: 8px 0; }
+.campaign-entry { display: grid; grid-template-columns: minmax(180px,1fr) auto repeat(4,auto) minmax(110px,auto) auto; gap: 6px; align-items: center; padding: 8px; border-radius: 8px; background: rgba(222,232,242,.6); cursor: grab; }
+.campaign-entry small { color: #587085; }
+.campaign-select-layer { z-index: 260; }
+.campaign-select-window { width: min(1080px,92vw); max-height: 90vh; overflow: auto; padding: 20px; border-radius: 18px; background: var(--panel-bg, #f8fafc); color: var(--text-primary, #203040); box-shadow: 0 28px 80px rgba(20,40,60,.25); }
+.campaign-map { display: grid; gap: 18px; padding: 14px 0; }
+.campaign-map-chapter { border-radius: 14px; padding: 14px; background: rgba(220,232,244,.58); }
+.campaign-map-chapter.is-locked { opacity: .55; }
+.campaign-map-chapter > header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; }
+.campaign-map-chapter > header > span { font: 700 24px/1 monospace; color: #3978aa; }
+.campaign-map-chapter h3, .campaign-map-chapter p { margin: 0; }
+.campaign-map-levels { display: flex; gap: 10px; overflow-x: auto; padding-top: 12px; }
+.campaign-map-levels button { min-width: 150px; min-height: 82px; display: grid; gap: 5px; text-align: left; border-radius: 12px; padding: 10px; }
+.campaign-map-levels button.is-complete { border-color: #57a66a; background: #f1fff3; }
+.campaign-map-levels button small { color: #d6a521; letter-spacing: 2px; }
+.campaign-resume-layer { z-index: 270; }
+.campaign-resume-card { width: min(440px,88vw); display: grid; gap: 10px; padding: 26px; border-radius: 18px; background: var(--panel-bg, #f8fafc); color: var(--text-primary, #203040); box-shadow: 0 25px 70px rgba(20,40,60,.3); }
+.campaign-resume-card h2, .campaign-resume-card p { margin: 0; }
+@media (max-width: 800px) { .campaign-toolbar { grid-template-columns: 1fr; } .campaign-entry { grid-template-columns: 1fr auto auto; } .campaign-entry select { grid-column: 1 / -1; } }
+
 :root[data-theme="warm"], [data-theme="warm"] {
   color-scheme: light;
   --accent: #3976bc;

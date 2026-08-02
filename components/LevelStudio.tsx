@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Blueprint,
+  CampaignDefinition,
   ChallengeTestType,
   LevelDefinition,
   LevelOrigin,
@@ -19,8 +20,11 @@ import {
   downloadLevel,
   parseLevelFile,
   updateLevel,
+  getLevelPublishBlockingDetails,
+  LevelValidationDetail,
 } from '../services/levelService';
 import { createTutorialCue, normalizeTutorialCue } from '../services/tutorialService';
+import CampaignStudio from './CampaignStudio';
 
 interface LevelStudioProps {
   isOpen: boolean;
@@ -36,14 +40,19 @@ interface LevelStudioProps {
   onPublish: (level: LevelDefinition) => string[];
   onImport: (level: LevelDefinition) => void;
   onPlay: (level: LevelDefinition, startCueId?: string) => void;
+  campaign: CampaignDefinition;
+  onApplyCampaign: (campaign: CampaignDefinition) => void;
+  onRestoreCampaign: () => CampaignDefinition;
+  onPreviewCampaignLevel: (campaign: CampaignDefinition, levelEntryId: string) => void;
   onClose: () => void;
 }
 
 const LevelStudio: React.FC<LevelStudioProps> = ({
   isOpen, lang, blueprints, presets, levels, officialLevelIds, overriddenOfficialLevelIds,
-  onSave, onDelete, onDuplicate, onPublish, onImport, onPlay, onClose,
+  onSave, onDelete, onDuplicate, onPublish, onImport, onPlay, campaign,
+  onApplyCampaign, onRestoreCampaign, onPreviewCampaignLevel, onClose,
 }) => {
-  const [tab, setTab] = useState<'create' | 'library'>('create');
+  const [tab, setTab] = useState<'create' | 'library' | 'campaign'>('create');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [author, setAuthor] = useState(() => localStorage.getItem('hoc_level_author') ?? '');
@@ -71,6 +80,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
   const [entrySubtitle, setEntrySubtitle] = useState('');
   const [tutorialCues, setTutorialCues] = useState<LevelTutorialCue[]>([]);
   const [notice, setNotice] = useState('');
+  const [publishIssues, setPublishIssues] = useState<{ level: LevelDefinition; details: LevelValidationDetail[] } | null>(null);
   const [tutorialDebugEvents, setTutorialDebugEvents] = useState<Array<{ levelId: string | null; message: string; at: string }>>([]);
   const [editingLevel, setEditingLevel] = useState<LevelDefinition | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -102,11 +112,28 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
       'blueprint-exceeds-card-limit': { zh: '蓝图牌数超过关卡上限', en: 'Blueprint exceeds card limit' },
       'invalid-test-stages': { zh: '测试阶段设置无效', en: 'Invalid test stages' },
       'invalid-tutorial-cues': { zh: '教学步骤不完整', en: 'Incomplete tutorial cues' },
+      'tutorial-duplicate-id': { zh: '节点 ID 重复', en: 'Duplicate node ID' },
+      'tutorial-missing-text': { zh: '缺少提示文字', en: 'Missing prompt text' },
+      'tutorial-invalid-target': { zh: '引导目标无效', en: 'Invalid guidance target' },
+      'tutorial-invalid-hints': { zh: '渐进提示时间无效', en: 'Invalid hint timing' },
+      'tutorial-missing-preset': { zh: '未选择放置预设', en: 'No placement preset selected' },
+      'tutorial-missing-tool': { zh: '未选择工具', en: 'No tool selected' },
+      'tutorial-missing-input': { zh: '未选择输入动作', en: 'No input action selected' },
+      'tutorial-invalid-card-count': { zh: '放牌数量无效', en: 'Invalid card count' },
+      'tutorial-invalid-blueprint-step': { zh: '蓝图步骤不存在', en: 'Blueprint step does not exist' },
+      'tutorial-invalid-height': { zh: '目标高度无效', en: 'Invalid target height' },
       'blueprint-checksum': { zh: '内嵌蓝图校验失败', en: 'Embedded blueprint checksum failed' },
       'incomplete-blueprint-steps': { zh: '蓝图步骤没有覆盖全部纸牌', en: 'Blueprint steps do not cover every card' },
       'playtest-required': { zh: '尚未试玩验证', en: 'Not playtested yet' },
     };
     return labels[issue]?.[lang] ?? issue;
+  };
+  const levelStatusLabel = (level: LevelDefinition) => {
+    if (level.status === 'published') return lang === 'zh' ? '已发布' : 'Published';
+    if (level.verification.passed && level.verification.blueprintChecksum === level.blueprintChecksum) return lang === 'zh' ? '已验证' : 'Verified';
+    const configurationIssues = getLevelPublishBlockingDetails(level).filter(issue => issue.code !== 'playtest-required');
+    if (configurationIssues.length === 0) return lang === 'zh' ? '待完整试玩' : 'Full playtest required';
+    return lang === 'zh' ? '草稿' : 'Draft';
   };
 
   const beginEdit = (level: LevelDefinition) => {
@@ -144,10 +171,6 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
   const buildInput = (): CreateLevelInput | null => {
     if (!name.trim() || !selectedBlueprint) {
       setNotice(lang === 'zh' ? '请填写关卡名称并选择蓝图。' : 'Enter a name and select a blueprint.');
-      return null;
-    }
-    if (tutorialEnabled && tutorialCues.some(cue => cue.enabled && !isCueTargetValid(cue))) {
-      setNotice(lang === 'zh' ? '教学时间线包含不存在的语义目标。' : 'The tutorial timeline contains a missing semantic target.');
       return null;
     }
     return {
@@ -282,12 +305,23 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
           <button className={tab === 'library' ? 'is-active' : ''} onClick={() => setTab('library')}>
             {lang === 'zh' ? `关卡库 ${levels.length}` : `Library ${levels.length}`}
           </button>
+          {import.meta.env.DEV && <button className={tab === 'campaign' ? 'is-active' : ''} onClick={() => setTab('campaign')}>
+            {lang === 'zh' ? '挑战流程' : 'Campaign'}
+          </button>}
           <button className="blueprint-import" onClick={() => importRef.current?.click()}>
             {lang === 'zh' ? '导入关卡' : 'Import'}
           </button>
           <input ref={importRef} type="file" accept=".json,.paker-level.json" hidden onChange={importFile} />
         </nav>
         {notice && <div className="blueprint-notice">{notice}</div>}
+        {publishIssues && <div className="level-publish-check">
+          <strong>{lang === 'zh' ? `“${publishIssues.level.name[lang]}”发布检查` : `Publish check: ${publishIssues.level.name[lang]}`}</strong>
+          {publishIssues.details.map((issue, index) => <button key={`${issue.code}_${issue.cueId ?? ''}_${index}`} onClick={() => {
+            if (!issue.cueId) return;
+            beginEdit(publishIssues.level);
+            requestAnimationFrame(() => document.getElementById(`level-cue-${issue.cueId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+          }}>{issue.cueIndex !== undefined ? `${lang === 'zh' ? '教学节点' : 'Tutorial'} ${String(issue.cueIndex + 1).padStart(2, '0')}：` : ''}{issueLabel(issue.code)}{issue.field ? ` · ${issue.field}` : ''}</button>)}
+        </div>}
 
         {tab === 'create' ? (
           <form className="level-form" onSubmit={submit}>
@@ -403,7 +437,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
 
                   <div className="level-cue-list">
                     {tutorialCues.map((cue, index) => (
-                      <article className={`level-cue-row ${cue.enabled ? '' : 'is-disabled'}`} key={cue.id}>
+                      <article id={`level-cue-${cue.id}`} className={`level-cue-row ${cue.enabled ? '' : 'is-disabled'}`} key={cue.id}>
                         <header>
                           <b>{String(index + 1).padStart(2, '0')}</b>
                           <select
@@ -425,7 +459,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                           <button type="button" onClick={() => moveTutorialCue(index, -1)} disabled={index === 0}>↑</button>
                           <button type="button" onClick={() => moveTutorialCue(index, 1)} disabled={index === tutorialCues.length - 1}>↓</button>
                           <button type="button" onClick={() => duplicateTutorialCue(cue)} title={lang === 'zh' ? '复制节点' : 'Duplicate'}>⧉</button>
-                          <button type="button" className="level-cue-play" onClick={() => playFromCue(cue)} title={lang === 'zh' ? '从此节点试玩' : 'Play from here'}>▶</button>
+                          <button type="button" className="level-cue-play" disabled={!cue.enabled || !isCueTargetValid(cue)} onClick={() => playFromCue(cue)} title={lang === 'zh' ? '从此节点试玩' : 'Play from here'}>▶</button>
                           <button type="button" className="danger-text" onClick={() => setTutorialCues(current => current.filter(item => item.id !== cue.id))}>×</button>
                         </header>
                         <textarea
@@ -518,7 +552,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                 : (lang === 'zh' ? '保存自包含关卡' : 'Save self-contained level')}
             </button>
           </form>
-        ) : (
+        ) : tab === 'library' ? (
           <div className="level-library">
             {levels.length === 0 ? <div className="blueprint-empty"><strong>{lang === 'zh' ? '还没有自定义关卡' : 'No custom levels yet'}</strong></div> : levels.map(level => {
               const isOfficial = officialLevelIds.includes(level.id);
@@ -529,14 +563,14 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                   <span className="panel-kicker">
                     {isOfficial ? (lang === 'zh' ? '官方' : 'OFFICIAL') : (lang === 'zh' ? '玩家' : 'PLAYER')}
                     {isOfficialOverride ? ` · ${lang === 'zh' ? '已修改' : 'OVERRIDDEN'}` : ''}
-                    {' · '}{level.status}
+                    {' · '}{levelStatusLabel(level)}
                   </span>
                   <h3>{level.name[lang]}</h3><p>{level.description[lang]}</p>
                   <small>
                     {level.embeddedBlueprint.cardCount} {lang === 'zh' ? '张目标牌' : 'target cards'} · {level.testType} · {level.testDuration}s
                     {' · '}{level.requiresBlueprintMatch ? (lang === 'zh' ? '要求蓝图' : 'blueprint required') : (lang === 'zh' ? '自由结构' : 'free structure')}
                     {level.tutorial.enabled ? ` · ${level.tutorial.cues.length} ${lang === 'zh' ? '条教学' : 'tutorial cues'}` : ''}
-                    {' · '}{level.verification.passed ? (lang === 'zh' ? '已试玩通过' : 'verified') : (lang === 'zh' ? '待试玩' : 'unverified')}
+                    {' · '}{level.status === 'published' ? (lang === 'zh' ? '可加入挑战流程' : 'campaign-ready') : (lang === 'zh' ? '发布后才可加入挑战流程' : 'publish before adding to a campaign')}
                   </small>
                 </div>
                 <div className="level-card-actions">
@@ -544,14 +578,14 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                   <button onClick={() => beginEdit(level)}>{lang === 'zh' ? '编辑' : 'Edit'}</button>
                   <button onClick={() => onDuplicate(level)}>{lang === 'zh' ? '复制' : 'Duplicate'}</button>
                   {level.status === 'draft' && <button onClick={() => {
-                    const issues = onPublish(level);
+                    const details = getLevelPublishBlockingDetails(level);
+                    setPublishIssues(details.length ? { level, details } : null);
+                    const issues = details.length ? details.map(issue => issue.code) : onPublish(level);
                     setNotice(issues.length
                       ? (lang === 'zh'
                           ? `无法发布：${issues.map(issueLabel).join('、')}`
                           : `Cannot publish: ${issues.map(issueLabel).join(', ')}`)
-                      : (level.verification.passed
-                          ? (lang === 'zh' ? '关卡已发布。' : 'Level published.')
-                          : (lang === 'zh' ? '关卡已发布，但尚未试玩验证。' : 'Level published without playtest verification.')));
+                      : (lang === 'zh' ? '关卡已发布，可加入正式挑战流程。' : 'Level published and can be added to a campaign.'));
                   }}>{lang === 'zh' ? '发布' : 'Publish'}</button>}
                   <button onClick={() => downloadLevel(level)}>{lang === 'zh' ? '导出' : 'Export'}</button>
                   {isOfficial
@@ -575,7 +609,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
               </article>
             )})}
           </div>
-        )}
+        ) : <CampaignStudio lang={lang} levels={levels} initialCampaign={campaign} onApply={onApplyCampaign} onRestoreBuiltIn={onRestoreCampaign} onPreview={onPreviewCampaignLevel} />}
       </section>
     </div>
   );

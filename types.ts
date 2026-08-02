@@ -398,6 +398,69 @@ export interface LevelDefinition extends ChallengeLevel {
   };
 }
 
+export interface CampaignLevelEntry {
+  id: string;
+  enabled: boolean;
+  sourceLevelId: string;
+  sourcePublishRevision: number;
+  level: LevelDefinition;
+}
+
+export interface CampaignChapter {
+  id: string;
+  name: Record<'en' | 'zh', string>;
+  description: Record<'en' | 'zh', string>;
+  enabled: boolean;
+  levels: CampaignLevelEntry[];
+}
+
+export interface CampaignDefinition {
+  schemaVersion: 1;
+  id: string;
+  name: Record<'en' | 'zh', string>;
+  description: Record<'en' | 'zh', string>;
+  status: 'draft' | 'published';
+  publishRevision: number;
+  createdAt: string;
+  updatedAt: string;
+  chapters: CampaignChapter[];
+}
+
+export interface CampaignLevelResult {
+  completedAt: string;
+  bestScore: number;
+  bestStars: number;
+}
+
+export interface CampaignProgress {
+  schemaVersion: 1;
+  campaignId: string;
+  results: Record<string, CampaignLevelResult>;
+}
+
+export interface CampaignSession {
+  schemaVersion: 1;
+  campaignId: string;
+  campaignPublishRevision: number;
+  chapterId: string;
+  levelEntryId: string;
+  levelId: string;
+  levelPublishRevision: number;
+  cards: CardData[];
+  cardSize: CardSize;
+  currentPresetId: string;
+  isFreezeMode: boolean;
+  blueprint: {
+    origin: [number, number, number];
+    yaw: number;
+    currentStepIndex: number;
+    visible: boolean;
+    assistance: BlueprintAssistance;
+  } | null;
+  tutorialCueId: string | null;
+  savedAt: string;
+}
+
 export enum CardSize {
   POKER = 'POKER',
   BRIDGE = 'BRIDGE'

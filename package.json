@@ -20,6 +20,7 @@
     "test:launch": "node scripts/launch-self-test.mjs",
     "test:save": "node scripts/game-save-self-test.mjs",
     "test:level": "node scripts/level-tutorial-self-test.mjs",
+    "test:campaign": "node scripts/campaign-self-test.mjs",
     "desktop": "npm run build && electron electron/main.cjs",
     "pack:win": "npm run build && electron-builder --win --dir",
     "dist:win": "npm run build && electron-builder --win nsis"

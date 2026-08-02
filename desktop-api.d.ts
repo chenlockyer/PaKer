@@ -16,6 +16,7 @@ declare global {
         scaleFactor: number;
       }>;
       quit: () => Promise<void>;
+      writeOfficialCampaign: (campaign: import('./types').CampaignDefinition) => Promise<{ ok: boolean; error?: string }>;
       onWindowStateChanged: (
         listener: (state: { fullscreen: boolean; maximized: boolean }) => void,
       ) => () => void;
