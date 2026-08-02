@@ -311,27 +311,69 @@ export interface LevelTestStage {
 export type LevelTutorialCueKind =
   | 'message'
   | 'preset'
+  | 'tool'
   | 'input'
-  | 'blueprint-step';
+  | 'card-place'
+  | 'blueprint-step'
+  | 'height'
+  | 'test-start'
+  | 'test-success'
+  | 'test-failure';
+
+export type LevelTutorialHighlight =
+  | 'pulse'
+  | 'arrow'
+  | 'spotlight'
+  | 'key-badge'
+  | 'blueprint-glow';
+
+export type LevelTutorialTarget =
+  | { type: 'none' }
+  | { type: 'preset'; presetId: string }
+  | { type: 'tool'; tool: PointerMode }
+  | { type: 'control'; control: 'physics' | 'undo' | 'redo' | 'height-lock' | 'test' }
+  | { type: 'blueprint-step'; stepIndex: number }
+  | { type: 'world'; position: [number, number, number] };
+
+export interface LevelTutorialHint {
+  delayMs: number;
+  highlight: LevelTutorialHighlight;
+  text: Record<'en' | 'zh', string>;
+}
 
 export interface LevelTutorialCue {
   id: string;
   kind: LevelTutorialCueKind;
+  enabled: boolean;
   text: Record<'en' | 'zh', string>;
   presetId?: string;
+  tool?: PointerMode;
   inputAction?: string;
   blueprintStepIndex?: number;
+  cardCount?: number;
+  targetHeight?: number;
+  target: LevelTutorialTarget;
+  highlight: LevelTutorialHighlight;
+  hints: LevelTutorialHint[];
+  feedback: {
+    flash: boolean;
+    sound: boolean;
+  };
 }
 
 export interface LevelTutorial {
   enabled: boolean;
+  displayMode: 'first-time' | 'always';
+  skippable: boolean;
+  entryDurationMs: number;
   entryTitle: Record<'en' | 'zh', string>;
   entrySubtitle: Record<'en' | 'zh', string>;
   cues: LevelTutorialCue[];
 }
 
 export interface LevelDefinition extends ChallengeLevel {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  publishRevision: number;
   origin: LevelOrigin;
   requiresBlueprintMatch: boolean;
   author: string;

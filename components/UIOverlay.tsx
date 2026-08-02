@@ -12,6 +12,7 @@ import {
   PointerMode,
   GameMode,
   LevelTutorialCue,
+  LevelTutorialHint,
   ChallengePhase,
   ChallengeTestType,
   LaunchPreset,
@@ -78,9 +79,15 @@ interface UIOverlayProps {
   tutorialCue: LevelTutorialCue | null;
   tutorialCueIndex: number;
   tutorialCueCount: number;
+  tutorialHint: LevelTutorialHint | null;
+  tutorialFeedbackActive: boolean;
+  tutorialWorldScreenPoint: { x: number; y: number; visible: boolean } | null;
+  tutorialAvailable: boolean;
+  tutorialSkippable: boolean;
   onDismissTutorialEntry: () => void;
   onAdvanceTutorialCue: () => void;
   onSkipTutorial: () => void;
+  onRestartTutorial: () => void;
 }
 
 type PresetGroup = 'flat' | 'upright' | 'tilt' | 'custom';
@@ -243,13 +250,20 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   tutorialCue,
   tutorialCueIndex,
   tutorialCueCount,
+  tutorialHint,
+  tutorialFeedbackActive,
+  tutorialWorldScreenPoint,
+  tutorialAvailable,
+  tutorialSkippable,
   onDismissTutorialEntry,
   onAdvanceTutorialCue,
   onSkipTutorial,
+  onRestartTutorial,
 }) => {
   const t = translations[lang];
   const { formatBinding, profile } = useInput();
   const [presetOpen, setPresetOpen] = useState(true);
+  const [tutorialTargetRect, setTutorialTargetRect] = useState<DOMRect | null>(null);
   const [showControlCoach, setShowControlCoach] = useState(
     () => localStorage.getItem('hoc_control_coach_seen_v1') !== '1',
   );
@@ -259,10 +273,42 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
     return () => window.removeEventListener('reset-control-coach', resetCoach);
   }, []);
   useEffect(() => {
-    if (tutorialCue?.kind !== 'preset') return;
-    setPresetOpen(true);
-    setInteractionMode(InteractionMode.QUICK);
+    if (tutorialCue?.target.type === 'preset') {
+      setPresetOpen(true);
+      setInteractionMode(InteractionMode.QUICK);
+    } else if (tutorialCue?.target.type === 'control' && tutorialCue.target.control === 'height-lock') {
+      setPresetOpen(true);
+    }
   }, [setInteractionMode, tutorialCue]);
+  const tutorialTargetKey = useMemo(() => {
+    if (!tutorialCue) return null;
+    const target = tutorialCue.target;
+    if (target.type === 'preset') return `preset:${target.presetId}`;
+    if (target.type === 'tool') return `tool:${target.tool}`;
+    if (target.type === 'control') return `control:${target.control}`;
+    if (target.type === 'blueprint-step') return 'blueprint-step';
+    return null;
+  }, [tutorialCue]);
+  useEffect(() => {
+    if (!tutorialTargetKey) {
+      setTutorialTargetRect(null);
+      return;
+    }
+    const update = () => {
+      const escaped = typeof CSS !== 'undefined' && CSS.escape
+        ? CSS.escape(tutorialTargetKey)
+        : tutorialTargetKey.replace(/"/g, '\\"');
+      const element = document.querySelector<HTMLElement>(`[data-tutorial-target="${escaped}"]`);
+      setTutorialTargetRect(element?.getBoundingClientRect() ?? null);
+    };
+    update();
+    const timer = window.setInterval(update, 120);
+    window.addEventListener('resize', update);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('resize', update);
+    };
+  }, [tutorialTargetKey]);
   const labels = lang === 'zh'
     ? {
         project: '纸牌建筑师',
@@ -356,6 +402,51 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
     }
   });
 
+  const uiScale = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--ui-scale'),
+  ) || 1;
+  const preferWorldTarget = tutorialCue?.target.type === 'world' || tutorialCue?.target.type === 'blueprint-step';
+  const worldGuideSource = tutorialWorldScreenPoint
+    ? {
+        x: tutorialWorldScreenPoint.x / uiScale,
+        y: tutorialWorldScreenPoint.y / uiScale,
+        width: 42,
+        height: 42,
+        visible: tutorialWorldScreenPoint.visible,
+      }
+    : null;
+  const domGuideSource = tutorialTargetRect
+    ? {
+        x: (tutorialTargetRect.left + tutorialTargetRect.width / 2) / uiScale,
+        y: (tutorialTargetRect.top + tutorialTargetRect.height / 2) / uiScale,
+        width: tutorialTargetRect.width / uiScale,
+        height: tutorialTargetRect.height / uiScale,
+        visible: true,
+      }
+    : null;
+  const guideSource = preferWorldTarget
+    ? worldGuideSource ?? domGuideSource
+    : domGuideSource ?? worldGuideSource;
+  const guidePoint = guideSource ? {
+    ...guideSource,
+    x: Math.max(28, Math.min(window.innerWidth / uiScale - 28, guideSource.x)),
+    y: Math.max(28, Math.min(window.innerHeight / uiScale - 28, guideSource.y)),
+  } : null;
+  const activeHighlight = tutorialHint?.highlight ?? tutorialCue?.highlight ?? 'pulse';
+  const hintText = tutorialHint?.text[lang] || tutorialHint?.text.zh || '';
+  const tutorialKindLabel = tutorialCue ? ({
+    message: lang === 'zh' ? '操作提示' : 'GUIDANCE',
+    preset: lang === 'zh' ? '选择预设' : 'SELECT PRESET',
+    tool: lang === 'zh' ? '选择工具' : 'SELECT TOOL',
+    input: lang === 'zh' ? '按键练习' : 'INPUT PRACTICE',
+    'card-place': lang === 'zh' ? '放置卡牌' : 'PLACE CARDS',
+    'blueprint-step': lang === 'zh' ? '搭建目标' : 'BUILD TARGET',
+    height: lang === 'zh' ? '高度目标' : 'HEIGHT TARGET',
+    'test-start': lang === 'zh' ? '开始测试' : 'START TEST',
+    'test-success': lang === 'zh' ? '测试通过' : 'TEST PASSED',
+    'test-failure': lang === 'zh' ? '失败提示' : 'TEST FAILED',
+  } as const)[tutorialCue.kind] : '';
+
   return (
     <div className="game-ui ui-scale-surface">
       <header className="game-topbar">
@@ -375,6 +466,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           <button onClick={onLoad}>{t.load}</button>
           <button onClick={onClear} className="danger-text">{labels.clear}</button>
           <button onClick={onOpenSettings}>{labels.settings}</button>
+          {tutorialAvailable && (
+            <button onClick={onRestartTutorial} title={lang === 'zh' ? '重新播放教学' : 'Replay tutorial'} aria-label={lang === 'zh' ? '重新播放教学' : 'Replay tutorial'}>↻</button>
+          )}
           <button onClick={onBackToMenu}>{labels.menu}</button>
         </nav>
       </header>
@@ -388,9 +482,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             <button className="primary-button" onClick={onDismissTutorialEntry}>
               {lang === 'zh' ? '开始' : 'Begin'}
             </button>
-            <button className="text-button" onClick={onSkipTutorial}>
+            {tutorialSkippable && <button className="text-button" onClick={onSkipTutorial}>
               {lang === 'zh' ? '跳过教学' : 'Skip tutorial'}
-            </button>
+            </button>}
           </div>
         </section>
       )}
@@ -402,15 +496,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           </span>
           <div>
             <span className="panel-kicker">
-              {tutorialCue.kind === 'preset'
-                ? (lang === 'zh' ? '选择预设' : 'SELECT PRESET')
-                : tutorialCue.kind === 'input'
-                  ? (lang === 'zh' ? '按键练习' : 'INPUT PRACTICE')
-                  : tutorialCue.kind === 'blueprint-step'
-                    ? (lang === 'zh' ? '搭建目标' : 'BUILD TARGET')
-                    : (lang === 'zh' ? '操作提示' : 'GUIDANCE')}
+              {tutorialKindLabel}
             </span>
-            <strong>{tutorialCue.text[lang] || tutorialCue.text.zh}</strong>
+            <strong>{hintText || tutorialCue.text[lang] || tutorialCue.text.zh}</strong>
           </div>
           {tutorialCue.kind === 'input' && tutorialCue.inputAction && (
             <kbd>{formatBinding(tutorialCue.inputAction as InputAction)}</kbd>
@@ -420,10 +508,26 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
               {lang === 'zh' ? '知道了' : 'Continue'}
             </button>
           )}
-          <button className="tutorial-skip" onClick={onSkipTutorial}>
+          {tutorialSkippable && <button className="tutorial-skip" onClick={onSkipTutorial}>
             {lang === 'zh' ? '跳过' : 'Skip'}
-          </button>
+          </button>}
         </section>
+      )}
+
+      {tutorialCue && guidePoint && (
+        <div
+          className={`tutorial-target-guide is-${activeHighlight} ${tutorialFeedbackActive ? 'is-complete' : ''} ${guideSource?.visible ? '' : 'is-offscreen'}`}
+          style={{
+            left: guidePoint.x,
+            top: guidePoint.y,
+            width: Math.max(42, guidePoint.width + 18),
+            height: Math.max(42, guidePoint.height + 18),
+          }}
+          aria-hidden="true"
+        >
+          <i />
+          {(activeHighlight === 'arrow' || !guideSource?.visible) && <b>➤</b>}
+        </div>
       )}
 
       {showControlCoach && interactionEnabled && !tutorialEntry && !tutorialCue && (
@@ -491,6 +595,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
                       <button
                         key={preset.id}
                         className={`preset-item ${currentPresetId === preset.id ? 'is-selected' : ''} ${tutorialCue?.kind === 'preset' && tutorialCue.presetId === preset.id ? 'is-tutorial-target' : ''}`}
+                        data-tutorial-target={`preset:${preset.id}`}
                         onClick={() => setPresetId(preset.id)}
                         disabled={!interactionEnabled}
                         title={t[preset.name as keyof typeof t] || preset.name}
@@ -523,7 +628,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             </div>
           )}
 
-          {presetOpen && <div className="height-hint"><kbd>{formatBinding('card.lockHeight')}</kbd><span>{labels.holdHeight}</span></div>}
+          {presetOpen && <div className="height-hint" data-tutorial-target="control:height-lock"><kbd>{formatBinding('card.lockHeight')}</kbd><span>{labels.holdHeight}</span></div>}
         </aside>
       )}
 
@@ -568,7 +673,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
       )}
 
       {blueprintGuide && (
-        <aside className={`blueprint-guide-panel ${gameMode === GameMode.CHALLENGE ? 'with-challenge' : ''}`}>
+        <aside className={`blueprint-guide-panel ${gameMode === GameMode.CHALLENGE ? 'with-challenge' : ''}`} data-tutorial-target="blueprint-step">
           <div className="panel-heading">
             <div>
               <span className="panel-kicker">{labels.blueprintGuide}</span>
@@ -758,16 +863,17 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
       )}
 
       <div className="tool-dock">
-        <button className={pointerMode === PointerMode.PLACE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PLACE)} disabled={!interactionEnabled}>
+        <button data-tutorial-target="tool:PLACE" className={pointerMode === PointerMode.PLACE ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PLACE)} disabled={!interactionEnabled}>
           <span className="tool-symbol">+</span><strong>{labels.place}</strong><kbd>{formatBinding('tool.place')}</kbd>
         </button>
-        <button className={pointerMode === PointerMode.PUSH ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PUSH)} disabled={!interactionEnabled}>
+        <button data-tutorial-target="tool:PUSH" className={pointerMode === PointerMode.PUSH ? 'is-active' : ''} onClick={() => setPointerMode(PointerMode.PUSH)} disabled={!interactionEnabled}>
           <span className="tool-symbol push-symbol">↝</span><strong>{labels.push}</strong><kbd>{formatBinding('tool.push')}</kbd>
         </button>
-        <button className={pointerMode === PointerMode.DELETE ? 'is-danger' : ''} onClick={() => setPointerMode(PointerMode.DELETE)} disabled={!interactionEnabled}>
+        <button data-tutorial-target="tool:DELETE" className={pointerMode === PointerMode.DELETE ? 'is-danger' : ''} onClick={() => setPointerMode(PointerMode.DELETE)} disabled={!interactionEnabled}>
           <span className="tool-symbol">×</span><strong>{labels.remove}</strong><kbd>{formatBinding('tool.delete')}</kbd>
         </button>
         <button
+          data-tutorial-target="tool:LAUNCH"
           className={pointerMode === PointerMode.LAUNCH ? 'is-launch' : ''}
           onClick={() => setPointerMode(PointerMode.LAUNCH)}
           disabled={!interactionEnabled || gameMode !== GameMode.FREE}
@@ -780,7 +886,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           <kbd>{formatBinding('tool.launch')}</kbd>
         </button>
         <span className="dock-divider" />
-        <button className={isFreezeMode ? 'is-locked' : ''} onClick={() => setIsFreezeMode(!isFreezeMode)} disabled={!interactionEnabled}>
+        <button data-tutorial-target="control:physics" className={isFreezeMode ? 'is-locked' : ''} onClick={() => setIsFreezeMode(!isFreezeMode)} disabled={!interactionEnabled}>
           <span className="physics-indicator" />
           <strong>{labels.physics}</strong>
           <small>{isFreezeMode ? labels.frozen : labels.active}</small>
@@ -810,8 +916,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           </>
         ) : (
           <>
-            <kbd>{formatBinding('history.undo')}</kbd><button onClick={onUndo}>{lang === 'zh' ? '撤销' : 'Undo'}</button>
-            <kbd>{formatBinding('history.redo')}</kbd><button onClick={onRedo}>{lang === 'zh' ? '重做' : 'Redo'}</button>
+            <kbd>{formatBinding('history.undo')}</kbd><button data-tutorial-target="control:undo" onClick={onUndo}>{lang === 'zh' ? '撤销' : 'Undo'}</button>
+            <kbd>{formatBinding('history.redo')}</kbd><button data-tutorial-target="control:redo" onClick={onRedo}>{lang === 'zh' ? '重做' : 'Redo'}</button>
           </>
         )}
       </div>

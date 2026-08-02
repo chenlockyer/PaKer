@@ -70,8 +70,8 @@ const ChallengeHUD: React.FC<ChallengeHUDProps> = ({
         <div className="progress-track"><i style={{ width: `${heightProgress}%` }} /></div>
         {phase === ChallengePhase.BUILDING && (
           <div className="challenge-actions">
-            <button onClick={onUndo} disabled={cardCount === 0}>{t.undoLast}</button>
-            <button className="primary-button" onClick={onStartTest} disabled={!canStart}>
+            <button data-tutorial-target="control:undo" onClick={onUndo} disabled={cardCount === 0}>{t.undoLast}</button>
+            <button data-tutorial-target="control:test" className="primary-button" onClick={onStartTest} disabled={!canStart}>
               {canStart ? copy.test : copy.unavailable}
             </button>
           </div>

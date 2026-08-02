@@ -4,6 +4,7 @@ import {
   LevelDefinition,
 } from '../types';
 import { checksumBlueprint } from './levelService';
+import { createDefaultTutorial } from './tutorialService';
 import { OFFICIAL_TUTORIAL_BLUEPRINTS } from './officialBlueprints';
 
 const CREATED_AT = '2026-07-29T00:00:00.000Z';
@@ -41,7 +42,8 @@ const makeOfficialLevel = ({
   embeddedBlueprint.id = `${id}_blueprint`;
   const blueprintChecksum = checksumBlueprint(embeddedBlueprint);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    publishRevision: 1,
     id,
     name,
     description,
@@ -76,12 +78,7 @@ const makeOfficialLevel = ({
       weightMass,
       weightDropOffset,
     }],
-    tutorial: {
-      enabled: false,
-      entryTitle: { zh: '', en: '' },
-      entrySubtitle: { zh: '', en: '' },
-      cues: [],
-    },
+    tutorial: createDefaultTutorial(),
     scoring: {
       baseScore: testDuration * 50,
       unusedCardBonus: 50,

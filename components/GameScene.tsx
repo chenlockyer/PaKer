@@ -53,6 +53,8 @@ interface GameSceneProps {
   onBlueprintStepComplete: (playerCardIds: string[]) => void;
   onBlueprintStepRegression: (stepIndex: number) => void;
   onCameraHintChange: (hint: BlueprintCameraHint) => void;
+  tutorialWorldTarget: [number, number, number] | null;
+  onTutorialWorldScreenPoint: (point: { x: number; y: number; visible: boolean } | null) => void;
 }
 
 class SceneErrorBoundary extends React.Component<
@@ -202,6 +204,42 @@ const CameraBridge = ({
   return null;
 };
 
+const TutorialWorldBridge = ({
+  target,
+  onScreenPoint,
+}: {
+  target: [number, number, number] | null;
+  onScreenPoint: (point: { x: number; y: number; visible: boolean } | null) => void;
+}) => {
+  const { camera, gl } = useThree();
+  const lastRef = React.useRef('');
+  const lastSampleRef = React.useRef(0);
+  useFrame(({ clock }) => {
+    if (!target) {
+      if (lastRef.current) {
+        lastRef.current = '';
+        onScreenPoint(null);
+      }
+      return;
+    }
+    if (clock.elapsedTime - lastSampleRef.current < 0.08) return;
+    lastSampleRef.current = clock.elapsedTime;
+    const projected = new THREE.Vector3(...target).project(camera);
+    const rect = gl.domElement.getBoundingClientRect();
+    const point = {
+      x: rect.left + (projected.x * 0.5 + 0.5) * rect.width,
+      y: rect.top + (-projected.y * 0.5 + 0.5) * rect.height,
+      visible: projected.z >= -1 && projected.z <= 1 && projected.x >= -1 && projected.x <= 1 && projected.y >= -1 && projected.y <= 1,
+    };
+    const key = `${Math.round(point.x)}:${Math.round(point.y)}:${point.visible}`;
+    if (key !== lastRef.current) {
+      lastRef.current = key;
+      onScreenPoint(point);
+    }
+  });
+  return null;
+};
+
 const GameScene: React.FC<GameSceneProps> = ({ 
   rotationPreset, 
   interactionMode,
@@ -232,6 +270,8 @@ const GameScene: React.FC<GameSceneProps> = ({
   onBlueprintStepComplete,
   onBlueprintStepRegression,
   onCameraHintChange,
+  tutorialWorldTarget,
+  onTutorialWorldScreenPoint,
 }) => {
   const background = theme === 'dark' ? '#171d24' : theme === 'warm' ? '#e9e6df' : '#e4e9ef';
   const nativeDpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -273,6 +313,7 @@ const GameScene: React.FC<GameSceneProps> = ({
             <Sky sunPosition={[100, 20, 100]} />
             <LocalEnvironment />
             <CameraBridge guide={blueprintGuide} onCameraHintChange={onCameraHintChange} />
+            <TutorialWorldBridge target={tutorialWorldTarget} onScreenPoint={onTutorialWorldScreenPoint} />
 
             <PhysicsWorld
               rotationPreset={rotationPreset}

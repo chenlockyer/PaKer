@@ -32,7 +32,6 @@ import {
   CARD_DIMENSIONS,
   LiveCardTransform,
   LevelDefinition,
-  LevelTutorialCue,
   LaunchPreset,
   LaunchRecord,
   PhysicsSettings,
@@ -49,6 +48,7 @@ import {
   createBlueprint,
   createBlueprintSnapshot,
   createRecordedBlueprintSteps,
+  getBlueprintWorldCards,
   instantiateBlueprintCards,
   loadBlueprints,
   persistBlueprints,
@@ -96,6 +96,7 @@ import {
   loadPhysicsSettings,
   persistPhysicsSettings,
 } from './services/physicsSettingsService';
+import { useTutorialDirector } from './hooks/useTutorialDirector';
 
 const DEG_10 = Math.PI / 18;
 const PRESET_SCHEMA_VERSION = '5';
@@ -110,6 +111,8 @@ const EMPTY_BLUEPRINT_PROGRESS: BlueprintGuideProgress = {
   feedback: 'missing',
   complete: false,
 };
+const levelUsesBlueprintGuide = (level: LevelDefinition) =>
+  level.requiresBlueprintMatch || level.tutorial.cues.some(cue => cue.enabled && cue.kind === 'blueprint-step');
 const BUILT_IN_PRESET_IDS = new Set([
   'flat',
   'stand_x',
@@ -243,8 +246,11 @@ const App: React.FC = () => {
   const [challengeScore, setChallengeScore] = useState(0);
   const [challengeStars, setChallengeStars] = useState(0);
   const [currentTestStageIndex, setCurrentTestStageIndex] = useState(0);
-  const [tutorialCueIndex, setTutorialCueIndex] = useState(0);
-  const [tutorialEntryVisible, setTutorialEntryVisible] = useState(false);
+  const [tutorialWorldScreenPoint, setTutorialWorldScreenPoint] = useState<{
+    x: number;
+    y: number;
+    visible: boolean;
+  } | null>(null);
   const [saveLibrary, setSaveLibrary] = useState(() =>
     loadGameSaveLibrary(localStorage)
   );
@@ -363,67 +369,38 @@ const App: React.FC = () => {
     ? [...blueprintGuide.blueprint.steps]
         .sort((left, right) => left.order - right.order)[blueprintGuide.currentStepIndex]
     : null;
-  const activeTutorial = currentLevel.tutorial?.enabled
-    ? currentLevel.tutorial
+  const tutorialDirector = useTutorialDirector({
+    lang,
+    currentPresetId,
+    pointerMode,
+    cardCount: cards.length,
+    liveHeight,
+    challengePhase,
+    blueprintGuide,
+    blueprintProgress,
+    subscribeInput,
+  });
+  const activeTutorial = tutorialDirector.level?.tutorial.enabled
+    ? tutorialDirector.level.tutorial
     : null;
-  const activeTutorialCue: LevelTutorialCue | null =
-    activeTutorial?.cues[tutorialCueIndex] ?? null;
+  const activeTutorialCue = tutorialDirector.cue;
+  let tutorialWorldTarget: [number, number, number] | null = null;
+  if (activeTutorialCue?.target.type === 'world') {
+    tutorialWorldTarget = activeTutorialCue.target.position;
+  } else if (activeTutorialCue?.target.type === 'blueprint-step' && blueprintGuide) {
+    const orderedSteps = [...blueprintGuide.blueprint.steps].sort((left, right) => left.order - right.order);
+    const targetStep = orderedSteps[activeTutorialCue.target.stepIndex];
+    const targetCardId = targetStep?.cardIds[0];
+    const targetCard = getBlueprintWorldCards(blueprintGuide).find(card => card.id === targetCardId);
+    tutorialWorldTarget = targetCard?.position ?? null;
+  }
 
   const restartLevelTutorial = useCallback((level: LevelDefinition | null) => {
-    const enabled = Boolean(level?.tutorial?.enabled);
-    setTutorialCueIndex(0);
-    setTutorialEntryVisible(
-      enabled && Boolean(level?.tutorial.entryTitle[lang] || level?.tutorial.entrySubtitle[lang]),
-    );
-  }, [lang]);
-
-  const advanceTutorialCue = useCallback(() => {
-    setTutorialCueIndex(index => index + 1);
-  }, []);
+    tutorialDirector.start(level);
+  }, [tutorialDirector.start]);
 
   useEffect(() => {
-    if (tutorialEntryVisible || !activeTutorialCue) return;
-    if (
-      activeTutorialCue.kind === 'preset' &&
-      activeTutorialCue.presetId === currentPresetId
-    ) {
-      advanceTutorialCue();
-    }
-  }, [activeTutorialCue, advanceTutorialCue, currentPresetId, tutorialEntryVisible]);
-
-  useEffect(() => {
-    if (
-      tutorialEntryVisible ||
-      activeTutorialCue?.kind !== 'input' ||
-      !activeTutorialCue.inputAction
-    ) return;
-    return subscribeInput(activeTutorialCue.inputAction as InputAction, event => {
-      if (event.phase === 'down') advanceTutorialCue();
-    });
-  }, [activeTutorialCue, advanceTutorialCue, subscribeInput, tutorialEntryVisible]);
-
-  useEffect(() => {
-    if (
-      tutorialEntryVisible ||
-      activeTutorialCue?.kind !== 'blueprint-step' ||
-      activeTutorialCue.blueprintStepIndex === undefined ||
-      !blueprintGuide
-    ) return;
-    const targetIndex = activeTutorialCue.blueprintStepIndex;
-    const targetIsComplete =
-      blueprintGuide.currentStepIndex > targetIndex ||
-      (blueprintGuide.currentStepIndex === targetIndex && blueprintProgress.complete);
-    if (targetIsComplete) advanceTutorialCue();
-  }, [
-    activeTutorialCue,
-    advanceTutorialCue,
-    blueprintGuide,
-    blueprintProgress.complete,
-    tutorialEntryVisible,
-  ]);
-
-  useEffect(() => {
-    if (activeTutorial?.cues.some(cue => cue.kind === 'preset')) return;
+    if (activeTutorial?.cues.some(cue => cue.enabled && cue.kind === 'preset')) return;
     const recommendedPresetId = currentBlueprintStep?.recommendedPresetId;
     if (recommendedPresetId && presets.some(preset => preset.id === recommendedPresetId)) {
       setCurrentPresetId(recommendedPresetId);
@@ -1050,18 +1027,20 @@ const App: React.FC = () => {
 
   const resetChallenge = useCallback(() => {
     resetChallengeState(currentLevel.testDuration);
-    if (currentLevel.requiresBlueprintMatch) {
+    if (levelUsesBlueprintGuide(currentLevel)) {
       startBlueprintGuide(currentLevel.embeddedBlueprint, true);
     } else {
       stopBlueprintGuide();
     }
-    restartLevelTutorial(currentLevel);
+    tutorialDirector.start(currentLevel, activeCustomLevel
+      ? { playtest: true, force: true }
+      : undefined);
   }, [
+    activeCustomLevel,
     currentLevel,
     currentLevel.testDuration,
-    currentLevel,
     resetChallengeState,
-    restartLevelTutorial,
+    tutorialDirector.start,
     startBlueprintGuide,
     stopBlueprintGuide,
   ]);
@@ -1073,7 +1052,7 @@ const App: React.FC = () => {
     setGameMode(GameMode.CHALLENGE);
     setCurrentLevelIndex(0);
     resetChallengeState(firstLevel.testDuration);
-    if (firstLevel.requiresBlueprintMatch) {
+    if (levelUsesBlueprintGuide(firstLevel)) {
       startBlueprintGuide(firstLevel.embeddedBlueprint, true);
     } else {
       stopBlueprintGuide();
@@ -1088,7 +1067,7 @@ const App: React.FC = () => {
     setCurrentLevelIndex(nextLevelIndex);
     resetChallengeState(nextLevel.testDuration);
     restartLevelTutorial(nextLevel);
-    if (nextLevel.requiresBlueprintMatch) {
+    if (levelUsesBlueprintGuide(nextLevel)) {
       startBlueprintGuide(nextLevel.embeddedBlueprint, true);
     } else {
       stopBlueprintGuide();
@@ -1116,7 +1095,7 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const playtestCustomLevel = useCallback((level: LevelDefinition) => {
+  const playtestCustomLevel = useCallback((level: LevelDefinition, startCueId?: string) => {
     setActiveCustomLevel(level);
     setGameMode(GameMode.CHALLENGE);
     setCurrentLevelIndex(0);
@@ -1124,13 +1103,50 @@ const App: React.FC = () => {
     resetChallengeState(level.testDuration);
     setShowLevelStudio(false);
     setAppState(AppState.GAME);
-    if (level.requiresBlueprintMatch) {
+    if (levelUsesBlueprintGuide(level)) {
       startBlueprintGuide(level.embeddedBlueprint, true);
+      if (startCueId) {
+        const enabledCues = level.tutorial.cues.filter(cue => cue.enabled);
+        const selectedCueIndex = enabledCues.findIndex(cue => cue.id === startCueId);
+        const selectedCue = enabledCues[selectedCueIndex];
+        const earlierCues = enabledCues.slice(0, Math.max(0, selectedCueIndex));
+        const earlierStepIndexes = earlierCues
+          .filter(cue => cue.kind === 'blueprint-step')
+          .map(cue => cue.blueprintStepIndex ?? 0);
+        const preparedStepCount = selectedCue?.kind === 'blueprint-step'
+          ? Math.max(0, selectedCue.blueprintStepIndex ?? 0)
+          : earlierStepIndexes.length > 0 ? Math.max(...earlierStepIndexes) + 1 : 0;
+        const orderedSteps = [...level.embeddedBlueprint.steps].sort((left, right) => left.order - right.order);
+        const preparedIds = new Set(
+          orderedSteps.slice(0, preparedStepCount).flatMap(step => step.cardIds),
+        );
+        const preparedCards = instantiateBlueprintCards(level.embeddedBlueprint, {
+          origin: [0, 0, 0],
+          yaw: 0,
+          locked: false,
+          idFactory: sourceId => sourceId,
+        }).filter(card => preparedIds.has(card.id)).map(card => ({
+          ...card,
+          id: `tutorial_pre_${card.id}`,
+          locked: false,
+        }));
+        preparedCards.forEach(card => liveCardTransformsRef.current.set(card.id, {
+          position: [...card.position],
+          rotation: [...card.rotation],
+        }));
+        setCards(preparedCards);
+        setBlueprintGuide(previous => previous ? {
+          ...previous,
+          currentStepIndex: Math.min(preparedStepCount, Math.max(0, orderedSteps.length - 1)),
+        } : previous);
+        blueprintCheckpointRef.current = preparedCards.map(card => ({ ...card }));
+        blueprintCheckpointReadyRef.current = true;
+      }
     } else {
       stopBlueprintGuide();
     }
-    restartLevelTutorial(level);
-  }, [resetChallengeState, restartLevelTutorial, startBlueprintGuide, stopBlueprintGuide]);
+    tutorialDirector.start(level, { startCueId, playtest: true, force: true });
+  }, [resetChallengeState, startBlueprintGuide, stopBlueprintGuide, tutorialDirector.start]);
 
   const startFreeBuild = useCallback(() => {
     setGameMode(GameMode.FREE);
@@ -1303,10 +1319,10 @@ const App: React.FC = () => {
       showBlueprintStudio ||
       showLevelStudio ||
       saveLibraryMode !== null ||
-      tutorialEntryVisible ||
+      tutorialDirector.entryVisible ||
       appState !== AppState.GAME,
     );
-  }, [appState, saveLibraryMode, setInputSuspended, showBlueprintStudio, showLevelStudio, showSettings, tutorialEntryVisible]);
+  }, [appState, saveLibraryMode, setInputSuspended, showBlueprintStudio, showLevelStudio, showSettings, tutorialDirector.entryVisible]);
 
   const cyclePreset = useCallback((direction: -1 | 1) => {
     if (!interactionEnabled || presets.length === 0) return;
@@ -1425,6 +1441,8 @@ const App: React.FC = () => {
             onBlueprintStepComplete={completeBlueprintStep}
             onBlueprintStepRegression={regressBlueprintStep}
             onCameraHintChange={handleCameraHintChange}
+            tutorialWorldTarget={tutorialWorldTarget}
+            onTutorialWorldScreenPoint={setTutorialWorldScreenPoint}
           />
           
           <UIOverlay 
@@ -1494,19 +1512,22 @@ const App: React.FC = () => {
             onNextChallenge={advanceChallenge}
             interactionEnabled={interactionEnabled}
             theme={theme}
-            tutorialEntry={tutorialEntryVisible && activeTutorial ? {
+            tutorialEntry={tutorialDirector.entryVisible && activeTutorial ? {
               title: activeTutorial.entryTitle[lang],
               subtitle: activeTutorial.entrySubtitle[lang],
             } : null}
-            tutorialCue={tutorialEntryVisible ? null : activeTutorialCue}
-            tutorialCueIndex={tutorialCueIndex}
-            tutorialCueCount={activeTutorial?.cues.length ?? 0}
-            onDismissTutorialEntry={() => setTutorialEntryVisible(false)}
-            onAdvanceTutorialCue={advanceTutorialCue}
-            onSkipTutorial={() => {
-              setTutorialEntryVisible(false);
-              setTutorialCueIndex(activeTutorial?.cues.length ?? 0);
-            }}
+            tutorialCue={tutorialDirector.entryVisible ? null : activeTutorialCue}
+            tutorialCueIndex={tutorialDirector.cueIndex}
+            tutorialCueCount={tutorialDirector.cueCount}
+            tutorialHint={tutorialDirector.hint}
+            tutorialFeedbackActive={tutorialDirector.feedbackActive}
+            tutorialWorldScreenPoint={tutorialWorldScreenPoint}
+            tutorialAvailable={Boolean(activeTutorial)}
+            tutorialSkippable={activeTutorial?.skippable ?? false}
+            onDismissTutorialEntry={tutorialDirector.dismissEntry}
+            onAdvanceTutorialCue={tutorialDirector.advance}
+            onSkipTutorial={tutorialDirector.skip}
+            onRestartTutorial={tutorialDirector.restart}
           />
         </>
       )}

@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Blueprint,
   ChallengeTestType,
@@ -8,14 +8,19 @@ import {
   LevelTestStage,
   LevelTutorialCue,
   LevelTutorialCueKind,
+  LevelTutorialTarget,
+  PointerMode,
   RotationPreset,
 } from '../types';
 import { ACTIONS, InputAction } from '../input/InputContext';
 import {
   CreateLevelInput,
+  createLevel,
   downloadLevel,
   parseLevelFile,
+  updateLevel,
 } from '../services/levelService';
+import { createTutorialCue, normalizeTutorialCue } from '../services/tutorialService';
 
 interface LevelStudioProps {
   isOpen: boolean;
@@ -30,7 +35,7 @@ interface LevelStudioProps {
   onDuplicate: (level: LevelDefinition) => void;
   onPublish: (level: LevelDefinition) => string[];
   onImport: (level: LevelDefinition) => void;
-  onPlay: (level: LevelDefinition) => void;
+  onPlay: (level: LevelDefinition, startCueId?: string) => void;
   onClose: () => void;
 }
 
@@ -59,12 +64,31 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
   const [heightBonus, setHeightBonus] = useState(100);
   const [extraStages, setExtraStages] = useState<LevelTestStage[]>([]);
   const [tutorialEnabled, setTutorialEnabled] = useState(false);
+  const [tutorialDisplayMode, setTutorialDisplayMode] = useState<'first-time' | 'always'>('first-time');
+  const [tutorialSkippable, setTutorialSkippable] = useState(true);
+  const [entryDurationMs, setEntryDurationMs] = useState(0);
   const [entryTitle, setEntryTitle] = useState('');
   const [entrySubtitle, setEntrySubtitle] = useState('');
   const [tutorialCues, setTutorialCues] = useState<LevelTutorialCue[]>([]);
   const [notice, setNotice] = useState('');
+  const [tutorialDebugEvents, setTutorialDebugEvents] = useState<Array<{ levelId: string | null; message: string; at: string }>>([]);
   const [editingLevel, setEditingLevel] = useState<LevelDefinition | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const loadDebugEvents = () => {
+      try {
+        const values = JSON.parse(localStorage.getItem('hoc_tutorial_debug_events_v1') ?? '[]');
+        setTutorialDebugEvents(Array.isArray(values) ? values.slice(0, 12) : []);
+      } catch {
+        setTutorialDebugEvents([]);
+      }
+    };
+    loadDebugEvents();
+    window.addEventListener('paker-tutorial-debug', loadDebugEvents);
+    return () => window.removeEventListener('paker-tutorial-debug', loadDebugEvents);
+  }, [isOpen]);
 
   if (!isOpen) return null;
   const selectedBlueprint = blueprintId === '__embedded__'
@@ -107,6 +131,9 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
     setHeightBonus(level.scoring.heightBonus);
     setExtraStages(level.testStages.slice(1));
     setTutorialEnabled(level.tutorial.enabled);
+    setTutorialDisplayMode(level.tutorial.displayMode);
+    setTutorialSkippable(level.tutorial.skippable);
+    setEntryDurationMs(level.tutorial.entryDurationMs);
     setEntryTitle(level.tutorial.entryTitle.zh);
     setEntrySubtitle(level.tutorial.entrySubtitle.zh);
     setTutorialCues(level.tutorial.cues);
@@ -114,14 +141,16 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
     setTab('create');
   };
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
+  const buildInput = (): CreateLevelInput | null => {
     if (!name.trim() || !selectedBlueprint) {
       setNotice(lang === 'zh' ? '请填写关卡名称并选择蓝图。' : 'Enter a name and select a blueprint.');
-      return;
+      return null;
     }
-    localStorage.setItem('hoc_level_author', author);
-    onSave({
+    if (tutorialEnabled && tutorialCues.some(cue => cue.enabled && !isCueTargetValid(cue))) {
+      setNotice(lang === 'zh' ? '教学时间线包含不存在的语义目标。' : 'The tutorial timeline contains a missing semantic target.');
+      return null;
+    }
+    return {
       name, description, author, origin, requiresBlueprintMatch, blueprint: selectedBlueprint,
       tags: tags.split(/[,，]/), maxCards, minCards, heightMultiplier,
       testDuration, testType, windStrength, weightMass, weightDropOffset,
@@ -137,6 +166,9 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
       }, ...extraStages],
       tutorial: {
         enabled: tutorialEnabled,
+        displayMode: tutorialDisplayMode,
+        skippable: tutorialSkippable,
+        entryDurationMs,
         entryTitle: { zh: entryTitle.trim(), en: entryTitle.trim() },
         entrySubtitle: { zh: entrySubtitle.trim(), en: entrySubtitle.trim() },
         cues: tutorialCues.map((cue, index) => ({
@@ -145,7 +177,15 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
           text: { zh: cue.text.zh.trim(), en: cue.text.zh.trim() },
         })),
       },
-    }, editingLevel?.id ?? null);
+    };
+  };
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const input = buildInput();
+    if (!input) return;
+    localStorage.setItem('hoc_level_author', author);
+    onSave(input, editingLevel?.id ?? null);
     setName('');
     setDescription('');
     setEditingLevel(null);
@@ -154,11 +194,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
   };
 
   const addTutorialCue = () => {
-    setTutorialCues(current => [...current, {
-      id: `cue_${Date.now().toString(36)}`,
-      kind: 'message',
-      text: { zh: '', en: '' },
-    }]);
+    setTutorialCues(current => [...current, createTutorialCue()]);
   };
 
   const updateTutorialCue = (id: string, changes: Partial<LevelTutorialCue>) => {
@@ -173,6 +209,47 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+  };
+
+  const changeTutorialCueKind = (cue: LevelTutorialCue, kind: LevelTutorialCueKind) => {
+    const replacement = createTutorialCue(kind, cue.id);
+    setTutorialCues(current => current.map(item => item.id === cue.id ? {
+      ...replacement,
+      text: cue.text,
+      enabled: cue.enabled,
+    } : item));
+  };
+
+  const duplicateTutorialCue = (cue: LevelTutorialCue) => {
+    const copy = normalizeTutorialCue({
+      ...cue,
+      id: `cue_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`,
+    });
+    setTutorialCues(current => {
+      const index = current.findIndex(item => item.id === cue.id);
+      const next = [...current];
+      next.splice(index + 1, 0, copy);
+      return next;
+    });
+  };
+
+  const updateCueTarget = (cue: LevelTutorialCue, target: LevelTutorialTarget) => {
+    updateTutorialCue(cue.id, { target });
+  };
+
+  const playFromCue = (cue: LevelTutorialCue) => {
+    const input = buildInput();
+    if (!input) return;
+    const draft = editingLevel ? updateLevel(editingLevel, input) : createLevel(input);
+    onPlay(draft, cue.id);
+  };
+
+  const isCueTargetValid = (cue: LevelTutorialCue) => {
+    const target = cue.target;
+    if (target.type === 'preset') return presets.some(preset => preset.id === target.presetId);
+    if (target.type === 'blueprint-step') return target.stepIndex >= 0 && target.stepIndex < (selectedBlueprint?.steps.length ?? 0);
+    if (target.type === 'world') return target.position.every(Number.isFinite);
+    return true;
   };
 
   const importFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -298,7 +375,7 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
               <div className="level-tutorial-heading">
                 <div>
                   <span className="panel-kicker">04 · {lang === 'zh' ? '教学导演' : 'TUTORIAL DIRECTOR'}</span>
-                  <p>{lang === 'zh' ? '按顺序显示入场标题、引导语句、预设箭头和动态按键提示。' : 'Sequence entry titles, guidance, preset arrows, and dynamic key prompts.'}</p>
+                  <p>{lang === 'zh' ? '使用线性时间线编排目标、完成条件、渐进提示和即时反馈。' : 'Author targets, completion rules, progressive hints, and feedback on a linear timeline.'}</p>
                 </div>
                 <label className="level-tutorial-toggle">
                   <input type="checkbox" checked={tutorialEnabled} onChange={event => setTutorialEnabled(event.target.checked)} />
@@ -318,28 +395,37 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                       <input value={entrySubtitle} onChange={event => setEntrySubtitle(event.target.value)} placeholder={lang === 'zh' ? '一句话说明本关目标' : 'One sentence objective'} />
                     </label>
                   </div>
+                  <div className="level-tutorial-options">
+                    <label><span>{lang === 'zh' ? '播放规则' : 'Display rule'}</span><select value={tutorialDisplayMode} onChange={event => setTutorialDisplayMode(event.target.value as 'first-time' | 'always')}><option value="first-time">{lang === 'zh' ? '每个发布版本首次显示' : 'First time per published version'}</option><option value="always">{lang === 'zh' ? '每次进入都显示' : 'Every entry'}</option></select></label>
+                    <label><span>{lang === 'zh' ? '入场自动关闭（秒，0 为手动）' : 'Entry auto close (seconds, 0 manual)'}</span><input type="number" min="0" max="30" step=".5" value={entryDurationMs / 1000} onChange={event => setEntryDurationMs(Math.max(0, Number(event.target.value) * 1000))} /></label>
+                    <label className="level-tutorial-toggle"><input type="checkbox" checked={tutorialSkippable} onChange={event => setTutorialSkippable(event.target.checked)} /><span>{lang === 'zh' ? '允许玩家跳过' : 'Allow skip'}</span></label>
+                  </div>
 
                   <div className="level-cue-list">
                     {tutorialCues.map((cue, index) => (
-                      <article className="level-cue-row" key={cue.id}>
+                      <article className={`level-cue-row ${cue.enabled ? '' : 'is-disabled'}`} key={cue.id}>
                         <header>
                           <b>{String(index + 1).padStart(2, '0')}</b>
                           <select
                             value={cue.kind}
-                            onChange={event => updateTutorialCue(cue.id, {
-                              kind: event.target.value as LevelTutorialCueKind,
-                              presetId: undefined,
-                              inputAction: undefined,
-                              blueprintStepIndex: undefined,
-                            })}
+                            onChange={event => changeTutorialCueKind(cue, event.target.value as LevelTutorialCueKind)}
                           >
                             <option value="message">{lang === 'zh' ? '引导语句' : 'Message'}</option>
                             <option value="preset">{lang === 'zh' ? '点击预设' : 'Select preset'}</option>
+                            <option value="tool">{lang === 'zh' ? '选择工具' : 'Select tool'}</option>
                             <option value="input">{lang === 'zh' ? '按键操作' : 'Press action'}</option>
+                            <option value="card-place">{lang === 'zh' ? '放置卡牌' : 'Place cards'}</option>
                             <option value="blueprint-step">{lang === 'zh' ? '完成蓝图步骤' : 'Complete blueprint step'}</option>
+                            <option value="height">{lang === 'zh' ? '达到高度' : 'Reach height'}</option>
+                            <option value="test-start">{lang === 'zh' ? '开始测试' : 'Start test'}</option>
+                            <option value="test-success">{lang === 'zh' ? '测试成功' : 'Test success'}</option>
+                            <option value="test-failure">{lang === 'zh' ? '测试失败' : 'Test failure'}</option>
                           </select>
+                          <label className="level-cue-enabled" title={lang === 'zh' ? '启用节点' : 'Enable node'}><input type="checkbox" checked={cue.enabled} onChange={event => updateTutorialCue(cue.id, { enabled: event.target.checked })} /></label>
                           <button type="button" onClick={() => moveTutorialCue(index, -1)} disabled={index === 0}>↑</button>
                           <button type="button" onClick={() => moveTutorialCue(index, 1)} disabled={index === tutorialCues.length - 1}>↓</button>
+                          <button type="button" onClick={() => duplicateTutorialCue(cue)} title={lang === 'zh' ? '复制节点' : 'Duplicate'}>⧉</button>
+                          <button type="button" className="level-cue-play" onClick={() => playFromCue(cue)} title={lang === 'zh' ? '从此节点试玩' : 'Play from here'}>▶</button>
                           <button type="button" className="danger-text" onClick={() => setTutorialCues(current => current.filter(item => item.id !== cue.id))}>×</button>
                         </header>
                         <textarea
@@ -352,16 +438,23 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                         {cue.kind === 'preset' && (
                           <label>
                             <span>{lang === 'zh' ? '箭头指向的左侧预设' : 'Preset highlighted by arrow'}</span>
-                            <select value={cue.presetId ?? ''} onChange={event => updateTutorialCue(cue.id, { presetId: event.target.value || undefined })}>
+                            <select value={cue.presetId ?? ''} onChange={event => updateTutorialCue(cue.id, { presetId: event.target.value || undefined, target: { type: 'preset', presetId: event.target.value } })}>
                               <option value="">{lang === 'zh' ? '请选择预设' : 'Select preset'}</option>
                               {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
                             </select>
                           </label>
                         )}
+                        {cue.kind === 'tool' && (
+                          <label><span>{lang === 'zh' ? '要求选择的工具' : 'Required tool'}</span><select value={cue.tool ?? PointerMode.PLACE} onChange={event => { const tool = event.target.value as PointerMode; updateTutorialCue(cue.id, { tool, target: { type: 'tool', tool } }); }}><option value={PointerMode.PLACE}>{lang === 'zh' ? '建造' : 'Place'}</option><option value={PointerMode.PUSH}>{lang === 'zh' ? '推拨' : 'Push'}</option><option value={PointerMode.DELETE}>{lang === 'zh' ? '删除' : 'Delete'}</option><option value={PointerMode.LAUNCH}>{lang === 'zh' ? '弹射' : 'Launch'}</option></select></label>
+                        )}
                         {cue.kind === 'input' && (
                           <label>
                             <span>{lang === 'zh' ? '需要玩家执行的操作' : 'Required input action'}</span>
-                            <select value={cue.inputAction ?? ''} onChange={event => updateTutorialCue(cue.id, { inputAction: event.target.value as InputAction || undefined })}>
+                            <select value={cue.inputAction ?? ''} onChange={event => {
+                              const inputAction = event.target.value as InputAction;
+                              const target: LevelTutorialTarget = inputAction === 'physics.toggle' ? { type: 'control', control: 'physics' } : inputAction === 'card.lockHeight' ? { type: 'control', control: 'height-lock' } : inputAction === 'history.undo' ? { type: 'control', control: 'undo' } : inputAction === 'history.redo' ? { type: 'control', control: 'redo' } : cue.target;
+                              updateTutorialCue(cue.id, { inputAction: inputAction || undefined, target });
+                            }}>
                               <option value="">{lang === 'zh' ? '请选择操作' : 'Select action'}</option>
                               {ACTIONS.filter(action => !action.startsWith('preset.slot')).map(action => <option key={action} value={action}>{action}</option>)}
                             </select>
@@ -370,19 +463,52 @@ const LevelStudio: React.FC<LevelStudioProps> = ({
                         {cue.kind === 'blueprint-step' && (
                           <label>
                             <span>{lang === 'zh' ? '等待完成的蓝图步骤' : 'Blueprint step to complete'}</span>
-                            <select value={cue.blueprintStepIndex ?? 0} onChange={event => updateTutorialCue(cue.id, { blueprintStepIndex: Number(event.target.value) })}>
+                            <select value={cue.blueprintStepIndex ?? 0} onChange={event => { const stepIndex = Number(event.target.value); updateTutorialCue(cue.id, { blueprintStepIndex: stepIndex, target: { type: 'blueprint-step', stepIndex } }); }}>
                               {(selectedBlueprint?.steps ?? []).map((step, stepIndex) => (
                                 <option key={step.id} value={stepIndex}>{stepIndex + 1} · {step.title}</option>
                               ))}
                             </select>
                           </label>
                         )}
+                        {cue.kind === 'card-place' && <label><span>{lang === 'zh' ? '需要新放置的牌数' : 'New cards required'}</span><input type="number" min="1" max="100" value={cue.cardCount ?? 1} onChange={event => updateTutorialCue(cue.id, { cardCount: Math.max(1, Number(event.target.value)) })} /></label>}
+                        {cue.kind === 'height' && <label><span>{lang === 'zh' ? '目标高度' : 'Target height'}</span><input type="number" min=".1" step=".1" value={cue.targetHeight ?? 1} onChange={event => updateTutorialCue(cue.id, { targetHeight: Math.max(.1, Number(event.target.value)) })} /></label>}
+
+                        {!['preset', 'tool', 'blueprint-step'].includes(cue.kind) && (
+                          <label><span>{lang === 'zh' ? '视觉指向目标' : 'Visual target'}</span><select value={cue.target.type === 'control' ? `control:${cue.target.control}` : cue.target.type} onChange={event => {
+                            const value = event.target.value;
+                            updateCueTarget(cue, value === 'world' ? { type: 'world', position: [0, 0, 0] } : value.startsWith('control:') ? { type: 'control', control: value.slice(8) as 'physics' | 'undo' | 'redo' | 'height-lock' | 'test' } : { type: 'none' });
+                          }}><option value="none">{lang === 'zh' ? '不指向' : 'None'}</option><option value="control:height-lock">{lang === 'zh' ? '高度锁定提示' : 'Height lock'}</option><option value="control:physics">{lang === 'zh' ? '物理开关' : 'Physics'}</option><option value="control:undo">{lang === 'zh' ? '撤销' : 'Undo'}</option><option value="control:redo">{lang === 'zh' ? '重做' : 'Redo'}</option><option value="control:test">{lang === 'zh' ? '测试按钮' : 'Test button'}</option><option value="world">{lang === 'zh' ? '场景坐标' : 'World position'}</option></select></label>
+                        )}
+                        {cue.target.type === 'world' && <div className="level-world-target"><span>{lang === 'zh' ? '场景坐标 X / Y / Z' : 'World X / Y / Z'}</span>{cue.target.position.map((value, axis) => <input key={axis} type="number" step=".1" value={value} onChange={event => { const target = cue.target as Extract<LevelTutorialTarget, { type: 'world' }>; const position = [...target.position] as [number, number, number]; position[axis] = Number(event.target.value); updateCueTarget(cue, { type: 'world', position }); }} />)}</div>}
+
+                        <div className={`level-cue-target-status ${isCueTargetValid(cue) ? 'is-valid' : 'is-invalid'}`}>
+                          <span>{isCueTargetValid(cue) ? '●' : '!'}</span>
+                          {isCueTargetValid(cue)
+                            ? (lang === 'zh' ? '语义目标有效；试玩时会跟随真实 UI 和镜头位置' : 'Semantic target valid; preview follows live UI and camera')
+                            : (lang === 'zh' ? '目标不存在，请重新选择' : 'Target is missing; choose another target')}
+                        </div>
+
+                        <div className="level-cue-visuals">
+                          <label><span>{lang === 'zh' ? '初始高亮' : 'Initial highlight'}</span><select value={cue.highlight} onChange={event => updateTutorialCue(cue.id, { highlight: event.target.value as LevelTutorialCue['highlight'] })}><option value="pulse">{lang === 'zh' ? '脉冲' : 'Pulse'}</option><option value="arrow">{lang === 'zh' ? '箭头' : 'Arrow'}</option><option value="spotlight">{lang === 'zh' ? '聚光' : 'Spotlight'}</option><option value="key-badge">{lang === 'zh' ? '按键徽章' : 'Key badge'}</option><option value="blueprint-glow">{lang === 'zh' ? '蓝图发光' : 'Blueprint glow'}</option></select></label>
+                          <label className="level-tutorial-toggle"><input type="checkbox" checked={cue.feedback.flash} onChange={event => updateTutorialCue(cue.id, { feedback: { ...cue.feedback, flash: event.target.checked } })} /><span>{lang === 'zh' ? '完成闪光' : 'Flash'}</span></label>
+                          <label className="level-tutorial-toggle"><input type="checkbox" checked={cue.feedback.sound} onChange={event => updateTutorialCue(cue.id, { feedback: { ...cue.feedback, sound: event.target.checked } })} /><span>{lang === 'zh' ? '完成音效' : 'Sound'}</span></label>
+                        </div>
+                        <details className="level-cue-hints">
+                          <summary>{lang === 'zh' ? '渐进提示（默认 3 / 8 / 15 秒）' : 'Progressive hints (3 / 8 / 15 seconds)'}</summary>
+                          {cue.hints.map((hint, hintIndex) => <div key={`${cue.id}_hint_${hintIndex}`}><input type="number" min="0" step=".5" value={hint.delayMs / 1000} onChange={event => updateTutorialCue(cue.id, { hints: cue.hints.map((item, index) => index === hintIndex ? { ...item, delayMs: Math.max(0, Number(event.target.value) * 1000) } : item) })} /><select value={hint.highlight} onChange={event => updateTutorialCue(cue.id, { hints: cue.hints.map((item, index) => index === hintIndex ? { ...item, highlight: event.target.value as LevelTutorialCue['highlight'] } : item) })}><option value="pulse">{lang === 'zh' ? '脉冲' : 'Pulse'}</option><option value="arrow">{lang === 'zh' ? '箭头' : 'Arrow'}</option><option value="spotlight">{lang === 'zh' ? '聚光' : 'Spotlight'}</option><option value="key-badge">{lang === 'zh' ? '按键' : 'Key'}</option><option value="blueprint-glow">{lang === 'zh' ? '蓝图' : 'Blueprint'}</option></select><input value={hint.text.zh} onChange={event => updateTutorialCue(cue.id, { hints: cue.hints.map((item, index) => index === hintIndex ? { ...item, text: { zh: event.target.value, en: event.target.value } } : item) })} placeholder={lang === 'zh' ? '可选的加强提示' : 'Optional stronger hint'} /></div>)}
+                        </details>
                       </article>
                     ))}
                     <button type="button" className="level-add-cue" onClick={addTutorialCue}>
                       {lang === 'zh' ? '+ 添加教学步骤' : '+ Add tutorial cue'}
                     </button>
                   </div>
+                  <details className="level-tutorial-debug">
+                    <summary>{lang === 'zh' ? '试玩事件日志' : 'Playtest event log'}</summary>
+                    {tutorialDebugEvents.filter(event => !editingLevel || event.levelId === editingLevel.id).length === 0
+                      ? <p>{lang === 'zh' ? '从任意节点试玩后，完成、输入、回退和跳过事件会显示在这里。' : 'Play from any node to inspect completion, input, regression, and skip events here.'}</p>
+                      : tutorialDebugEvents.filter(event => !editingLevel || event.levelId === editingLevel.id).map((event, index) => <code key={`${event.at}_${index}`}>{new Date(event.at).toLocaleTimeString()} · {event.message}</code>)}
+                  </details>
                 </>
               )}
             </section>

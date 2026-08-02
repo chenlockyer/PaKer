@@ -957,6 +957,28 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .tutorial-cue > kbd { min-width: 52px; padding: 7px 10px; border: 1px solid var(--line-strong); border-bottom-width: 3px; border-radius: 5px; background: var(--surface-soft); text-align: center; }
 .tutorial-cue .primary-button { min-height: 34px; padding: 0 13px; }
 .tutorial-skip { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 10px; }
+.tutorial-target-guide {
+  position: fixed; z-index: 88; pointer-events: none; transform: translate(-50%, -50%);
+  border: 2px solid color-mix(in srgb, var(--accent) 82%, white); border-radius: 12px;
+  transition: left .12s linear, top .12s linear, width .16s ease, height .16s ease;
+  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--accent) 38%, transparent));
+}
+.tutorial-target-guide > i { position: absolute; inset: -7px; border: 2px solid var(--accent); border-radius: inherit; opacity: .65; }
+.tutorial-target-guide > b {
+  position: absolute; right: calc(100% + 12px); top: 50%; color: var(--accent); font-size: 24px;
+  transform: translateY(-50%); text-shadow: 0 2px 7px rgba(0, 0, 0, .22);
+}
+.tutorial-target-guide.is-pulse > i, .tutorial-target-guide.is-key-badge > i,
+.tutorial-target-guide.is-blueprint-glow > i { animation: tutorial-guide-pulse 1.15s ease-out infinite; }
+.tutorial-target-guide.is-spotlight { box-shadow: 0 0 0 9999px rgba(18, 27, 39, .42), 0 0 0 4px color-mix(in srgb, var(--accent) 24%, transparent); }
+.tutorial-target-guide.is-blueprint-glow { border-color: #63a8ff; box-shadow: 0 0 24px rgba(75, 147, 255, .55); }
+.tutorial-target-guide.is-key-badge { border-radius: 8px; border-color: #f1c84b; }
+.tutorial-target-guide.is-offscreen > b { right: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.tutorial-target-guide.is-complete { border-color: var(--success); background: color-mix(in srgb, var(--success) 18%, transparent); }
+@keyframes tutorial-guide-pulse {
+  from { transform: scale(.92); opacity: .85; }
+  to { transform: scale(1.22); opacity: 0; }
+}
 .blueprint-recording-bar strong, .blueprint-recording-bar small { display: block; }
 .blueprint-recording-bar strong { color: var(--ink); font-size: 10px; }
 .blueprint-recording-bar small { margin-top: 3px; color: var(--muted); font-size: 8px; }
@@ -1041,13 +1063,30 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
 .level-tutorial-heading p { margin: 6px 0 0; color: var(--muted); font-size: 11px; font-weight: 400; }
 .level-tutorial-toggle { flex-direction: row !important; align-items: center; padding: 8px 11px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); }
 .level-tutorial-toggle input { width: auto; min-height: 0; padding: 0; accent-color: var(--accent); }
+.level-tutorial-options { display: grid; grid-template-columns: 1fr 1fr auto; gap: 9px; align-items: end; }
 .level-cue-list { display: grid; gap: 9px; margin-top: 4px; }
-.level-cue-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(180px, .6fr); gap: 8px; padding: 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
-.level-cue-row > header { grid-column: 1 / -1; display: grid; grid-template-columns: 36px minmax(160px, 1fr) 32px 32px 32px; gap: 6px; align-items: center; }
+.level-cue-row { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(210px, .65fr); gap: 8px; padding: 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-soft); }
+.level-cue-row.is-disabled { opacity: .58; }
+.level-cue-row > header { grid-column: 1 / -1; display: grid; grid-template-columns: 36px minmax(170px, 1fr) 32px repeat(5, 32px); gap: 6px; align-items: center; }
 .level-cue-row > header b { color: var(--accent); font: 800 12px/1 monospace; }
 .level-cue-row > header button { min-height: 32px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted); }
+.level-cue-row > header .level-cue-play { color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); }
+.level-cue-enabled { width: 32px; height: 32px; display: grid !important; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.level-cue-enabled input { width: auto; min-height: 0; }
 .level-cue-row > textarea { min-height: 70px; }
 .level-cue-row > label { justify-content: center; }
+.level-cue-visuals { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 8px; align-items: end; }
+.level-cue-hints { grid-column: 1 / -1; padding: 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.level-cue-hints summary { color: var(--accent-ink); font-size: 11px; font-weight: 750; cursor: pointer; }
+.level-cue-hints > div { display: grid; grid-template-columns: 80px 110px minmax(180px, 1fr); gap: 7px; margin-top: 7px; }
+.level-world-target { display: grid; grid-template-columns: 1fr repeat(3, 76px); gap: 6px; align-items: center; color: var(--muted); font-size: 11px; }
+.level-world-target input { min-width: 0; }
+.level-cue-target-status { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
+.level-cue-target-status span { color: var(--success); }
+.level-cue-target-status.is-invalid, .level-cue-target-status.is-invalid span { color: var(--danger); }
+.level-tutorial-debug { padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
+.level-tutorial-debug summary { color: var(--accent-ink); font-size: 11px; font-weight: 750; cursor: pointer; }
+.level-tutorial-debug p, .level-tutorial-debug code { display: block; margin: 7px 0 0; color: var(--muted); font-size: 10px; }
 .level-add-cue { min-height: 38px; border: 1px dashed var(--line-strong); border-radius: 5px; background: var(--surface-soft); color: var(--accent-ink); cursor: pointer; }
 .level-save { grid-column: 1 / -1; min-height: 42px; }
 .level-library { display: grid; gap: 10px; padding: 20px; overflow: auto; }
