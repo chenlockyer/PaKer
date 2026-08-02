@@ -834,17 +834,24 @@ const PresetWheel = ({
 }) => {
   const t = translations[lang];
   const { formatBinding } = useInput();
-  const pointerRef = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+  const toUiPoint = (clientX: number, clientY: number) => {
+    const uiScale = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--ui-scale'),
+    ) || 1;
+    return { x: clientX / uiScale, y: clientY / uiScale };
+  };
+  const pointerRef = useRef(toUiPoint(window.innerWidth / 2, window.innerHeight / 2));
   const [center, setCenter] = useState(pointerRef.current);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     const trackPointer = (event: PointerEvent) => {
-      pointerRef.current = { x: event.clientX, y: event.clientY };
+      const pointer = toUiPoint(event.clientX, event.clientY);
+      pointerRef.current = pointer;
       if (!isOpen || presets.length === 0) return;
-      const dx = event.clientX - center.x;
-      const dy = event.clientY - center.y;
+      const dx = pointer.x - center.x;
+      const dy = pointer.y - center.y;
       if (Math.hypot(dx, dy) < 30) {
         const current = presets.findIndex(preset => preset.id === currentPresetId);
         setSelectedIndex(Math.max(0, current));
@@ -863,11 +870,7 @@ const PresetWheel = ({
     if (event.phase === 'down') {
       const current = Math.max(0, presets.findIndex(preset => preset.id === currentPresetId));
       setSelectedIndex(current);
-      const safeMargin = 250;
-      setCenter({
-        x: Math.min(window.innerWidth - safeMargin, Math.max(safeMargin, pointerRef.current.x)),
-        y: Math.min(window.innerHeight - safeMargin, Math.max(safeMargin, pointerRef.current.y)),
-      });
+      setCenter(pointerRef.current);
       setIsOpen(true);
       return;
     }
