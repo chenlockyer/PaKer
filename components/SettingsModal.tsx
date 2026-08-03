@@ -238,6 +238,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const actionLabels: Record<InputAction, string> = lang === 'zh'
     ? {
+        'card.snap': '按住吸附',
         'tool.place': '放置工具',
         'tool.push': '推拨工具',
         'tool.delete': '删除工具',
@@ -285,6 +286,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         'card.tiltRight': 'Tilt right',
         'card.resetRotation': 'Reset to preset',
         'card.lockHeight': 'Hold height lock',
+        'card.snap': 'Hold to snap',
         'preset.radial': 'Preset wheel',
         'preset.previous': 'Previous preset',
         'preset.next': 'Next preset',
@@ -315,7 +317,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       title: lang === 'zh' ? '纸牌姿态' : 'Card pose',
       actions: [
         'card.yawLeft', 'card.yawRight', 'card.tiltForward', 'card.tiltBackward',
-        'card.tiltLeft', 'card.tiltRight', 'card.resetRotation', 'card.lockHeight',
+        'card.tiltLeft', 'card.tiltRight', 'card.resetRotation', 'card.lockHeight', 'card.snap',
       ],
     },
     {
@@ -331,10 +333,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const captureBinding = (action: InputAction, event: React.KeyboardEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight'].includes(event.code)) {
+    if (
+      action !== 'card.snap' &&
+      ['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight'].includes(event.code)
+    ) {
       return;
     }
     const binding = keyBindingFromEvent(event);
+    if (action === 'card.snap' && ['ControlLeft', 'ControlRight'].includes(binding.code)) {
+      binding.ctrl = undefined;
+    }
+    if (action === 'card.snap' && ['ShiftLeft', 'ShiftRight'].includes(binding.code)) {
+      binding.shift = undefined;
+    }
+    if (action === 'card.snap' && ['AltLeft', 'AltRight'].includes(binding.code)) {
+      binding.alt = undefined;
+    }
     const current = bindings[action];
     if (
       current.code === binding.code &&

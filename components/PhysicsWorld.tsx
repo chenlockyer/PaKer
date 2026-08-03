@@ -49,6 +49,12 @@ import {
   worldDirectionFromQuaternion,
 } from '../physics/launchGesture';
 import { resolveLaunchActuatorStep } from '../physics/launchActuator';
+import {
+  createGhostSnapAnchors,
+  resolveGhostSnap,
+  type GhostSnapLatch,
+  type GhostSnapType,
+} from '../physics/ghostPlacement';
 
 const useRepeatingInputAction = (
   action: InputAction,
@@ -451,6 +457,7 @@ const GhostCard = ({
   cardSize: CardSize;
 }) => {
   const { camera, raycaster } = useThree();
+  const { world, rapier } = useRapier();
   const meshRef = useRef<THREE.Mesh>(null);
   const lastPointerRef = useRef(new THREE.Vector2(Number.NaN, Number.NaN));
   const lastCameraPositionRef = useRef(new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN));
@@ -461,7 +468,29 @@ const GhostCard = ({
   const heightLockPlaneRef = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   const heightLockPointRef = useRef(new THREE.Vector3());
   const [isHeightLocked, setIsHeightLocked] = useState(false);
+  const snapHeldRef = useRef(false);
+  const [isSnapHeld, setIsSnapHeld] = useState(false);
+  const snapLatchRef = useRef<GhostSnapLatch | null>(null);
+  const placementValidRef = useRef(true);
+  const [placementVisual, setPlacementVisual] = useState<{
+    valid: boolean;
+    snapped: boolean;
+    snapType?: GhostSnapType;
+    anchor?: [number, number, number];
+  }>({ valid: true, snapped: false });
   const dimensions = CARD_DIMENSIONS[cardSize];
+  const snapAnchors = useMemo(
+    () => createGhostSnapAnchors(dimensions.width, dimensions.height),
+    [dimensions.height, dimensions.width],
+  );
+  const ghostShape = useMemo(
+    () => new rapier.Cuboid(
+      dimensions.width / 2,
+      dimensions.thickness / 2,
+      dimensions.height / 2,
+    ),
+    [dimensions.height, dimensions.thickness, dimensions.width, rapier],
+  );
   
   // Manual adjustment is stored as a quaternion in world space. Keeping
   // three Euler offsets would make later key presses depend on rotation
@@ -540,6 +569,137 @@ const GhostCard = ({
     }
   });
 
+  useInputAction('card.snap', event => {
+    snapHeldRef.current = event.phase === 'down';
+    setIsSnapHeld(event.phase === 'down');
+    if (event.phase === 'up') snapLatchRef.current = null;
+    rotationDirtyRef.current = true;
+  });
+
+  const resolveCollisions = useCallback((
+    startPosition: THREE.Vector3,
+    quaternion: THREE.Quaternion,
+    lockHeight: boolean,
+  ) => {
+    const position = startPosition.clone();
+    const start = startPosition.clone();
+    const rotation = { x: quaternion.x, y: quaternion.y, z: quaternion.z, w: quaternion.w };
+    const clearance = 0.001;
+    const maximumDisplacement = dimensions.width * 0.4;
+
+    for (let iteration = 0; iteration <= 6; iteration += 1) {
+      let deepestContact: ReturnType<RapierCollider['contactShape']> = null;
+      world.intersectionsWithShape(position, rotation, ghostShape, collider => {
+        const contact = collider.contactShape(ghostShape, position, rotation, 0);
+        if (contact && contact.distance < -0.00001) {
+          if (!deepestContact || contact.distance < deepestContact.distance) {
+            deepestContact = contact;
+          }
+        }
+        return true;
+      });
+
+      if (!deepestContact) return { position, valid: true };
+      if (iteration === 6) return { position, valid: false };
+
+      const normal = new THREE.Vector3(
+        deepestContact.normal1.x,
+        deepestContact.normal1.y,
+        deepestContact.normal1.z,
+      );
+      let distance = -deepestContact.distance + clearance;
+      if (lockHeight) {
+        const horizontalLength = Math.hypot(normal.x, normal.z);
+        if (horizontalLength < 0.05) return { position, valid: false };
+        normal.set(normal.x / horizontalLength, 0, normal.z / horizontalLength);
+        distance /= horizontalLength;
+      } else {
+        normal.normalize();
+      }
+      position.addScaledVector(normal, distance);
+      if (position.distanceTo(start) > maximumDisplacement) {
+        return { position, valid: false };
+      }
+    }
+
+    return { position, valid: false };
+  }, [dimensions.width, ghostShape, world]);
+
+  const applyPlacement = useCallback((
+    basePosition: THREE.Vector3,
+    quaternion: THREE.Quaternion,
+    hit: THREE.Intersection | undefined,
+    hitNormal: THREE.Vector3 | null,
+  ) => {
+    let candidatePosition = basePosition.clone();
+    let snapped = false;
+    let snapType: GhostSnapType | undefined;
+    let anchor: [number, number, number] | undefined;
+
+    if (snapHeldRef.current && hit?.object.name === 'card-surface') {
+      const snap = resolveGhostSnap({
+        basePosition,
+        ghostQuaternion: quaternion,
+        target: hit.object,
+        anchors: snapAnchors,
+        enterDistance: dimensions.width * 0.22,
+        releaseDistance: dimensions.width * 0.3,
+        latch: snapLatchRef.current,
+      });
+      if (snap) {
+        candidatePosition.copy(snap.position);
+        if (hitNormal) {
+          const cardXAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
+          const cardYAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion);
+          const cardZAxis = new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion);
+          const projectedRadius =
+            Math.abs(cardXAxis.dot(hitNormal)) * dimensions.width / 2 +
+            Math.abs(cardYAxis.dot(hitNormal)) * dimensions.thickness / 2 +
+            Math.abs(cardZAxis.dot(hitNormal)) * dimensions.height / 2;
+          const supportPlane = hit.point.dot(hitNormal) + projectedRadius + 0.001;
+          candidatePosition.addScaledVector(
+            hitNormal,
+            supportPlane - candidatePosition.dot(hitNormal),
+          );
+        }
+        if (heightLockRef.current.active) candidatePosition.y = heightLockRef.current.height;
+        snapLatchRef.current = {
+          targetId: snap.targetId,
+          targetAnchorId: snap.targetAnchorId,
+          ghostAnchorId: snap.ghostAnchorId,
+        };
+        snapped = true;
+        snapType = snap.type;
+        anchor = snap.ghostAnchorLocal.toArray();
+      } else {
+        snapLatchRef.current = null;
+      }
+    } else {
+      snapLatchRef.current = null;
+    }
+
+    const resolved = resolveCollisions(
+      candidatePosition,
+      quaternion,
+      heightLockRef.current.active,
+    );
+    placementValidRef.current = resolved.valid;
+    if (meshRef.current) {
+      meshRef.current.position.copy(resolved.position);
+      meshRef.current.quaternion.copy(quaternion);
+    }
+    setPlacementVisual(previous => {
+      if (
+        previous.valid === resolved.valid &&
+        previous.snapped === snapped &&
+        previous.snapType === snapType &&
+        String(previous.anchor) === String(anchor)
+      ) return previous;
+      return { valid: resolved.valid, snapped, snapType, anchor };
+    });
+    rotationDirtyRef.current = false;
+  }, [dimensions.height, dimensions.thickness, dimensions.width, resolveCollisions, snapAnchors]);
+
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button === 0) {
@@ -601,6 +761,23 @@ const GhostCard = ({
     lastCameraQuaternionRef.current.copy(camera.quaternion);
     raycaster.setFromCamera(mouse, camera);
 
+    const targets: THREE.Object3D[] = [];
+    if (floorRef.current) targets.push(floorRef.current);
+    if (cardsGroupRef.current) targets.push(cardsGroupRef.current);
+    const intersects = raycaster.intersectObjects(targets, true);
+    const hit = intersects.find(intersection =>
+      intersection.object !== meshRef.current &&
+      intersection.object.type === 'Mesh' &&
+      intersection.object.name !== 'ghost' &&
+      intersection.object.visible &&
+      (intersection.object.name === 'placement-floor' || intersection.object.name === 'card-surface')
+    );
+    const quaternion = new THREE.Quaternion().setFromEuler(targetRotation);
+    let hitNormal: THREE.Vector3 | null = null;
+    if (hit?.face) {
+      hitNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+    }
+
     if (heightLockRef.current.active) {
       // While height is locked, ignore every scene surface. Project the
       // pointer directly onto a horizontal plane through the captured height
@@ -611,34 +788,14 @@ const GhostCard = ({
         heightLockPointRef.current
       );
 
-      if (lockedPoint && meshRef.current) {
-        meshRef.current.position.copy(lockedPoint);
-        meshRef.current.rotation.copy(targetRotation);
-        rotationDirtyRef.current = false;
+      if (lockedPoint) {
+        applyPlacement(lockedPoint, quaternion, hit, hitNormal);
       }
       return;
     }
-    
-    // OPTIMIZATION: Only intersect with floor and card meshes
-    const targets: THREE.Object3D[] = [];
-    if (floorRef.current) targets.push(floorRef.current);
-    if (cardsGroupRef.current) targets.push(cardsGroupRef.current);
 
-    const intersects = raycaster.intersectObjects(targets, true);
-    
-    // Ignore self and hidden cards
-    const hit = intersects.find(i => 
-      i.object !== meshRef.current && 
-      i.object.type === 'Mesh' &&
-      (i.object.name !== 'ghost') &&
-      i.object.visible 
-    );
-
-    if (hit && hit.face) {
+    if (hit && hitNormal) {
       // Anti-clipping projection
-      const hitNormal = hit.face.normal.clone();
-      hitNormal.transformDirection(hit.object.matrixWorld).normalize();
-
       const rotationMatrix = new THREE.Matrix4().makeRotationFromEuler(targetRotation);
 
       const cardXAxis = new THREE.Vector3(1, 0, 0).applyMatrix4(rotationMatrix); 
@@ -664,18 +821,14 @@ const GhostCard = ({
         newPos.z = Math.round(newPos.z / SNAP) * SNAP;
       }
 
-      if (meshRef.current) {
-        meshRef.current.position.copy(newPos);
-        meshRef.current.rotation.copy(targetRotation);
-        rotationDirtyRef.current = false;
-      }
+      applyPlacement(newPos, quaternion, hit, hitNormal);
     }
   });
 
   // Handle Placement Trigger
   useEffect(() => {
     const triggerPlace = () => {
-      if (meshRef.current) {
+      if (meshRef.current && placementValidRef.current) {
         onPlace(meshRef.current.position.clone(), meshRef.current.rotation.clone());
       }
     };
@@ -696,7 +849,11 @@ const GhostCard = ({
     return () => window.removeEventListener('click', handleClick);
   }, [onPlace]);
 
-  const ghostColor = isHeightLocked
+  const ghostColor = !placementVisual.valid
+    ? 0xef4444
+    : placementVisual.snapped || isSnapHeld
+      ? 0xfacc15
+      : isHeightLocked
     ? 0xa855f7
     : isFreezeMode
       ? 0x00ffff
@@ -725,6 +882,12 @@ const GhostCard = ({
         1.5,
         ghostColor
       ]} />
+      {placementVisual.snapped && placementVisual.anchor && (
+        <mesh position={placementVisual.anchor} renderOrder={5}>
+          <sphereGeometry args={[0.075, 12, 8]} />
+          <meshBasicMaterial color={0xfacc15} depthTest={false} depthWrite={false} />
+        </mesh>
+      )}
     </mesh>
   );
 };

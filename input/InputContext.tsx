@@ -24,6 +24,7 @@ export type InputAction =
   | 'card.tiltRight'
   | 'card.resetRotation'
   | 'card.lockHeight'
+  | 'card.snap'
   | 'preset.radial'
   | 'preset.previous'
   | 'preset.next'
@@ -77,6 +78,7 @@ export const ACTIONS: InputAction[] = [
   'card.tiltRight',
   'card.resetRotation',
   'card.lockHeight',
+  'card.snap',
   'preset.radial',
   'preset.previous',
   'preset.next',
@@ -115,6 +117,7 @@ export const RECOMMENDED_BINDINGS: Record<InputAction, KeyBinding> = {
   'card.tiltRight': { code: 'KeyD' },
   'card.resetRotation': { code: 'KeyR' },
   'card.lockHeight': { code: 'Space' },
+  'card.snap': { code: 'ControlLeft' },
   'preset.radial': { code: 'KeyC' },
   'preset.previous': { code: 'KeyQ', shift: true },
   'preset.next': { code: 'KeyE', shift: true },
@@ -165,7 +168,7 @@ export const LEGACY_BINDINGS: Record<InputAction, KeyBinding> = {
 };
 
 const STORAGE_KEY = 'hoc_input_settings_v1';
-const INPUT_SCHEMA_VERSION = 6;
+const INPUT_SCHEMA_VERSION = 7;
 type Listener = (event: InputActionEvent) => void;
 
 interface StoredInputSettings {
@@ -263,6 +266,12 @@ export const keyBindingFromEvent = (event: React.KeyboardEvent | KeyboardEvent):
 });
 
 const CODE_LABELS: Record<string, string> = {
+  ControlLeft: 'Ctrl',
+  ControlRight: 'Ctrl',
+  ShiftLeft: 'Shift',
+  ShiftRight: 'Shift',
+  AltLeft: 'Alt',
+  AltRight: 'Alt',
   Space: 'Space',
   Escape: 'Esc',
   Delete: 'Del',

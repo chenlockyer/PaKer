@@ -907,6 +907,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
             <kbd>{formatBinding('preset.radial')}</kbd><span>{lang === 'zh' ? '姿态轮盘' : 'Preset wheel'}</span>
             <kbd>W S A D Q E</kbd><span>{lang === 'zh' ? '调整姿态' : 'Adjust pose'}</span>
             <kbd>{formatBinding('card.lockHeight')}</kbd><span>{lang === 'zh' ? '锁定高度' : 'Lock height'}</span>
+            <kbd>{formatBinding('card.snap')}</kbd><span>{lang === 'zh' ? '按住吸附' : 'Hold to snap'}</span>
           </>
         ) : interactionMode === InteractionMode.PRECISION ? (
           <>
