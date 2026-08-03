@@ -11,7 +11,7 @@ import {
   type RapierCollider,
 } from '@react-three/rapier';
 import { useThree, useFrame, ThreeElements } from '@react-three/fiber';
-import { TransformControls } from '@react-three/drei';
+import { Line, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import Card from './Card';
 import BlueprintProjection from './BlueprintProjection';
@@ -51,6 +51,7 @@ import {
 import { resolveLaunchActuatorStep } from '../physics/launchActuator';
 import {
   createGhostSnapAnchors,
+  createGhostSnapSegments,
   resolveGhostSnap,
   type GhostSnapLatch,
   type GhostSnapType,
@@ -477,10 +478,15 @@ const GhostCard = ({
     snapped: boolean;
     snapType?: GhostSnapType;
     anchor?: [number, number, number];
+    targetLine?: [[number, number, number], [number, number, number]];
   }>({ valid: true, snapped: false });
   const dimensions = CARD_DIMENSIONS[cardSize];
   const snapAnchors = useMemo(
     () => createGhostSnapAnchors(dimensions.width, dimensions.height),
+    [dimensions.height, dimensions.width],
+  );
+  const snapSegments = useMemo(
+    () => createGhostSnapSegments(dimensions.width, dimensions.height),
     [dimensions.height, dimensions.width],
   );
   const ghostShape = useMemo(
@@ -635,6 +641,7 @@ const GhostCard = ({
     let snapped = false;
     let snapType: GhostSnapType | undefined;
     let anchor: [number, number, number] | undefined;
+    let targetSegmentWorld: [THREE.Vector3, THREE.Vector3] | undefined;
 
     if (snapHeldRef.current && hit?.object.name === 'card-surface') {
       const snap = resolveGhostSnap({
@@ -642,9 +649,11 @@ const GhostCard = ({
         ghostQuaternion: quaternion,
         target: hit.object,
         anchors: snapAnchors,
-        enterDistance: dimensions.width * 0.22,
-        releaseDistance: dimensions.width * 0.3,
+        segments: snapSegments,
+        enterDistance: dimensions.width * 0.15,
+        releaseDistance: dimensions.width * 0.2,
         latch: snapLatchRef.current,
+        horizontalOnly: heightLockRef.current.active,
       });
       if (snap) {
         candidatePosition.copy(snap.position);
@@ -665,12 +674,14 @@ const GhostCard = ({
         if (heightLockRef.current.active) candidatePosition.y = heightLockRef.current.height;
         snapLatchRef.current = {
           targetId: snap.targetId,
-          targetAnchorId: snap.targetAnchorId,
+          targetFeatureId: snap.targetFeatureId,
+          targetType: snap.targetType,
           ghostAnchorId: snap.ghostAnchorId,
         };
         snapped = true;
         snapType = snap.type;
         anchor = snap.ghostAnchorLocal.toArray();
+        targetSegmentWorld = snap.targetSegmentWorld;
       } else {
         snapLatchRef.current = null;
       }
@@ -688,17 +699,22 @@ const GhostCard = ({
       meshRef.current.position.copy(resolved.position);
       meshRef.current.quaternion.copy(quaternion);
     }
+    const inverseQuaternion = quaternion.clone().invert();
+    const targetLine = targetSegmentWorld?.map(point =>
+      point.clone().sub(resolved.position).applyQuaternion(inverseQuaternion).toArray()
+    ) as [[number, number, number], [number, number, number]] | undefined;
     setPlacementVisual(previous => {
       if (
         previous.valid === resolved.valid &&
         previous.snapped === snapped &&
         previous.snapType === snapType &&
-        String(previous.anchor) === String(anchor)
+        String(previous.anchor) === String(anchor) &&
+        String(previous.targetLine) === String(targetLine)
       ) return previous;
-      return { valid: resolved.valid, snapped, snapType, anchor };
+      return { valid: resolved.valid, snapped, snapType, anchor, targetLine };
     });
     rotationDirtyRef.current = false;
-  }, [dimensions.height, dimensions.thickness, dimensions.width, resolveCollisions, snapAnchors]);
+  }, [dimensions.height, dimensions.thickness, dimensions.width, resolveCollisions, snapAnchors, snapSegments]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -887,6 +903,17 @@ const GhostCard = ({
           <sphereGeometry args={[0.075, 12, 8]} />
           <meshBasicMaterial color={0xfacc15} depthTest={false} depthWrite={false} />
         </mesh>
+      )}
+      {placementVisual.snapped && placementVisual.targetLine && (
+        <Line
+          points={placementVisual.targetLine}
+          color="#facc15"
+          lineWidth={3}
+          transparent
+          opacity={0.95}
+          depthTest={false}
+          renderOrder={5}
+        />
       )}
     </mesh>
   );
