@@ -1,24 +1,26 @@
 /**
- * Card Siege HUD: phase banner, clock, both core read-outs, the active side's
- * action panel and a compact build toolbar (presets, tools, freeze, launch
- * preset) so the battle screen does not need the campaign overlay.
+ * Card Siege HUD: phase banner, clock, both sides' collapse read-outs, the
+ * active side's action panel and a compact build toolbar (blueprint, presets,
+ * tools, freeze, launch preset) so the battle screen does not need the campaign
+ * overlay.
  */
 
 import React, { useMemo } from 'react';
 import {
-  CardSize,
   LaunchPreset,
   PointerMode,
   RotationPreset,
 } from '../types';
-import type {
-  BattleArena,
-  BattleSide,
-  BattleShotRecord,
-  BattleState,
+import {
+  COLLAPSE_THRESHOLD,
+  MIN_STANDING_CARDS,
+  type BattleArena,
+  type BattleSide,
+  type BattleShotRecord,
+  type BattleState,
 } from '../battle/types';
-import { phaseDurationMs, phaseLabel, totalTurns, turnIndexOf } from '../battle/engine';
-import type { BattleBudgetView } from '../hooks/useBattleController';
+import { phaseDurationMs, totalTurns, turnIndexOf } from '../battle/engine';
+import type { BattleBudgetView, PlacementVerdict } from '../hooks/useBattleController';
 import type { PlacementRole } from '../battle/engine';
 import { translations } from '../utils/translations';
 
@@ -36,10 +38,9 @@ const LAUNCH_PRESETS: { id: LaunchPreset; zh: string; en: string }[] = [
 const PLACEMENT_REASON: Record<string, Record<'zh' | 'en', string>> = {
   'not-your-turn': { zh: '现在不是这一方的回合', en: 'Not this side’s turn' },
   'wrong-phase': { zh: '当前阶段不能放牌', en: 'Placement is closed in this phase' },
+  'action-already-used': { zh: '本回合的工程行动已经用掉了', en: 'The engineering action is already spent' },
   budget: { zh: '这一类的牌已经用完了', en: 'That card budget is empty' },
   'outside-zone': { zh: '只能建在自己的建筑区里', en: 'Build only inside your own zone' },
-  'outside-core-area': { zh: '核心牌必须放进黄色核心区', en: 'The core must sit inside the yellow core area' },
-  'core-too-low': { zh: '核心牌不能贴地放置', en: 'The core cannot be placed on the floor' },
 };
 
 export interface BattleHUDProps {
@@ -48,7 +49,7 @@ export interface BattleHUDProps {
   arena: BattleArena;
   budgets: Record<BattleSide, BattleBudgetView>;
   pendingRole: PlacementRole;
-  placementVerdict: { ok: boolean; reason?: string } | null;
+  placementVerdict: PlacementVerdict | null;
   presets: RotationPreset[];
   currentPresetId: string;
   setPresetId: (id: string) => void;
@@ -66,7 +67,9 @@ export interface BattleHUDProps {
   onExit: () => void;
   onUndo: () => void;
   canUndo: boolean;
-  cardSize: CardSize;
+  onOpenBlueprint: () => void;
+  onClearBlueprint: () => void;
+  blueprintLabel: string | null;
 }
 
 const formatSeconds = (ms: number) => {
@@ -75,25 +78,21 @@ const formatSeconds = (ms: number) => {
   return safe.toFixed(1);
 };
 
-const ShotSummary = ({
-  shot,
-  lang,
-}: {
-  shot: BattleShotRecord;
-  lang: 'zh' | 'en';
-}) => (
+const ShotSummary = ({ shot, lang }: { shot: BattleShotRecord; lang: 'zh' | 'en' }) => (
   <div className="battle-shot">
     <span className="battle-shot-kicker">
-      {lang === 'zh' ? `第 ${shot.round} 回合 · ${SIDE_NAME[shot.side].zh}出手` : `Round ${shot.round} · ${SIDE_NAME[shot.side].en}`}
+      {lang === 'zh'
+        ? `第 ${shot.round} 回合 · ${SIDE_NAME[shot.side].zh}出手`
+        : `Round ${shot.round} · ${SIDE_NAME[shot.side].en}`}
     </span>
     <div className="battle-shot-row">
       <span>{lang === 'zh' ? '击倒' : 'Knocked'}</span>
       <strong>{shot.knockedCards}</strong>
     </div>
     <div className="battle-shot-row">
-      <span>{lang === 'zh' ? '核心位移' : 'Core shift'}</span>
+      <span>{lang === 'zh' ? '倒塌率' : 'Collapse'}</span>
       <strong>
-        {shot.coreDisplacementAfter.A.toFixed(2)} / {shot.coreDisplacementAfter.B.toFixed(2)}
+        {Math.round(shot.collapseAfter.A * 100)}% / {Math.round(shot.collapseAfter.B * 100)}%
       </strong>
     </div>
     <div className="battle-shot-row">
@@ -103,7 +102,7 @@ const ShotSummary = ({
   </div>
 );
 
-const CoreCard = ({
+const CollapseCard = ({
   side,
   state,
   lang,
@@ -112,14 +111,18 @@ const CoreCard = ({
   state: BattleState;
   lang: 'zh' | 'en';
 }) => {
-  const core = state.sides[side].core;
+  const collapse = state.sides[side].collapse;
   const active = state.activeSide === side && state.phase !== 'finished';
-  const status = !core.placed
-    ? (lang === 'zh' ? '未放置' : 'Not placed')
-    : core.broken
-      ? (lang === 'zh' ? '已失效' : 'Lost')
-      : core.danger ? (lang === 'zh' ? '危险' : 'In danger') : (lang === 'zh' ? '完好' : 'Safe');
-  const tone = !core.placed ? 'is-empty' : core.broken ? 'is-lost' : core.danger ? 'is-danger' : 'is-safe';
+  const rate = Math.min(1, collapse.rate);
+  const danger = collapse.rate >= COLLAPSE_THRESHOLD * 0.7 && !collapse.broken;
+  const status = collapse.standing === 0
+    ? (lang === 'zh' ? '没有站牌' : 'No standing cards')
+    : collapse.broken
+      ? (lang === 'zh' ? '已倒塌' : 'Collapsed')
+      : danger ? (lang === 'zh' ? '快塌了' : 'Collapsing') : (lang === 'zh' ? '稳固' : 'Holding');
+  const tone = collapse.standing === 0
+    ? 'is-empty'
+    : collapse.broken ? 'is-lost' : danger ? 'is-danger' : 'is-safe';
   return (
     <section className={`battle-core ${active ? 'is-active' : ''} battle-core-${side.toLowerCase()}`}>
       <header>
@@ -129,25 +132,25 @@ const CoreCard = ({
       </header>
       <div className="battle-core-stats">
         <div>
-          <span>{lang === 'zh' ? '离地' : 'Clearance'}</span>
-          <strong>{core.placed ? Math.max(0, core.clearance).toFixed(2) : '—'}</strong>
+          <span>{lang === 'zh' ? '站牌' : 'Standing'}</span>
+          <strong>{collapse.standing}</strong>
         </div>
         <div>
-          <span>{lang === 'zh' ? '位移' : 'Shift'}</span>
-          <strong>{core.placed ? core.displacement.toFixed(2) : '—'}</strong>
+          <span>{lang === 'zh' ? '已倒' : 'Fallen'}</span>
+          <strong>{collapse.fallen}</strong>
         </div>
       </div>
-      {core.danger && !core.broken && (
-        <div className="battle-core-warn">
-          {state.phase === 'build'
-            ? (lang === 'zh'
-              ? '核心已经落地：稳定检查后会被判负，请重建。'
-              : 'Core is on the floor — rebuild it before the settle check.')
-            : (lang === 'zh'
-              ? '核心离地过低，0.75 秒内会判负'
-              : 'Core is low: 0.75 s on the floor loses')}
-        </div>
-      )}
+      <div className="battle-collapse-track">
+        <i
+          className={collapse.broken ? 'is-lost' : danger ? 'is-danger' : ''}
+          style={{ width: `${rate * 100}%` }}
+        />
+        <b style={{ left: `${COLLAPSE_THRESHOLD * 100}%` }} aria-hidden="true" />
+      </div>
+      <div className="battle-collapse-caption">
+        <span>{lang === 'zh' ? `倒塌率 ${Math.round(collapse.rate * 100)}%` : `Collapse ${Math.round(collapse.rate * 100)}%`}</span>
+        <span>{lang === 'zh' ? '判负线 50%' : 'Loses at 50%'}</span>
+      </div>
     </section>
   );
 };
@@ -176,11 +179,14 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
   onExit,
   onUndo,
   canUndo,
+  onOpenBlueprint,
+  onClearBlueprint,
+  blueprintLabel,
 }) => {
   const t = translations[lang];
   const side = state.activeSide;
   const budget = budgets[side];
-  const core = state.sides[side].core;
+  const collapse = state.sides[side].collapse;
   const duration = phaseDurationMs(state);
   const progress = duration > 0 ? Math.max(0, Math.min(1, state.timeLeftMs / duration)) : 0;
   const turn = Math.min(turnIndexOf(state) + 1, totalTurns(state));
@@ -188,6 +194,8 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
   const isEngineer = state.phase === 'engineer';
   const isFire = state.phase === 'fire';
   const finished = state.phase === 'finished';
+  const standingNow = state.cards.filter(record => record.side === side && record.standing).length;
+  const canFinishBuild = standingNow >= MIN_STANDING_CARDS;
 
   const copy = useMemo(() => (lang === 'zh' ? {
     round: '回合',
@@ -203,18 +211,13 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
     skip: '跳过',
     skipFire: '放弃攻击',
     resign: '认输',
-    core: '核心',
-    placeCore: '放置核心',
-    corePlaced: '核心已放置',
     structure: '结构牌',
     ammo: '弹药牌',
     reserve: '储备牌',
     reload: '装填弹药',
-    remaining: '剩余',
-    hintBuildCore: '先把核心牌放进自己的黄色核心区（不能贴地）。',
-    hintBuild: '先搭底座再放核心：核心落在结构上才安全。',
+    hintBuild: '先搭底座再往上加：每张立着的牌都算进倒塌率，倒掉一半就输。',
     hintEngineer: '这一回合可以放 1 张储备牌，或者装填 1 张弹药。',
-    hintFire: '切换到“弹射”工具，点住一张弹药牌蓄力松手。',
+    hintFire: '按住自己的弹药牌蓄力，松手打出去。',
     hintWait: '等待结算，双方都不能操作。',
     camera: '视角',
     global: '全局',
@@ -230,16 +233,18 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
     rematch: '再来一局',
     winner: '获胜',
     draw: '平局',
-    reasonFlat: '核心落地',
-    reasonOutside: '核心被推出合法区域',
+    reasonCollapse: '结构倒塌',
     reasonResign: '认输',
     reasonRoundLimit: '回合上限判定',
-    coreSummary: '核心状态',
+    collapseSummary: '倒塌状态',
     exitHint: '返回主菜单会放弃这局对战。',
     lastShot: '上一发',
     noShot: '还没有出手记录',
-    phaseWaiting: '等待中',
     confirmResign: '确定认输吗？',
+    blueprint: '蓝图',
+    blueprintClear: '移除投影',
+    blueprintActive: '参考中',
+    noBlueprint: '没有可用的蓝图',
   } : {
     round: 'Round',
     turn: 'turn',
@@ -254,18 +259,13 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
     skip: 'Skip',
     skipFire: 'Hold fire',
     resign: 'Resign',
-    core: 'Core',
-    placeCore: 'Place core',
-    corePlaced: 'Core placed',
     structure: 'Structure',
     ammo: 'Ammo',
     reserve: 'Reserve',
     reload: 'Load ammo',
-    remaining: 'Left',
-    hintBuildCore: 'Put your core card inside your yellow core area — never on the floor.',
-    hintBuild: 'Build a base first: a core resting on a structure is a safe core.',
+    hintBuild: 'Base first, then stack: every card standing on an edge counts, and half of them falling loses.',
     hintEngineer: 'One engineering action: place a reserve card or load one ammo card.',
-    hintFire: 'Switch to the launch tool, press and hold an ammo card, release to fire.',
+    hintFire: 'Press and hold one of your ammo cards, release to fire.',
     hintWait: 'Resolving — neither side may act.',
     camera: 'Camera',
     global: 'Global',
@@ -281,16 +281,18 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
     rematch: 'Rematch',
     winner: 'wins',
     draw: 'Draw',
-    reasonFlat: 'core hit the floor',
-    reasonOutside: 'core left its legal area',
+    reasonCollapse: 'structure collapsed',
     reasonResign: 'resignation',
     reasonRoundLimit: 'round limit',
-    coreSummary: 'Core status',
+    collapseSummary: 'Collapse',
     exitHint: 'Leaving returns to the main menu and drops this match.',
     lastShot: 'Last shot',
     noShot: 'No shot fired yet',
-    phaseWaiting: 'Waiting',
     confirmResign: 'Resign this match?',
+    blueprint: 'Blueprint',
+    blueprintClear: 'Clear guide',
+    blueprintActive: 'Guiding',
+    noBlueprint: 'No saved blueprints',
   }), [lang]);
 
   const phaseTitle = state.phase === 'build' ? copy.buildTitle
@@ -308,10 +310,9 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
   const outcomeText = () => {
     if (!state.outcome) return '';
     const { winner, reason } = state.outcome;
-    const reasonText = reason === 'core-flat' ? copy.reasonFlat
-      : reason === 'core-outside' ? copy.reasonOutside
-        : reason === 'resign' ? copy.reasonResign
-          : copy.reasonRoundLimit;
+    const reasonText = reason === 'collapse' ? copy.reasonCollapse
+      : reason === 'resign' ? copy.reasonResign
+        : copy.reasonRoundLimit;
     const who = winner === 'draw' ? copy.draw : `${SIDE_NAME[winner][lang]} ${copy.winner}`;
     return `${who} · ${reasonText}`;
   };
@@ -339,17 +340,17 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
         <div className="battle-topbar-side is-right">
           <span className="panel-kicker">{arena.name[lang]}</span>
           <strong className="battle-score">
-            {state.sides.A.core.placed ? (state.sides.A.core.broken ? '×' : '●') : '○'}
+            {Math.round(state.sides.A.collapse.rate * 100)}%
             <em>vs</em>
-            {state.sides.B.core.placed ? (state.sides.B.core.broken ? '×' : '●') : '○'}
+            {Math.round(state.sides.B.collapse.rate * 100)}%
           </strong>
         </div>
       </header>
 
       <aside className="battle-cores">
-        <span className="panel-kicker">{copy.coreSummary}</span>
-        <CoreCard side="A" state={state} lang={lang} />
-        <CoreCard side="B" state={state} lang={lang} />
+        <span className="panel-kicker">{copy.collapseSummary}</span>
+        <CollapseCard side="A" state={state} lang={lang} />
+        <CollapseCard side="B" state={state} lang={lang} />
         <div className="battle-camera">
           <span>{copy.camera}</span>
           <div>
@@ -373,79 +374,62 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
           <div><span>{copy.ammo}</span><strong>{budget.ammoLeft}/{state.config.ammoCards}</strong></div>
         </div>
 
-        {isBuild && (
-          <div className="battle-role-row">
-            <button
-              className={pendingRole === 'core' ? 'is-active' : ''}
-              disabled={core.placed}
-              onClick={() => onSetRole('core')}
-            >
-              {core.placed ? copy.corePlaced : copy.placeCore}
-            </button>
-            <button
-              className={pendingRole === 'structure' ? 'is-active' : ''}
-              onClick={() => onSetRole('structure')}
-            >
-              {copy.structure}
-            </button>
-            <button
-              className={pendingRole === 'ammo' ? 'is-active' : ''}
-              onClick={() => onSetRole('ammo')}
-            >
-              {copy.ammo}
-            </button>
-          </div>
-        )}
-
-        {isEngineer && (
+        {(isBuild || isEngineer) && (
           <div className="battle-role-row">
             <button
               className={pendingRole === 'structure' ? 'is-active' : ''}
-              disabled={state.sides[side].engineerUsedThisTurn}
+              disabled={isEngineer && state.sides[side].engineerUsedThisTurn}
               onClick={() => onSetRole('structure')}
             >
-              {copy.reserve}
+              {isEngineer ? copy.reserve : copy.structure}
             </button>
             <button
               className={pendingRole === 'ammo' ? 'is-active' : ''}
-              disabled={state.sides[side].engineerUsedThisTurn}
+              disabled={isEngineer && state.sides[side].engineerUsedThisTurn}
               onClick={() => onSetRole('ammo')}
             >
-              {copy.reload}
+              {isEngineer ? copy.reload : copy.ammo}
             </button>
           </div>
         )}
 
         <p className="battle-hint">
-          {isBuild && !core.placed ? copy.hintBuildCore
-            : isBuild ? copy.hintBuild
-              : isEngineer ? copy.hintEngineer
-                : isFire ? copy.hintFire
-                  : copy.hintWait}
+          {isBuild ? copy.hintBuild
+            : isEngineer ? copy.hintEngineer
+              : isFire ? copy.hintFire
+                : copy.hintWait}
         </p>
 
-        {isBuild && !core.placed && (
+        {isBuild && !canFinishBuild && (
           <p className="battle-warning">
             {lang === 'zh'
-              ? '还没有核心牌：直接结束建造会被判负。'
-              : 'No core placed yet — finishing the build without one loses the match.'}
+              ? `至少要有 ${MIN_STANDING_CARDS} 张立着的牌才能结束建造（现在 ${standingNow} 张）。`
+              : `Place at least ${MIN_STANDING_CARDS} cards on edge before finishing (${standingNow} now).`}
           </p>
         )}
 
-        {placementVerdict && !placementVerdict.ok && placementVerdict.reason && (
-          <p className="battle-verdict">{PLACEMENT_REASON[placementVerdict.reason]?.[lang] ?? placementVerdict.reason}</p>
+        {pointerMode === PointerMode.PLACE && placementVerdict && !placementVerdict.ok && placementVerdict.reason && (
+          <p className="battle-verdict">
+            {PLACEMENT_REASON[placementVerdict.reason]?.[lang] ?? placementVerdict.reason}
+            {placementVerdict.reason === 'outside-zone' && placementVerdict.count
+              ? `（${lang === 'zh' ? `${placementVerdict.count} 张会出界` : `${placementVerdict.count} cards outside`}）`
+              : ''}
+            {placementVerdict.reason === 'budget' && placementVerdict.count
+              ? `（${lang === 'zh'
+                ? `需要 ${placementVerdict.count} 张，只剩 ${placementVerdict.remaining ?? 0} 张`
+                : `needs ${placementVerdict.count}, ${placementVerdict.remaining ?? 0} left`}）`
+              : ''}
+          </p>
         )}
 
         <div className="battle-action-row">
           {isBuild && (
-            <button className="primary-button" onClick={onSkip}>{copy.finishBuild}</button>
+            <button className="primary-button" onClick={onSkip} disabled={!canFinishBuild}>
+              {copy.finishBuild}
+            </button>
           )}
-          {isEngineer && (
-            <button className="primary-button" onClick={onSkip}>{copy.skip}</button>
-          )}
-          {isFire && (
-            <button className="primary-button" onClick={onSkip}>{copy.skipFire}</button>
-          )}
+          {isEngineer && <button className="primary-button" onClick={onSkip}>{copy.skip}</button>}
+          {isFire && <button className="primary-button" onClick={onSkip}>{copy.skipFire}</button>}
           <button onClick={onUndo} disabled={!canUndo}>{copy.undo}</button>
           <button
             className="danger-button"
@@ -466,59 +450,68 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
       </aside>
 
       <div className="battle-toolbar">
-        <div className="battle-toolbar-group">
-          <span>{copy.tools}</span>
-          <button
-            className={pointerMode === PointerMode.PLACE ? 'is-active' : ''}
-            onClick={() => setPointerMode(PointerMode.PLACE)}
-          >
-            {t.place}
-          </button>
-          <button
-            className={pointerMode === PointerMode.DELETE ? 'is-active' : ''}
-            onClick={() => setPointerMode(PointerMode.DELETE)}
-          >
-            {t.delete}
-          </button>
-          <button
-            className={pointerMode === PointerMode.LAUNCH ? 'is-active' : ''}
-            onClick={() => setPointerMode(PointerMode.LAUNCH)}
-          >
-            {copy.launchMode}
-          </button>
-          <button
-            className={isFreezeMode ? 'is-active' : ''}
-            onClick={onToggleFreeze}
-          >
-            {isFreezeMode ? copy.freezeOn : copy.freezeOff}
-          </button>
-        </div>
-
-        <div className="battle-toolbar-presets">
-          {presets.map(preset => (
+        <div className="battle-toolbar-row">
+          <div className="battle-toolbar-group">
+            <span>{copy.tools}</span>
             <button
-              key={preset.id}
-              className={`battle-preset ${preset.id === currentPresetId ? 'is-active' : ''}`}
-              title={`${presetLabel(preset)}${preset.shortcut ? ` (${preset.shortcut})` : ''}`}
-              onClick={() => setPresetId(preset.id)}
+              className={pointerMode === PointerMode.PLACE ? 'is-active' : ''}
+              onClick={() => setPointerMode(PointerMode.PLACE)}
             >
-              <i aria-hidden="true">{preset.icon}</i>
-              <span>{presetLabel(preset)}</span>
+              {t.place}
             </button>
-          ))}
-        </div>
-
-        <div className="battle-toolbar-group">
-          <span>{copy.launchMode}</span>
-          {LAUNCH_PRESETS.map(option => (
             <button
-              key={option.id}
-              className={launchPreset === option.id ? 'is-active' : ''}
-              onClick={() => setLaunchPreset(option.id)}
+              className={pointerMode === PointerMode.DELETE ? 'is-active' : ''}
+              onClick={() => setPointerMode(PointerMode.DELETE)}
             >
-              {option[lang]}
+              {t.delete}
             </button>
-          ))}
+            <button
+              className={pointerMode === PointerMode.LAUNCH ? 'is-active' : ''}
+              onClick={() => setPointerMode(PointerMode.LAUNCH)}
+            >
+              {copy.launchMode}
+            </button>
+            <button className={isFreezeMode ? 'is-active' : ''} onClick={onToggleFreeze}>
+              {isFreezeMode ? copy.freezeOn : copy.freezeOff}
+            </button>
+            {(isBuild || isEngineer) && (
+              <button className={blueprintLabel ? 'is-active' : ''} onClick={onOpenBlueprint}>
+                {copy.blueprint}
+              </button>
+            )}
+            {blueprintLabel && (
+              <button className="battle-blueprint-chip" onClick={onClearBlueprint} title={copy.blueprintClear}>
+                {copy.blueprintActive}：{blueprintLabel} ×
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="battle-toolbar-row">
+          <div className="battle-toolbar-presets">
+            {presets.map(preset => (
+              <button
+                key={preset.id}
+                className={`battle-preset ${preset.id === currentPresetId ? 'is-active' : ''}`}
+                title={`${presetLabel(preset)}${preset.shortcut ? ` (${preset.shortcut})` : ''}`}
+                onClick={() => setPresetId(preset.id)}
+              >
+                <i aria-hidden="true">{preset.icon}</i>
+                <span>{presetLabel(preset)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="battle-toolbar-group battle-toolbar-launch">
+            <span>{copy.launchMode}</span>
+            {LAUNCH_PRESETS.map(option => (
+              <button
+                key={option.id}
+                className={launchPreset === option.id ? 'is-active' : ''}
+                onClick={() => setLaunchPreset(option.id)}
+              >
+                {option[lang]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -532,7 +525,7 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
           </strong>
           <small>
             {state.phase === 'settle'
-              ? (lang === 'zh' ? '建造结束，力量开始起作用' : 'Building is over — physics takes over')
+              ? (lang === 'zh' ? '建造结束，倒掉一半站牌就判负' : 'Building is over — half your standing cards falling loses')
               : `${copy.round} ${state.round}/${state.config.rounds}`}
           </small>
         </div>
@@ -546,17 +539,20 @@ const BattleHUD: React.FC<BattleHUDProps> = ({
             <h2>{outcomeText()}</h2>
             <p>{state.outcome?.detail}</p>
             <div className="battle-result-cores">
-              {(['A', 'B'] as BattleSide[]).map(item => (
-                <div key={item}>
-                  <span className={`battle-side-pip battle-side-${item.toLowerCase()}`} />
-                  <strong>{SIDE_NAME[item][lang]}</strong>
-                  <em>
-                    {copy.core} {state.sides[item].core.placed
-                      ? `${Math.max(0, state.sides[item].core.clearance).toFixed(2)} / ${state.sides[item].core.displacement.toFixed(2)}`
-                      : '—'}
-                  </em>
-                </div>
-              ))}
+              {(['A', 'B'] as BattleSide[]).map(item => {
+                const itemCollapse = state.sides[item].collapse;
+                return (
+                  <div key={item}>
+                    <span className={`battle-side-pip battle-side-${item.toLowerCase()}`} />
+                    <strong>{SIDE_NAME[item][lang]}</strong>
+                    <em>
+                      {lang === 'zh' ? '站牌' : 'standing'} {itemCollapse.standing} ·
+                      {' '}{lang === 'zh' ? '倒' : 'fallen'} {itemCollapse.fallen} ·
+                      {' '}{Math.round(itemCollapse.rate * 100)}%
+                    </em>
+                  </div>
+                );
+              })}
             </div>
             <div className="result-actions">
               <button className="primary-button" onClick={onRematch}>{copy.rematch}</button>

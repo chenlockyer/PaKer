@@ -1,9 +1,11 @@
 /**
- * Ground markings for the battle arena: two build zones, the neutral buffer and
- * the core areas. Pure decoration — the rules live in battle/arena.ts.
+ * Ground markings for the battle arena: the two 15 × 15 cell build zones and
+ * the neutral no-build band between them. Pure decoration — the rules live in
+ * battle/arena.ts.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import * as THREE from 'three';
 import { Line } from '@react-three/drei';
 import type { BattleArena, BattleArenaRect, BattleSide } from '../battle/types';
 
@@ -11,8 +13,6 @@ const SIDE_COLOR: Record<BattleSide, string> = {
   A: '#38bdf8',
   B: '#fb7185',
 };
-
-const CORE_COLOR = '#facc15';
 
 const rectCorners = (rect: BattleArenaRect, y: number): [number, number, number][] => [
   [rect.minX, y, rect.minZ],
@@ -63,8 +63,8 @@ const RectOutline = ({
     transparent
     opacity={opacity}
     dashed={dashed}
-    dashSize={0.22}
-    gapSize={0.16}
+    dashSize={0.4}
+    gapSize={0.3}
     depthWrite={false}
   />
 );
@@ -79,6 +79,29 @@ export interface BattleArenaViewProps {
 const BattleArenaView: React.FC<BattleArenaViewProps> = ({ arena, activeSide, placingSide }) => {
   const sides = useMemo<BattleSide[]>(() => ['A', 'B'], []);
 
+  // One line-segments geometry for every cell boundary, so the 15 × 15 squares
+  // read as cells without spawning ~60 child components.
+  const grid = useMemo(() => {
+    const positions: number[] = [];
+    const push = (a: [number, number, number], b: [number, number, number]) => {
+      positions.push(...a, ...b);
+    };
+    (['A', 'B'] as BattleSide[]).forEach(side => {
+      const rect = arena.zones[side];
+      for (let offset = rect.minX + arena.cell; offset < rect.maxX - 1e-6; offset += arena.cell) {
+        push([offset, 0.008, rect.minZ], [offset, 0.008, rect.maxZ]);
+      }
+      for (let offset = rect.minZ + arena.cell; offset < rect.maxZ - 1e-6; offset += arena.cell) {
+        push([rect.minX, 0.008, offset], [rect.maxX, 0.008, offset]);
+      }
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return geometry;
+  }, [arena]);
+
+  useEffect(() => () => grid.dispose(), [grid]);
+
   return (
     <group name="battle-arena">
       {sides.map(side => {
@@ -89,30 +112,21 @@ const BattleArenaView: React.FC<BattleArenaViewProps> = ({ arena, activeSide, pl
             <ZoneFill
               rect={arena.zones[side]}
               color={SIDE_COLOR[side]}
-              opacity={emphasized ? 0.24 : faint ? 0.08 : 0.14}
+              opacity={emphasized ? 0.2 : faint ? 0.06 : 0.11}
             />
             <RectOutline
               rect={arena.zones[side]}
               color={SIDE_COLOR[side]}
-              opacity={emphasized ? 1 : 0.55}
-            />
-            <ZoneFill
-              rect={arena.coreAreas[side]}
-              color={CORE_COLOR}
-              opacity={emphasized ? 0.22 : 0.1}
-            />
-            <RectOutline
-              rect={arena.coreAreas[side]}
-              color={CORE_COLOR}
-              y={0.014}
-              opacity={emphasized ? 1 : 0.45}
-              dashed
+              opacity={emphasized ? 1 : 0.5}
             />
           </group>
         );
       })}
-      <ZoneFill rect={arena.buffer} color="#0f172a" opacity={0.22} />
-      <RectOutline rect={arena.buffer} color="#94a3b8" y={0.01} opacity={0.3} dashed />
+      <lineSegments geometry={grid}>
+        <lineBasicMaterial color="#94a3b8" transparent opacity={0.16} depthWrite={false} />
+      </lineSegments>
+      <ZoneFill rect={arena.buffer} color="#0f172a" opacity={0.24} />
+      <RectOutline rect={arena.buffer} color="#94a3b8" y={0.01} opacity={0.35} dashed />
     </group>
   );
 };

@@ -1528,3 +1528,26 @@ kbd { display: inline-flex; min-width: 20px; height: 18px; align-items: center; 
   font-size: 10px;
   line-height: 1.4;
 }
+
+.battle-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: stretch;
+}
+.battle-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.battle-toolbar-row .battle-toolbar-presets { flex: 1 1 auto; }
+.battle-toolbar-launch { flex: 0 0 auto; }
+.battle-blueprint-chip {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-style: dashed !important;
+  color: var(--accent-ink) !important;
+}

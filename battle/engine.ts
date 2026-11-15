@@ -2,24 +2,32 @@
  * Card Siege turn engine.
  *
  * Pure state machine: give it a config, tick it with a delta and the current
- * core transforms, and it returns the next state. No timers, no React, no
- * three.js — the browser controller calls `tick` from an interval and the node
- * self-test calls it in a loop.
+ * card poses, and it returns the next state. No timers, no React, no three.js —
+ * the browser controller calls `tick` from an interval and the node self-test
+ * calls it in a loop.
  *
  * Phase order for one round:
  *   inspect (3s) → engineer (15s) → fire (20s) → resolve (≤6s) → next player
  * Before the rounds there is one build phase per side and a settle check.
+ *
+ * Win condition: every card placed standing on an edge is tracked. A side whose
+ * standing cards have half or more fallen flat — because they were shot, or
+ * because the house collapsed on its own — loses.
  */
 
 import {
-  CORE_DANGER_CLEARANCE,
-  CORE_FLAT_GRACE_MS,
-  CORE_OUTSIDE_GRACE_MS,
+  COLLAPSE_THRESHOLD,
   DEFAULT_BATTLE_CONFIG,
+  FALLEN_DISPLACEMENT,
+  FALLEN_DROP,
+  FALLEN_NORMAL_LIMIT,
+  MIN_STANDING_CARDS,
+  STANDING_NORMAL_LIMIT,
   type BattleArena,
+  type BattleCardRecord,
+  type BattleCardSample,
+  type BattleCollapseState,
   type BattleConfig,
-  type BattleCoreSamples,
-  type BattleCoreStatus,
   type BattleOutcome,
   type BattlePhase,
   type BattleShotRecord,
@@ -28,30 +36,23 @@ import {
   type BattleState,
   otherSide,
 } from './types';
-import { isCoreLegal } from './arena';
-import { distance3, lowestCardCorner } from './geometry';
-import { CardSize } from '../types';
+import { isInsideZone } from './arena';
+import { distance3, rotateVector } from './geometry';
+import type { CardData } from '../types';
 
 const LOG_LIMIT = 40;
 
-const emptyCore = (): BattleCoreStatus => ({
-  cardId: null,
-  placed: false,
-  initialPosition: null,
-  position: null,
-  clearance: 0,
-  height: 0,
-  displacement: 0,
-  flatForMs: 0,
-  outsideForMs: 0,
-  danger: false,
+const emptyCollapse = (): BattleCollapseState => ({
+  standing: 0,
+  fallen: 0,
+  rate: 0,
   broken: false,
-  brokenReason: null,
+  lastFallenId: null,
 });
 
 const emptySide = (side: BattleSide): BattleSideState => ({
   side,
-  core: emptyCore(),
+  collapse: emptyCollapse(),
   reserveUsed: 0,
   ammoLaunched: 0,
   engineerUsedThisTurn: false,
@@ -62,8 +63,8 @@ export const createBattleState = (
   config: Partial<BattleConfig> = {},
   nowMs = 0,
 ): BattleState => ({
-  schemaVersion: 1,
-  config: { ...DEFAULT_BATTLE_CONFIG, ...config, schemaVersion: 1 },
+  schemaVersion: 2,
+  config: { ...DEFAULT_BATTLE_CONFIG, ...config, schemaVersion: 2 },
   phase: 'idle',
   activeSide: 'A',
   round: 1,
@@ -71,6 +72,7 @@ export const createBattleState = (
   startedAtMs: nowMs,
   endedAtMs: null,
   sides: { A: emptySide('A'), B: emptySide('B') },
+  cards: [],
   shots: [],
   lastShot: null,
   outcome: null,
@@ -149,23 +151,30 @@ const startTurn = (state: BattleState, activeSide: BattleSide, round: number, no
   timeLeftMs: phaseDurationMs(state, 'inspect'),
 });
 
+const percent = (value: number) => `${Math.round(value * 100)}%`;
+
 const evaluateOutcome = (state: BattleState): BattleOutcome | null => {
   const { A, B } = state.sides;
-  if (A.core.broken && B.core.broken) {
-    return { winner: 'draw', reason: 'core-flat', detail: '双方核心同时失效' };
+  if (A.collapse.broken && B.collapse.broken) {
+    if (Math.abs(A.collapse.rate - B.collapse.rate) < 0.01) {
+      return { winner: 'draw', reason: 'collapse', detail: '双方同时倒塌' };
+    }
+    return A.collapse.rate < B.collapse.rate
+      ? { winner: 'A', reason: 'collapse', detail: `双方都倒塌，蓝方更完整（${percent(A.collapse.rate)} : ${percent(B.collapse.rate)}）` }
+      : { winner: 'B', reason: 'collapse', detail: `双方都倒塌，红方更完整（${percent(A.collapse.rate)} : ${percent(B.collapse.rate)}）` };
   }
-  if (A.core.broken) {
+  if (A.collapse.broken) {
     return {
       winner: 'B',
-      reason: A.core.brokenReason === 'outside' ? 'core-outside' : 'core-flat',
-      detail: 'A 的核心失效',
+      reason: 'collapse',
+      detail: `蓝方倒塌 ${percent(A.collapse.rate)}（${A.collapse.fallen}/${A.collapse.standing} 张站牌倒下）`,
     };
   }
-  if (B.core.broken) {
+  if (B.collapse.broken) {
     return {
       winner: 'A',
-      reason: B.core.brokenReason === 'outside' ? 'core-outside' : 'core-flat',
-      detail: 'B 的核心失效',
+      reason: 'collapse',
+      detail: `红方倒塌 ${percent(B.collapse.rate)}（${B.collapse.fallen}/${B.collapse.standing} 张站牌倒下）`,
     };
   }
   return null;
@@ -177,37 +186,30 @@ const finish = (state: BattleState, outcome: BattleOutcome, nowMs: number): Batt
   `对局结束：${outcome.winner === 'draw' ? '平局' : `${outcome.winner} 获胜`}（${outcome.detail}）`,
 );
 
-/** Round limit tie-break: higher core wins, then the less displaced core. */
+/** Round limit tie-break: the steadier house wins. */
 export const resolveRoundLimit = (state: BattleState, nowMs: number): BattleState => {
   const { A, B } = state.sides;
-  if (!A.core.placed && !B.core.placed) {
-    return finish(state, { winner: 'draw', reason: 'round-limit', detail: '双方都没有放置核心' }, nowMs);
+  if (A.collapse.standing === 0 && B.collapse.standing === 0) {
+    return finish(state, { winner: 'draw', reason: 'round-limit', detail: '双方都没有可倒塌的站牌' }, nowMs);
   }
-  if (!A.core.placed) return finish(state, { winner: 'B', reason: 'round-limit', detail: 'A 没有核心' }, nowMs);
-  if (!B.core.placed) return finish(state, { winner: 'A', reason: 'round-limit', detail: 'B 没有核心' }, nowMs);
-  const heightDelta = A.core.height - B.core.height;
-  if (Math.abs(heightDelta) > 0.25) {
+  const rateDelta = A.collapse.rate - B.collapse.rate;
+  if (Math.abs(rateDelta) > 0.01) {
     return finish(state, {
-      winner: heightDelta > 0 ? 'A' : 'B',
+      winner: rateDelta < 0 ? 'A' : 'B',
       reason: 'round-limit',
-      detail: `核心高度 ${A.core.height.toFixed(2)} : ${B.core.height.toFixed(2)}`,
+      detail: `倒塌率 ${percent(A.collapse.rate)} : ${percent(B.collapse.rate)}`,
     }, nowMs);
   }
-  const displacementDelta = A.core.displacement - B.core.displacement;
-  if (Math.abs(displacementDelta) > 0.1) {
+  if (A.collapse.standing !== B.collapse.standing) {
     return finish(state, {
-      winner: displacementDelta < 0 ? 'A' : 'B',
+      winner: A.collapse.standing > B.collapse.standing ? 'A' : 'B',
       reason: 'round-limit',
-      detail: `核心位移 ${A.core.displacement.toFixed(2)} : ${B.core.displacement.toFixed(2)}`,
+      detail: `站牌 ${A.collapse.standing} : ${B.collapse.standing}`,
     }, nowMs);
   }
-  return finish(state, { winner: 'draw', reason: 'round-limit', detail: '核心高度与位移都接近' }, nowMs);
+  return finish(state, { winner: 'draw', reason: 'round-limit', detail: '倒塌率与站牌数都很接近' }, nowMs);
 };
 
-/**
- * Move to the next phase, honouring the build order and the per-round turn
- * cycle. Returns the same state object when nothing changes.
- */
 export const advancePhase = (state: BattleState, nowMs = 0): BattleState => {
   switch (state.phase) {
     case 'build':
@@ -216,16 +218,33 @@ export const advancePhase = (state: BattleState, nowMs = 0): BattleState => {
       }
       return withPhase(state, 'settle', nowMs);
     case 'settle': {
-      // The rules are explicit: a side that finishes building without a core
-      // has already lost. This is checked once the settle window is over so a
-      // structure collapsing on top of the core still counts as a loss.
-      const missingA = !state.sides.A.core.placed;
-      const missingB = !state.sides.B.core.placed;
-      if (missingA && missingB) {
-        return finish(state, { winner: 'draw', reason: 'core-flat', detail: '双方都没有放置核心' }, nowMs);
+      // The collapse check is the opener: a house that fell on its own during
+      // the build already loses here, and so does a pile that never stood up.
+      const standingA = standingCountOf(state, 'A');
+      const standingB = standingCountOf(state, 'B');
+      if (standingA < MIN_STANDING_CARDS && standingB < MIN_STANDING_CARDS) {
+        return finish(state, {
+          winner: 'draw',
+          reason: 'collapse',
+          detail: `双方都没有立起 ${MIN_STANDING_CARDS} 张站牌`,
+        }, nowMs);
       }
-      if (missingA) return finish(state, { winner: 'B', reason: 'core-flat', detail: '蓝方没有放置核心' }, nowMs);
-      if (missingB) return finish(state, { winner: 'A', reason: 'core-flat', detail: '红方没有放置核心' }, nowMs);
+      if (standingA < MIN_STANDING_CARDS) {
+        return finish(state, {
+          winner: 'B',
+          reason: 'collapse',
+          detail: `蓝方只立起 ${standingA} 张站牌，少于 ${MIN_STANDING_CARDS} 张`,
+        }, nowMs);
+      }
+      if (standingB < MIN_STANDING_CARDS) {
+        return finish(state, {
+          winner: 'A',
+          reason: 'collapse',
+          detail: `红方只立起 ${standingB} 张站牌，少于 ${MIN_STANDING_CARDS} 张`,
+        }, nowMs);
+      }
+      const outcome = evaluateOutcome(state);
+      if (outcome) return finish(state, outcome, nowMs);
       return startTurn({ ...state }, 'A', 1, nowMs);
     }
     case 'inspect':
@@ -259,52 +278,108 @@ export const finishResolveEarly = (state: BattleState, nowMs = 0): BattleState =
 );
 
 /* ------------------------------------------------------------------ */
-/* Core evaluation                                                     */
+/* Cards and collapse                                                  */
 /* ------------------------------------------------------------------ */
 
-const evaluateCore = (
-  core: BattleCoreStatus,
-  sample: { position: [number, number, number]; quaternion: [number, number, number, number] },
-  legal: boolean,
-  cardSize: CardSize,
-  dtMs: number,
-  allowBreak: boolean,
-): BattleCoreStatus => {
-  const clearance = lowestCardCorner(sample.position, sample.quaternion, cardSize);
-  const displacement = core.initialPosition
-    ? distance3(sample.position, core.initialPosition)
-    : 0;
-  // A core is only "on the floor" once it is both touching the ground and has
-  // lost height since it was placed — a core standing on its edge at the end of
-  // a support is not a lost core.
-  const placedHeight = core.initialPosition?.[1] ?? sample.position[1];
-  const grounded = clearance <= 0.08 && placedHeight - sample.position[1] >= 0.3;
-  const flatForMs = allowBreak && grounded ? core.flatForMs + dtMs : 0;
-  const outsideForMs = allowBreak && !legal ? core.outsideForMs + dtMs : 0;
-  const broken = allowBreak && (
-    flatForMs >= CORE_FLAT_GRACE_MS || outsideForMs >= CORE_OUTSIDE_GRACE_MS
-  );
+/** Is this card standing on an edge (as opposed to lying flat)? */
+export const isStandingQuaternion = (quaternion: [number, number, number, number]) => {
+  const up = rotateVector(quaternion, [0, 1, 0]);
+  return Math.abs(up[1]) <= STANDING_NORMAL_LIMIT;
+};
+
+/** Has a tracked standing card come down? */
+export const isCardFallen = (
+  record: BattleCardRecord,
+  sample: BattleCardSample,
+): boolean => {
+  const up = rotateVector(sample.quaternion, [0, 1, 0]);
+  if (Math.abs(up[1]) >= FALLEN_NORMAL_LIMIT) return true;
+  const drop = record.baseHeight - sample.position[1];
+  if (drop >= FALLEN_DROP) return true;
+  return distance3(sample.position, record.basePosition) >= FALLEN_DISPLACEMENT;
+};
+
+/** Track a newly placed card so the collapse rule can score it later. */
+export const registerCard = (state: BattleState, card: CardData): BattleState => {
+  if (!card.owner || card.role === 'core') return state;
+  if (state.cards.some(record => record.id === card.id)) return state;
+  const quaternion = cardQuaternion(card);
+  const record: BattleCardRecord = {
+    id: card.id,
+    side: card.owner,
+    role: card.role === 'ammo' ? 'ammo' : 'structure',
+    standing: isStandingQuaternion(quaternion),
+    basePosition: [...card.position],
+    baseHeight: card.position[1],
+  };
+  return { ...state, cards: [...state.cards, record] };
+};
+
+/** Drop records for cards that no longer exist (delete, undo, import). */
+export const reconcileCards = (state: BattleState, liveCardIds: ReadonlySet<string>): BattleState => {
+  if (state.cards.length === 0) return state;
+  const cards = state.cards.filter(record => liveCardIds.has(record.id));
+  if (cards.length === state.cards.length) return state;
+  return recomputeCollapse({ ...state, cards });
+};
+
+const cardQuaternion = (card: CardData): [number, number, number, number] => {
+  const [x, y, z] = card.rotation;
+  const sx = Math.sin(x / 2);
+  const cx = Math.cos(x / 2);
+  const sy = Math.sin(y / 2);
+  const cy = Math.cos(y / 2);
+  const sz = Math.sin(z / 2);
+  const cz = Math.cos(z / 2);
+  return [
+    sx * cy * cz + cx * sy * sz,
+    cx * sy * cz - sx * cy * sz,
+    cx * cy * sz + sx * sy * cz,
+    cx * cy * cz - sx * sy * sz,
+  ];
+};
+
+/** Recompute both sides' collapse state from the recorded cards. */
+export const recomputeCollapse = (
+  state: BattleState,
+  samples: Partial<Record<string, BattleCardSample>> = {},
+  allowBreak = false,
+): BattleState => {
+  const patch = (side: BattleSideState): BattleSideState => {
+    const records = state.cards.filter(record => record.side === side.side && record.standing);
+    let fallen = 0;
+    let lastFallenId: string | null = null;
+    for (const record of records) {
+      const sample = samples[record.id];
+      if (!sample) continue;
+      if (isCardFallen(record, sample)) {
+        fallen += 1;
+        lastFallenId = record.id;
+      }
+    }
+    const rate = records.length === 0 ? 0 : fallen / records.length;
+    const broken = allowBreak && records.length > 0 && rate >= COLLAPSE_THRESHOLD;
+    return {
+      ...side,
+      collapse: {
+        standing: records.length,
+        fallen,
+        rate,
+        broken: side.collapse.broken || broken,
+        lastFallenId: lastFallenId ?? side.collapse.lastFallenId,
+      },
+    };
+  };
   return {
-    ...core,
-    position: sample.position,
-    clearance,
-    height: clearance,
-    displacement,
-    flatForMs,
-    outsideForMs,
-    danger: !core.broken && (clearance <= CORE_DANGER_CLEARANCE || displacement >= 1.5),
-    broken,
-    brokenReason: broken
-      ? (outsideForMs >= CORE_OUTSIDE_GRACE_MS ? 'outside' : 'flat')
-      : null,
+    ...state,
+    sides: { A: patch(state.sides.A), B: patch(state.sides.B) },
   };
 };
 
 export interface TickOptions {
   arena: BattleArena;
-  /** Core transforms sampled from the physics scene. */
-  samples?: BattleCoreSamples;
-  cardSize?: CardSize;
+  /** Live poses of every tracked card, keyed by card id. */
+  samples?: Partial<Record<string, BattleCardSample>>;
   /** True once the table is quiet enough to end the resolve phase early. */
   settled?: boolean;
 }
@@ -317,31 +392,9 @@ export const tick = (
 ): BattleState => {
   if (state.phase === 'idle' || state.phase === 'finished') return state;
   const dt = Math.max(0, dtMs);
-  const cardSize = options.cardSize ?? CardSize.BRIDGE;
   const allowBreak = state.phase !== 'build';
-  const samples = options.samples ?? {};
 
-  let next = state;
-  const sides = { ...next.sides };
-  (['A', 'B'] as BattleSide[]).forEach(side => {
-    const core = sides[side].core;
-    if (!core.placed) return;
-    const sample = samples[side];
-    if (!sample) return;
-    sides[side] = {
-      ...sides[side],
-      core: evaluateCore(
-        core,
-        sample,
-        isCoreLegal(options.arena, side, sample.position),
-        cardSize,
-        dt,
-        allowBreak,
-      ),
-    };
-  });
-  next = { ...next, sides };
-
+  let next = recomputeCollapse(state, options.samples, allowBreak);
   const outcome = evaluateOutcome(next);
   if (outcome) return finish(next, outcome, nowMs);
 
@@ -356,45 +409,10 @@ export const tick = (
 };
 
 /* ------------------------------------------------------------------ */
-/* Core placement and resources                                        */
+/* Placement and resources                                             */
 /* ------------------------------------------------------------------ */
 
-export const markCorePlaced = (
-  state: BattleState,
-  side: BattleSide,
-  cardId: string,
-  position: [number, number, number],
-  quaternion: [number, number, number, number],
-  cardSize: CardSize = CardSize.BRIDGE,
-): BattleState => {
-  const clearance = lowestCardCorner(position, quaternion, cardSize);
-  return {
-    ...state,
-    sides: {
-      ...state.sides,
-      [side]: {
-        ...state.sides[side],
-        core: {
-          ...emptyCore(),
-          cardId,
-          placed: true,
-          initialPosition: [...position],
-          position: [...position],
-          clearance,
-          height: clearance,
-          displacement: 0,
-        },
-      },
-    },
-  };
-};
-
-export const markCoreRemoved = (state: BattleState, side: BattleSide): BattleState => ({
-  ...state,
-  sides: { ...state.sides, [side]: { ...state.sides[side], core: emptyCore() } },
-});
-
-export type PlacementRole = 'structure' | 'ammo' | 'core';
+export type PlacementRole = 'structure' | 'ammo';
 
 export interface PlacementUsage {
   structure: number;
@@ -406,7 +424,6 @@ export type PlacementReason =
   | 'not-your-turn'
   | 'wrong-phase'
   | 'budget'
-  | 'core-already-placed'
   | 'action-already-used';
 
 export interface PlacementCheck {
@@ -414,13 +431,7 @@ export interface PlacementCheck {
   reason: PlacementReason;
 }
 
-/**
- * Can `side` place a card of `role` right now?
- *
- * Build phases let a side place structure and ammo cards; the engineer phase
- * allows exactly one extra card (a reserve structure card or an ammo reload)
- * and then moves straight on to firing.
- */
+/** Can `side` place a card of `role` right now? */
 export const canPlace = (
   state: BattleState,
   side: BattleSide,
@@ -430,11 +441,6 @@ export const canPlace = (
   if (state.phase === 'finished' || state.phase === 'idle') return { ok: false, reason: 'wrong-phase' };
   if (state.phase === 'build') {
     if (side !== state.activeSide) return { ok: false, reason: 'not-your-turn' };
-    if (role === 'core') {
-      return state.sides[side].core.placed
-        ? { ok: false, reason: 'core-already-placed' }
-        : { ok: true, reason: 'ok' };
-    }
     if (role === 'structure') {
       return usage.structure >= state.config.structureCards
         ? { ok: false, reason: 'budget' }
@@ -447,7 +453,6 @@ export const canPlace = (
   if (state.phase === 'engineer') {
     if (side !== state.activeSide) return { ok: false, reason: 'not-your-turn' };
     if (state.sides[side].engineerUsedThisTurn) return { ok: false, reason: 'action-already-used' };
-    if (role === 'core') return { ok: false, reason: 'wrong-phase' };
     if (role === 'ammo') {
       return usage.ammo >= state.config.ammoCards
         ? { ok: false, reason: 'budget' }
@@ -459,6 +464,13 @@ export const canPlace = (
   }
   return { ok: false, reason: 'wrong-phase' };
 };
+
+/** Does a blueprint fit inside the side's build zone? */
+export const blueprintFits = (
+  arena: BattleArena,
+  side: BattleSide,
+  positions: [number, number, number][],
+) => positions.every(position => isInsideZone(arena, side, position));
 
 export const markEngineerActionUsed = (state: BattleState, side: BattleSide): BattleState => ({
   ...state,
@@ -495,14 +507,18 @@ export const recordShot = (
   return withPhase(next, 'resolve', nowMs);
 };
 
-export const resign = (state: BattleState, side: BattleSide, nowMs = 0): BattleState => {
-  if (state.phase === 'finished' || state.phase === 'idle') return state;
-  return finish(state, { winner: otherSide(side), reason: 'resign', detail: `${side} 认输` }, nowMs);
-};
+/** How many cards this side has standing on an edge right now. */
+export const standingCountOf = (state: BattleState, side: BattleSide): number =>
+  state.cards.filter(record => record.side === side && record.standing).length;
+
+/** True when the active side has built enough to end its build phase. */
+export const canFinishBuild = (state: BattleState): boolean =>
+  state.phase === 'build' &&
+  standingCountOf(state, state.activeSide) >= MIN_STANDING_CARDS;
 
 /**
  * Fill in shot bookkeeping that is only known once the resolve phase ends
- * (how many cards actually moved, where both cores ended up).
+ * (how many cards actually moved, how far both sides have collapsed).
  */
 export const patchLastShot = (
   state: BattleState,
@@ -515,9 +531,9 @@ export const patchLastShot = (
   return { ...state, shots, lastShot: shots[shots.length - 1] };
 };
 
-export const isFinished = (state: BattleState) => state.phase === 'finished';
+export const resign = (state: BattleState, side: BattleSide, nowMs = 0): BattleState => {
+  if (state.phase === 'finished' || state.phase === 'idle') return state;
+  return finish(state, { winner: otherSide(side), reason: 'resign', detail: `${side} 认输` }, nowMs);
+};
 
-/** True when the active side still has to place its core card. */
-export const needsCore = (state: BattleState) => (
-  state.phase === 'build' && !state.sides[state.activeSide].core.placed
-);
+export const isFinished = (state: BattleState) => state.phase === 'finished';

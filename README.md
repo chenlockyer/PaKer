@@ -110,15 +110,16 @@ npm run test:level-factory  # 用真实运行时服务复验生成结果
 
 ![对战界面](docs/screenshots/battle-build.png)
 
-一人操作蓝红两方，轮流建造堡垒、保护核心、亲手弹射纸牌把对手的核心打下来。
-物理即规则：没有血条和隐藏伤害，核心落地或被推出合法区域就判负。
+一人操作蓝红两方，轮流建造堡垒、亲手弹射纸牌，把对手立着的牌打倒一半。
+物理即规则：没有血条和隐藏伤害，牌面翻倒或被撞飞就是真塌了。
 
-*   **竞技场**：双方各一块建筑区，中间是中立缓冲区，后部黄色核心区
-*   **建造**：每方 150 秒，只能在自己的区域放牌；核心牌必须放进核心区且离地一张牌
+*   **竞技场**：双方各一块 15×15 格的场地（一格 = 地面小网格 0.9），中间 15 格非战斗区
+*   **建造**：每方 150 秒，只能在自己的场地放牌；结束建造至少要立起 4 张站牌
 *   **稳定检查**：建造结束强制解除冻结，结构自己站住才算数
 *   **回合**：检查 3s → 工程 15s（放 1 张储备牌或装填 1 张弹药）→ 发射 20s → 结算 ≤6s
-*   **胜负**：核心落地 / 出界 0.75 秒即负；回合用尽按核心高度与位移判定
-*   **资源**：30 结构牌 + 10 储备牌 + 12 弹药牌（开始前可调），核心牌不占预算
+*   **倒塌判定**：立着的牌翻面 / 掉 1 格 / 被撞飞 3 格算倒下，倒塌率到 50% 判负
+*   **蓝图**：建造阶段可打开蓝图工作台，一键放置整张结构，或按半透明投影逐步搭建
+*   **资源**：30 结构牌 + 10 储备牌 + 12 弹药牌（开始前可调）
 
 ```bash
 npm run test:battle        # 引擎自测（无浏览器）
@@ -137,12 +138,14 @@ npm run test:battle        # 引擎自测（无浏览器）
 
 ### ⚔️ Card Siege (1v1)
 
-Run both sides yourself: build a fortress, hide your gold core card and hand-fire ammo cards at the other core. There is no health bar — a core that rests on the floor or leaves its legal area loses.
+Run both sides yourself: build a fortress, then hand-fire cards until half of the other side's standing cards are down. There is no health bar — a card that tips flat or gets knocked three cells away is simply down.
 
-*   150 s build per side, then a settle check that forces physics back on
+*   15 × 15 cell build square per side (a cell is the 0.9 ground grid), with a 15 cell neutral band between them
+*   150 s build per side, then a settle check that forces physics back on; you need at least four standing cards to finish
 *   Turns: inspect 3 s → engineer 15 s → fire 20 s → resolve ≤6 s
-*   30 structure + 10 reserve + 12 ammo cards per side, one engineer action and one shot per turn
-*   Rules, thresholds and code layout: [docs/battle-system.md](docs/battle-system.md)
+*   Collapse: a standing card counts as fallen once it lies flat, drops a cell or flies three cells; 50% loses
+*   Blueprints: drop a saved or official structure in one click, or build along a translucent projection
+*   30 structure + 10 reserve + 12 ammo cards per side
 
 ```bash
 npm run test:battle        # engine self-test, no browser required

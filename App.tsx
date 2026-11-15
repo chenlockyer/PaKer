@@ -107,8 +107,6 @@ import {
 import { useTutorialDirector } from './hooks/useTutorialDirector';
 import { useBattleController } from './hooks/useBattleController';
 import type { BattleConfig, BattlePhase, BattleSide, BattleState } from './battle/types';
-import { CORE_MIN_PLACEMENT_CLEARANCE } from './battle/types';
-import { lowestCardCorner, quatFromEulerXYZ } from './battle/geometry';
 import {
   clearActiveCampaign,
   clearCampaignSession,
@@ -341,6 +339,12 @@ const App: React.FC = () => {
       // tool, firing uses the launch tool.
       if (next.phase === 'build' || next.phase === 'engineer') setPointerMode(PointerMode.PLACE);
       if (next.phase === 'fire') setPointerMode(PointerMode.LAUNCH);
+      // A blueprint projection only belongs to the build phase it was opened
+      // in; drop it when the build hands over or the match moves on.
+      if (next.phase !== 'build' || next.activeSide !== previous.activeSide) {
+        setBlueprintGuide(null);
+        setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+      }
     }
     setBattleVerdict(null);
   }, []);
@@ -453,6 +457,14 @@ const App: React.FC = () => {
   );
   const playerLevels = customLevels.filter(level => !OFFICIAL_LEVEL_IDS.has(level.id));
   const levelLibrary = [...effectiveOfficialLevels, ...playerLevels];
+  // In a battle the blueprint library also offers the official tutorial
+  // structures and every campaign reference build, so a first match does not
+  // need hand-built blueprints to start from.
+  const battleBlueprints = [
+    ...OFFICIAL_TUTORIAL_BLUEPRINTS,
+    ...OFFICIAL_LEVELS.map(level => level.embeddedBlueprint),
+    ...blueprints,
+  ];
   const campaignLevels = flattenCampaign(activeCampaign);
   const currentPreset = presets.find(p => p.id === currentPresetId) || presets[0];
   const currentLevel = activeCustomLevel ?? campaignLevels[currentLevelIndex]?.entry.level ?? effectiveOfficialLevels[0];
@@ -552,21 +564,11 @@ const App: React.FC = () => {
         setBattleVerdict(verdict);
         return;
       }
-      if (role === 'core') {
-        const quaternion = quatFromEulerXYZ(card.rotation[0], card.rotation[1], card.rotation[2]);
-        if (lowestCardCorner(card.position, quaternion, cardSize) < CORE_MIN_PLACEMENT_CLEARANCE) {
-          setBattleVerdict({ ok: false, reason: 'core-too-low' });
-          return;
-        }
-      }
       const battleCard: CardData = {
         ...card,
         locked: isFreezeMode,
         role,
         owner: side,
-        ...(role === 'core'
-          ? { rank: 'J', suit: 'spades' as CardData['suit'], color: 'red' as CardData['color'] }
-          : {}),
       };
       setCards(previous => {
         recordCardHistory(previous);
@@ -613,6 +615,12 @@ const App: React.FC = () => {
 
   const removeCard = useCallback((id: string) => {
     if (appState === AppState.BATTLE) {
+      // Once the settle check starts, the house is locked: deleting a fallen
+      // card would let a player hide their own collapse from the score.
+      if (battle.state.phase !== 'build') {
+        setBattleVerdict({ ok: false, reason: 'wrong-phase' });
+        return;
+      }
       const card = cards.find(item => item.id === id);
       if (card) battle.noteCardRemoved(card);
     }
@@ -952,6 +960,12 @@ const App: React.FC = () => {
   }, []);
 
   const testBlueprintFromStart = useCallback((blueprint: Blueprint) => {
+    if (appState === AppState.BATTLE) {
+      alert(lang === 'zh'
+        ? '对战中不能“从头测试”蓝图：它会清空场地。请用“一键放置”或“使用”。'
+        : 'A blueprint test clears the table, so it is disabled during a battle. Use quick place or use instead.');
+      return;
+    }
     recordCardHistory(cards.map(card => {
       const transform = liveCardTransformsRef.current.get(card.id);
       return transform
@@ -966,10 +980,16 @@ const App: React.FC = () => {
     liveCardTransformsRef.current.clear();
     setIsFreezeMode(false);
     startBlueprintGuide(blueprint);
-  }, [cards, recordCardHistory, startBlueprintGuide]);
+  }, [appState, cards, lang, recordCardHistory, startBlueprintGuide]);
 
   const quickPlaceBlueprint = useCallback((blueprint: Blueprint) => {
     if (gameMode !== GameMode.FREE) return;
+    if (appState === AppState.BATTLE && blueprint.cardSize !== cardSize) {
+      alert(lang === 'zh'
+        ? '蓝图的牌型和对战桌不同，无法在对战里直接放置。'
+        : 'This blueprint uses a different card size than the battle table.');
+      return;
+    }
     if (cards.length > 0 && cardSize !== blueprint.cardSize) {
       alert(lang === 'zh'
         ? '当前桌面的卡牌尺寸与蓝图不同。请在同一尺寸的桌面中放置此蓝图。'
@@ -998,9 +1018,71 @@ const App: React.FC = () => {
     blueprintCheckpointRef.current = [];
     blueprintCheckpointReadyRef.current = false;
     setShowBlueprintStudio(false);
-  }, [cardSize, cards.length, gameMode, lang]);
+  }, [appState, cardSize, cards.length, gameMode, lang]);
 
   const placeBlueprintOrigin = useCallback((origin: [number, number, number]) => {
+    if (appState === AppState.BATTLE && blueprintGuide) {
+      const side = battle.state.activeSide;
+      const instantiated = instantiateBlueprintCards(blueprintGuide.blueprint, {
+        origin,
+        yaw: blueprintGuide.yaw,
+        locked: isFreezeMode,
+      });
+      if (instantiated.length === 0) return;
+      const verdict = battle.validateBlueprint(
+        instantiated.map(card => card.position),
+        side,
+      );
+      if (!verdict.ok) {
+        // Keep the guide in placement mode so the player can try another spot.
+        setBattleVerdict(verdict);
+        return;
+      }
+      setBattleVerdict(null);
+      if (blueprintGuide.placementAction === 'quick-place') {
+        const battleCards: CardData[] = instantiated.map(card => ({
+          ...card,
+          role: 'structure',
+          owner: side,
+        }));
+        const currentCards: CardData[] = cards.map(card => {
+          const transform = liveCardTransformsRef.current.get(card.id);
+          return transform
+            ? {
+                ...card,
+                position: [...transform.position] as [number, number, number],
+                rotation: [...transform.rotation] as [number, number, number],
+              }
+            : { ...card };
+        });
+        recordCardHistory(currentCards);
+        battleCards.forEach(card => {
+          liveCardTransformsRef.current.set(card.id, {
+            position: [...card.position],
+            rotation: [...card.rotation],
+          });
+        });
+        setCards([...currentCards, ...battleCards]);
+        battle.noteCardsAdded(battleCards);
+        setBlueprintGuide(null);
+        setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+        blueprintCheckpointRef.current = [];
+        blueprintCheckpointReadyRef.current = false;
+        return;
+      }
+      // Projection guide: park the ghost inside the zone and let the player
+      // build it card by card with the normal placement rules.
+      blueprintCheckpointRef.current = cards.map(card => {
+        const transform = liveCardTransformsRef.current.get(card.id);
+        return transform
+          ? { ...card, position: [...transform.position], rotation: [...transform.rotation] }
+          : { ...card };
+      });
+      blueprintCheckpointReadyRef.current = true;
+      setBlueprintGuide(previous => previous ? { ...previous, origin, placing: false } : null);
+      return;
+    }
+
     if (blueprintGuide?.placementAction === 'quick-place') {
       const placedCards = instantiateBlueprintCards(blueprintGuide.blueprint, {
         origin,
@@ -1041,7 +1123,7 @@ const App: React.FC = () => {
     });
     blueprintCheckpointReadyRef.current = true;
     setBlueprintGuide(previous => previous ? { ...previous, origin, placing: false } : null);
-  }, [blueprintGuide, cards, isFreezeMode, recordCardHistory]);
+  }, [appState, battle, blueprintGuide, cards, isFreezeMode, recordCardHistory]);
 
   const handleBlueprintProgress = useCallback((progress: BlueprintGuideProgress) => {
     setBlueprintProgress(previous => {
@@ -1412,10 +1494,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (appState !== AppState.BATTLE) return;
-    if (battle.state.phase === 'build') battle.requestCamera('mine');
-    // Only reframe when the building side changes, never on every tick.
+    if (battle.state.phase === 'build') {
+      battle.requestCamera('mine');
+      return;
+    }
+    // Open the first turn on the whole arena so both houses are visible.
+    if (battle.state.phase === 'inspect' && battle.state.round === 1) {
+      battle.requestCamera('global');
+    }
+    // Only reframe on phase/side changes, never on every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appState, battle.state.phase, battle.state.activeSide]);
+  }, [appState, battle.state.phase, battle.state.activeSide, battle.state.round]);
 
   const startWindTest = useCallback(() => {
     if (
@@ -1455,6 +1544,9 @@ const App: React.FC = () => {
 
   const undoCards = useCallback(() => {
     if (gameMode === GameMode.CHALLENGE && challengePhase !== ChallengePhase.BUILDING) return;
+    // In a battle, undo only exists while building: rewinding poses mid-match
+    // would rewrite the collapse score.
+    if (appState === AppState.BATTLE && battle.state.phase !== 'build') return;
     const previous = undoHistoryRef.current.pop();
     if (!previous) return;
     setCards(current => {
@@ -1466,10 +1558,11 @@ const App: React.FC = () => {
     });
     setCardSize(previous.cardSize);
     setDraggingCardId(null);
-  }, [cardSize, challengePhase, gameMode]);
+  }, [appState, battle.state.phase, cardSize, challengePhase, gameMode]);
 
   const redoCards = useCallback(() => {
     if (gameMode === GameMode.CHALLENGE && challengePhase !== ChallengePhase.BUILDING) return;
+    if (appState === AppState.BATTLE && battle.state.phase !== 'build') return;
     const next = redoHistoryRef.current.pop();
     if (!next) return;
     setCards(current => {
@@ -1481,7 +1574,7 @@ const App: React.FC = () => {
     });
     setCardSize(next.cardSize);
     setDraggingCardId(null);
-  }, [cardSize, challengePhase, gameMode]);
+  }, [appState, battle.state.phase, cardSize, challengePhase, gameMode]);
 
   useEffect(() => {
     if (challengePhase !== ChallengePhase.COUNTDOWN) return;
@@ -1725,11 +1818,11 @@ const App: React.FC = () => {
             physicsSettings={physicsSettings}
             onCardTransformChange={handleCardTransformChange}
             onCardLaunch={handleCardLaunch}
-            blueprintGuide={null}
-            onBlueprintPlaceOrigin={() => undefined}
-            onBlueprintProgress={() => undefined}
-            onBlueprintStepComplete={() => undefined}
-            onBlueprintStepRegression={() => undefined}
+            blueprintGuide={blueprintGuide}
+            onBlueprintPlaceOrigin={placeBlueprintOrigin}
+            onBlueprintProgress={handleBlueprintProgress}
+            onBlueprintStepComplete={completeBlueprintStep}
+            onBlueprintStepRegression={regressBlueprintStep}
             onCameraHintChange={handleCameraHintChange}
             tutorialWorldTarget={null}
             onTutorialWorldScreenPoint={() => undefined}
@@ -1773,7 +1866,9 @@ const App: React.FC = () => {
             onExit={exitBattle}
             onUndo={undoCards}
             canUndo={undoHistoryRef.current.length > 0}
-            cardSize={cardSize}
+            onOpenBlueprint={() => setShowBlueprintStudio(true)}
+            onClearBlueprint={stopBlueprintGuide}
+            blueprintLabel={blueprintGuide?.blueprint.name ?? null}
           />
         </>
       )}
@@ -1986,7 +2081,7 @@ const App: React.FC = () => {
         lang={lang}
         cardSize={cardSize}
         snapshot={blueprintSnapshot}
-        blueprints={blueprints}
+        blueprints={appState === AppState.BATTLE ? battleBlueprints : blueprints}
         presets={presets}
         currentCameraHint={cameraHintRef.current}
         onRefreshSnapshot={captureBlueprintSnapshot}

@@ -1,9 +1,10 @@
 /**
  * React binding for the Card Siege battle engine.
  *
- * Owns the BattleState, drives it with a 100 ms tick, samples the live core
- * transforms out of the physics scene and exposes the small API the rest of the
- * app needs (placement rules, launch permission, skip/resign, camera framing).
+ * Owns the BattleState, drives it with a 100 ms tick, samples every tracked
+ * card pose out of the physics scene and exposes the small API the rest of the
+ * app needs (placement rules, launch permission, blueprint checks, skip/resign,
+ * camera framing).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -15,32 +16,25 @@ import {
   LiveCardTransform,
 } from '../types';
 import {
-  CORE_MIN_PLACEMENT_CLEARANCE,
   type BattleArena,
   type BattleCameraRequest,
+  type BattleCardSample,
   type BattleConfig,
-  type BattleCoreSamples,
   type BattleSide,
   type BattleShotRecord,
   type BattleState,
 } from '../battle/types';
-import {
-  defaultCoreSpot,
-  getArena,
-  isCoreLegal,
-  isInsideZone,
-  sideCamera,
-} from '../battle/arena';
+import { getArena, isInsideZone, sideCamera } from '../battle/arena';
 import {
   advancePhase,
+  blueprintFits,
   canPlace,
   createBattleState,
-  markCorePlaced,
-  markCoreRemoved,
   markEngineerActionUsed,
-  needsCore,
   patchLastShot,
+  reconcileCards,
   recordShot,
+  registerCard,
   resign as resignEngine,
   skipPhase,
   startBattle,
@@ -50,7 +44,7 @@ import {
   type PlacementRole,
   type PlacementUsage,
 } from '../battle/engine';
-import { distance3, lowestCardCorner, quatFromEulerXYZ } from '../battle/geometry';
+import { distance3, quatFromEulerXYZ } from '../battle/geometry';
 
 const TICK_MS = 100;
 const KNOCK_THRESHOLD = 0.15;
@@ -69,7 +63,12 @@ export interface BattleBudgetView {
 
 export interface PlacementVerdict {
   ok: boolean;
-  reason?: 'not-your-turn' | 'wrong-phase' | 'budget' | 'outside-zone' | 'outside-core-area' | 'core-too-low';
+  /** Message key; see PLACEMENT_REASON in BattleHUD. */
+  reason?: string;
+  /** Cards that fell outside the zone, or the cards a blueprint needs. */
+  count?: number;
+  /** Structure cards left, when a blueprint does not fit the budget. */
+  remaining?: number;
 }
 
 export interface UseBattleControllerOptions {
@@ -96,6 +95,9 @@ export const useBattleController = ({
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
 
+  const cardSizeRef = useRef(cardSize);
+  cardSizeRef.current = cardSize;
+
   const [pendingRole, setPendingRole] = useState<PlacementRole>('structure');
   const pendingRoleRef = useRef<PlacementRole>(pendingRole);
   pendingRoleRef.current = pendingRole;
@@ -114,7 +116,7 @@ export const useBattleController = ({
   const shotSnapshotRef = useRef<Map<string, [number, number, number]> | null>(null);
   const resolveElapsedRef = useRef(0);
 
-  /** Counts of live cards per side, used for every budget decision. */
+  /** Live counts of cards per side, used for every budget decision. */
   const usage = useMemo(() => {
     const result: Record<BattleSide, PlacementUsage> = { A: emptyUsage(), B: emptyUsage() };
     for (const card of cards) {
@@ -156,15 +158,15 @@ export const useBattleController = ({
     }
   }, []);
 
-  /** Core transforms as seen by the physics scene right now. */
-  const collectCoreSamples = useCallback((): BattleCoreSamples => {
-    const samples: BattleCoreSamples = {};
+  /** Live pose of every tracked card, keyed by id. */
+  const collectSamples = useCallback((): Record<string, BattleCardSample> => {
+    const samples: Record<string, BattleCardSample> = {};
     for (const card of cardsRef.current) {
-      if (card.role !== 'core' || !card.owner) continue;
+      if (!card.owner) continue;
       const live = liveTransforms.current.get(card.id);
       const position = live ? live.position : card.position;
       const euler = live ? live.rotation : card.rotation;
-      samples[card.owner] = {
+      samples[card.id] = {
         position: [...position] as [number, number, number],
         quaternion: quatFromEulerXYZ(euler[0], euler[1], euler[2]),
       };
@@ -196,12 +198,14 @@ export const useBattleController = ({
   const finaliseShot = useCallback((next: BattleState) => {
     if (!shotSnapshotRef.current) return next;
     const knocked = countKnocked();
-    const coreDisplacementAfter = {
-      A: next.sides.A.core.displacement,
-      B: next.sides.B.core.displacement,
-    };
     shotSnapshotRef.current = null;
-    return patchLastShot(next, { knockedCards: knocked, coreDisplacementAfter });
+    return patchLastShot(next, {
+      knockedCards: knocked,
+      collapseAfter: {
+        A: next.sides.A.collapse.rate,
+        B: next.sides.B.collapse.rate,
+      },
+    });
   }, [countKnocked]);
 
   /* ---------------- ticking ---------------- */
@@ -211,28 +215,21 @@ export const useBattleController = ({
       const current = stateRef.current;
       if (current.phase === 'idle' || current.phase === 'finished') return;
 
-      // Undo/redo and the delete tool can remove a core card behind the
-      // engine's back; keep the recorded core in sync with the scene.
+      // Delete / undo can remove cards behind the engine's back; keep the
+      // tracked card list in sync with the scene before scoring collapse.
       const liveIds = new Set(cardsRef.current.map(card => card.id));
-      let reconciled = current;
-      (['A', 'B'] as BattleSide[]).forEach(side => {
-        const placedCore = reconciled.sides[side].core;
-        if (!placedCore.placed || !placedCore.cardId) return;
-        if (!liveIds.has(placedCore.cardId)) {
-          reconciled = markCoreRemoved(reconciled, side);
-        }
-      });
+      const reconciled = reconcileCards(current, liveIds);
+
       const now = Date.now();
-      // Use the real elapsed time rather than a fixed step: background tabs
-      // throttle timers, and a wall-clock delta keeps the match honest.
+      // Wall-clock delta: background tabs throttle timers, and a fixed step
+      // would make the match run in slow motion.
       const dt = lastTickAtRef.current > 0
         ? Math.min(600, Math.max(0, now - lastTickAtRef.current))
         : TICK_MS;
       lastTickAtRef.current = now;
-      const samples = collectCoreSamples();
+      const samples = collectSamples();
 
-      // Quiet-table detection for the resolve phase: the whole table has to
-      // stop moving for ~400 ms before the turn is allowed to close early.
+      // Quiet-table detection for the resolve phase.
       const previousPositions = lastPositionsRef.current;
       let maxStep = 0;
       for (const card of cardsRef.current) {
@@ -248,7 +245,7 @@ export const useBattleController = ({
         : 0;
       const settled = quietTicksRef.current >= QUIET_TICKS && resolveElapsedRef.current >= RESOLVE_MIN_MS;
 
-      const next = tick(reconciled, dt, now, { arena, samples, cardSize, settled });
+      const next = tick(reconciled, dt, now, { arena, samples, settled });
       if (next === current) return;
       if (reconciled.phase === 'resolve' && next.phase !== 'resolve') {
         commit(finaliseShot(next));
@@ -257,7 +254,7 @@ export const useBattleController = ({
       commit(next);
     }, TICK_MS);
     return () => window.clearInterval(interval);
-  }, [active, arena, cardSize, collectCoreSamples, commit, finaliseShot, liveTransforms]);
+  }, [active, arena, collectSamples, commit, finaliseShot, liveTransforms]);
 
   /* ---------------- camera ---------------- */
   const requestCamera = useCallback((view: 'global' | 'mine' | 'theirs' = 'global') => {
@@ -300,62 +297,48 @@ export const useBattleController = ({
 
   /* ---------------- placement ---------------- */
 
-  /**
-   * Validate a ghost pose before the card exists. The core needs its real
-   * orientation to know how far it clears the floor, so the ghost passes the
-   * rotation in as well.
-   */
+  /** Validate a ghost pose before the card exists. */
   const validatePlacement = useCallback((
     position: [number, number, number],
     role: PlacementRole = pendingRoleRef.current,
-    rotation?: [number, number, number],
+    _rotation?: [number, number, number],
   ): PlacementVerdict => {
     const current = stateRef.current;
     const side = current.activeSide;
     const check = canPlace(current, side, role, usageRef.current[side]);
     if (!check.ok) {
-      return {
-        ok: false,
-        reason: check.reason === 'not-your-turn' ? 'not-your-turn' : check.reason as PlacementVerdict['reason'],
-      };
-    }
-    if (role === 'core') {
-      if (!isCoreLegal(arena, side, position)) return { ok: false, reason: 'outside-core-area' };
-      const clearance = rotation
-        ? lowestCardCorner(
-          position,
-          quatFromEulerXYZ(rotation[0], rotation[1], rotation[2]),
-          cardSize,
-        )
-        : position[1];
-      if (clearance < CORE_MIN_PLACEMENT_CLEARANCE) return { ok: false, reason: 'core-too-low' };
-      return { ok: true };
+      return { ok: false, reason: check.reason };
     }
     if (!isInsideZone(arena, side, position)) return { ok: false, reason: 'outside-zone' };
     return { ok: true };
-  }, [arena, cardSize]);
+  }, [arena]);
 
   /** Called after a battle card has been added to the scene. */
   const noteCardAdded = useCallback((card: CardData) => {
     const current = stateRef.current;
-    const side = card.owner ?? current.activeSide;
-    if (card.role === 'core') {
-      const quaternion = quatFromEulerXYZ(card.rotation[0], card.rotation[1], card.rotation[2]);
-      commit(markCorePlaced(current, side, card.id, card.position, quaternion, cardSize));
-      pendingRoleRef.current = 'structure';
-      setPendingRole('structure');
-      return;
+    let next = registerCard(current, card);
+    if (current.phase === 'engineer' && card.owner === current.activeSide) {
+      next = advancePhase(markEngineerActionUsed(next, current.activeSide), Date.now());
     }
-    if (current.phase === 'engineer') {
-      commit(advancePhase(markEngineerActionUsed(current, side), Date.now()));
+    commit(next);
+  }, [commit]);
+
+  /** Batch variant used by whole-blueprint placement. */
+  const noteCardsAdded = useCallback((added: CardData[]) => {
+    if (added.length === 0) return;
+    const current = stateRef.current;
+    let next = current;
+    added.forEach(card => { next = registerCard(next, card); });
+    if (current.phase === 'engineer' && added[0]?.owner === current.activeSide) {
+      next = advancePhase(markEngineerActionUsed(next, current.activeSide), Date.now());
     }
-  }, [cardSize, commit]);
+    commit(next);
+  }, [commit]);
 
   const noteCardRemoved = useCallback((card: CardData) => {
-    if (card.role !== 'core') return;
     const current = stateRef.current;
-    const side = card.owner ?? current.activeSide;
-    if (current.sides[side].core.cardId === card.id) commit(markCoreRemoved(current, side));
+    const liveIds = new Set(cardsRef.current.filter(item => item.id !== card.id).map(item => item.id));
+    commit(reconcileCards(current, liveIds));
   }, [commit]);
 
   /** True when the given card may be fired right now. */
@@ -385,13 +368,13 @@ export const useBattleController = ({
       contactPointWorld: primary.contactPointWorld,
       direction: primary.directionWorld,
       knockedCards: 0,
-      coreDisplacementBefore: {
-        A: current.sides.A.core.displacement,
-        B: current.sides.B.core.displacement,
+      collapseBefore: {
+        A: current.sides.A.collapse.rate,
+        B: current.sides.B.collapse.rate,
       },
-      coreDisplacementAfter: {
-        A: current.sides.A.core.displacement,
-        B: current.sides.B.core.displacement,
+      collapseAfter: {
+        A: current.sides.A.collapse.rate,
+        B: current.sides.B.collapse.rate,
       },
       at: Date.now(),
     };
@@ -399,6 +382,32 @@ export const useBattleController = ({
     resolveElapsedRef.current = 0;
     commit(recordShot(current, shot, Date.now()));
   }, [commit, snapshotPositions]);
+
+  /* ---------------- blueprints ---------------- */
+
+  /**
+   * Validate placing a whole blueprint at once: every card has to land inside
+   * the active side's zone and the structure budget has to cover all of them.
+   */
+  const validateBlueprint = useCallback((
+    positions: [number, number, number][],
+    side: BattleSide = stateRef.current.activeSide,
+  ): PlacementVerdict => {
+    const current = stateRef.current;
+    if (side !== current.activeSide) return { ok: false, reason: 'not-your-turn' };
+    const check = canPlace(current, side, 'structure', usageRef.current[side]);
+    if (!check.ok) return { ok: false, reason: check.reason };
+    if (positions.length === 0) return { ok: false, reason: 'wrong-phase' };
+    if (!blueprintFits(arena, side, positions)) {
+      const outside = positions.filter(position => !isInsideZone(arena, side, position)).length;
+      return { ok: false, reason: 'outside-zone', count: outside };
+    }
+    const remaining = current.config.structureCards - usageRef.current[side].structure;
+    if (positions.length > remaining) {
+      return { ok: false, reason: 'budget', count: positions.length, remaining };
+    }
+    return { ok: true, count: positions.length, remaining };
+  }, [arena]);
 
   const skip = useCallback(() => {
     const current = stateRef.current;
@@ -437,12 +446,12 @@ export const useBattleController = ({
       timeLeftMs: state.timeLeftMs,
       durationMs,
       budgets,
-      cores: { A: state.sides.A.core, B: state.sides.B.core },
-      needsCore: needsCore(state),
+      collapse: { A: state.sides.A.collapse, B: state.sides.B.collapse },
       outcome: state.outcome,
       lastShot: state.lastShot,
       log: state.log.slice(-6).reverse(),
       shots: state.shots.length,
+      trackedCards: state.cards.length,
     };
   }, [budgets, state]);
 
@@ -456,7 +465,9 @@ export const useBattleController = ({
     pendingRole,
     setPendingRole: setRole,
     validatePlacement,
+    validateBlueprint,
     noteCardAdded,
+    noteCardsAdded,
     noteCardRemoved,
     canLaunch,
     noteLaunch,
