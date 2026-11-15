@@ -5,6 +5,7 @@ import { translations } from '../utils/translations';
 
 interface MainMenuProps {
   onStartChallenge: () => void;
+  onStartBattle: () => void;
   onStartFree: () => void;
   onLoad: () => void;
   onSettings: () => void;
@@ -25,6 +26,7 @@ const CardHouseMark = () => (
 
 const MainMenu: React.FC<MainMenuProps> = ({
   onStartChallenge,
+  onStartBattle,
   onStartFree,
   onLoad,
   onSettings,
@@ -41,6 +43,8 @@ const MainMenu: React.FC<MainMenuProps> = ({
         lead: '用真实物理搭起一座纸牌屋，再让风和重物检验它。',
         challenge: '开始挑战',
         challengeHint: '循序完成结构目标与稳定性测试',
+        battle: '纸牌攻城 · 对战',
+        battleHint: '一人操作两方，轮流建造与弹射纸牌攻城',
         free: '自由搭建',
         load: '继续上次搭建',
         settings: '设置',
@@ -54,6 +58,8 @@ const MainMenu: React.FC<MainMenuProps> = ({
         lead: 'Build with realistic cards, then put the structure through wind and impact tests.',
         challenge: 'Start Challenge',
         challengeHint: 'Learn structures through progressive stability trials',
+        battle: 'Card Siege · 1v1',
+        battleHint: 'Run both sides and trade hand-fired cards',
         free: 'Free Build',
         load: 'Continue Build',
         settings: 'Settings',
@@ -99,6 +105,13 @@ const MainMenu: React.FC<MainMenuProps> = ({
           </span>
           <b aria-hidden="true">→</b>
         </button>
+        <button className="menu-action menu-action-battle" onClick={onStartBattle}>
+          <span>
+            <strong>{copy.battle}</strong>
+            <small>{copy.battleHint}</small>
+          </span>
+          <b aria-hidden="true">⚔</b>
+        </button>
         <button className="menu-action" onClick={onStartFree}>
           <span>
             <strong>{copy.free}</strong>
@@ -132,7 +145,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
 
         <div className="menu-secondary">
           <button className="text-button" onClick={onSettings}>{copy.settings}</button>
-          <span>v1.2</span>
+          <span>v1.3</span>
         </div>
       </section>
     </main>

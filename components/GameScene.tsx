@@ -6,6 +6,7 @@ import { OrbitControls, PerformanceMonitor, Sky, Stats } from '@react-three/drei
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import PhysicsWorld from './PhysicsWorld';
+import BattleArenaView from './BattleArena';
 import {
   AppTheme,
   BlueprintGuideProgress,
@@ -22,6 +23,18 @@ import {
   PhysicsSettings,
 } from '../types';
 import { ChallengeTestType } from '../types';
+import type { BattleArena, BattleCameraRequest, BattleSide } from '../battle/types';
+import type { PlacementGuard } from '../types';
+
+interface BattleSceneProps {
+  arena: BattleArena;
+  activeSide: BattleSide;
+  placingSide: BattleSide | null;
+  cameraRequest: BattleCameraRequest | null;
+  placementGuard: PlacementGuard;
+  onPlacementStatus: (status: { ok: boolean; reason?: string } | null) => void;
+  canLaunchCard: (card: CardData) => boolean;
+}
 
 interface GameSceneProps {
   rotationPreset: RotationPreset;
@@ -55,6 +68,7 @@ interface GameSceneProps {
   onCameraHintChange: (hint: BlueprintCameraHint) => void;
   tutorialWorldTarget: [number, number, number] | null;
   onTutorialWorldScreenPoint: (point: { x: number; y: number; visible: boolean } | null) => void;
+  battle?: BattleSceneProps;
 }
 
 class SceneErrorBoundary extends React.Component<
@@ -240,6 +254,26 @@ const TutorialWorldBridge = ({
   return null;
 };
 
+const BattleCameraDirector = ({ request }: { request: BattleCameraRequest | null }) => {
+  const { camera, controls } = useThree();
+  const appliedRef = React.useRef(-1);
+
+  useEffect(() => {
+    if (!request || request.token === appliedRef.current) return;
+    appliedRef.current = request.token;
+    camera.position.set(...request.position);
+    const orbit = controls as { target?: THREE.Vector3; update?: () => void } | null;
+    if (orbit?.target) {
+      orbit.target.set(...request.target);
+      orbit.update?.();
+    } else {
+      camera.lookAt(new THREE.Vector3(...request.target));
+    }
+  }, [camera, controls, request]);
+
+  return null;
+};
+
 const GameScene: React.FC<GameSceneProps> = ({ 
   rotationPreset, 
   interactionMode,
@@ -272,6 +306,7 @@ const GameScene: React.FC<GameSceneProps> = ({
   onCameraHintChange,
   tutorialWorldTarget,
   onTutorialWorldScreenPoint,
+  battle,
 }) => {
   const background = theme === 'dark' ? '#171d24' : theme === 'warm' ? '#e9e6df' : '#e4e9ef';
   const nativeDpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -314,6 +349,14 @@ const GameScene: React.FC<GameSceneProps> = ({
             <LocalEnvironment />
             <CameraBridge guide={blueprintGuide} onCameraHintChange={onCameraHintChange} />
             <TutorialWorldBridge target={tutorialWorldTarget} onScreenPoint={onTutorialWorldScreenPoint} />
+            {battle && <BattleCameraDirector request={battle.cameraRequest} />}
+            {battle && (
+              <BattleArenaView
+                arena={battle.arena}
+                activeSide={battle.activeSide}
+                placingSide={battle.placingSide}
+              />
+            )}
 
             <PhysicsWorld
               rotationPreset={rotationPreset}
@@ -343,6 +386,9 @@ const GameScene: React.FC<GameSceneProps> = ({
               onBlueprintProgress={onBlueprintProgress}
               onBlueprintStepComplete={onBlueprintStepComplete}
               onBlueprintStepRegression={onBlueprintStepRegression}
+              placementGuard={battle?.placementGuard}
+              onPlacementStatus={battle?.onPlacementStatus}
+              canLaunchCard={battle?.canLaunchCard}
             />
 
             <OrbitControls

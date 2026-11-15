@@ -15,6 +15,7 @@ import {
   CARD_DIMENSIONS,
   CardLaunchRequest,
   CardData,
+  CardRole,
   CardSize,
   type LaunchGestureSample,
   type LaunchIntent,
@@ -48,6 +49,8 @@ interface CardProps {
   onPhysicsHandleChange?: (id: string, handle: CardPhysicsHandle | null) => void;
   onLaunchRequest?: (request: CardLaunchRequest) => void;
   physicsSettings: PhysicsSettings;
+  /** Battle mode: only the active side's ammo cards may be fired. */
+  launchAllowed?: boolean;
 }
 
 interface ActivePushGesture {
@@ -275,8 +278,13 @@ const getCardGeometry = (cardSize: CardSize) => {
   return geometry;
 };
 
-const getCardTexture = (color: CardData['color'], rank: string, cardSize: CardSize) => {
-  const cacheKey = `${cardSize}:${color}:${rank}`;
+const getCardTexture = (
+  color: CardData['color'],
+  rank: string,
+  cardSize: CardSize,
+  role?: CardRole,
+) => {
+  const cacheKey = `${cardSize}:${color}:${rank}:${role ?? 'plain'}`;
   const cachedTexture = textureCache.get(cacheKey);
   if (cachedTexture) return cachedTexture;
 
@@ -286,19 +294,53 @@ const getCardTexture = (color: CardData['color'], rank: string, cardSize: CardSi
   canvas.height = 358;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = color === 'red' ? '#aa0000' : '#000000';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-    ctx.fillStyle = color === 'red' ? '#ff0000' : '#000000';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'bold 100px Arial';
-    ctx.fillText(rank, canvas.width / 2, canvas.height / 2);
-    ctx.font = 'bold 32px Arial';
-    ctx.fillText(rank, 30, 50);
-    ctx.fillText(rank, canvas.width - 30, canvas.height - 50);
+    if (role === 'core') {
+      // The core card is the win condition, so it gets its own gold face
+      // instead of a suit pip: a double border and a centred crest.
+      ctx.fillStyle = '#fff8e6';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#b45309';
+      ctx.lineWidth = 16;
+      ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(30, 30, canvas.width - 60, canvas.height - 60);
+      ctx.fillStyle = '#92400e';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 120px Arial';
+      ctx.fillText('★', canvas.width / 2, canvas.height / 2 - 18);
+      ctx.font = 'bold 34px Arial';
+      ctx.fillText('CORE', canvas.width / 2, canvas.height / 2 + 74);
+      ctx.font = 'bold 30px Arial';
+      ctx.fillText(rank, 54, 62);
+      ctx.fillText(rank, canvas.width - 54, canvas.height - 62);
+    } else {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = color === 'red' ? '#aa0000' : '#000000';
+      ctx.lineWidth = 10;
+      ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+      ctx.fillStyle = color === 'red' ? '#ff0000' : '#000000';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 100px Arial';
+      ctx.fillText(rank, canvas.width / 2, canvas.height / 2);
+      ctx.font = 'bold 32px Arial';
+      ctx.fillText(rank, 30, 50);
+      ctx.fillText(rank, canvas.width - 30, canvas.height - 50);
+      if (role === 'ammo') {
+        // A red triangle on the ammo face makes loaded cards readable from the
+        // build camera without changing the card's physics at all.
+        ctx.beginPath();
+        ctx.moveTo(canvas.width - 62, 74);
+        ctx.lineTo(canvas.width - 34, 122);
+        ctx.lineTo(canvas.width - 90, 122);
+        ctx.closePath();
+        ctx.fillStyle = '#dc2626';
+        ctx.fill();
+      }
+    }
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -319,6 +361,7 @@ const Card: React.FC<CardProps> = ({
   onPhysicsHandleChange,
   onLaunchRequest,
   physicsSettings,
+  launchAllowed = true,
 }) => {
   const dimensions = CARD_DIMENSIONS[cardSize];
   const geometry = useMemo(() => getCardGeometry(cardSize), [cardSize]);
@@ -449,8 +492,8 @@ const Card: React.FC<CardProps> = ({
 
   // Texture Gen
   const texture = useMemo(
-    () => getCardTexture(data.color, data.rank, cardSize),
-    [data.color, data.rank, cardSize]
+    () => getCardTexture(data.color, data.rank, cardSize, data.role),
+    [data.color, data.rank, cardSize, data.role]
   );
 
   // Hover state
@@ -629,6 +672,7 @@ const Card: React.FC<CardProps> = ({
       setChargePreview(null);
       releasePointer(event);
       if (!interactionEnabled || data.locked || pointerMode !== PointerMode.LAUNCH) return;
+      if (!launchAllowed) return;
       if (launchedSequencesRef.current.has(charge.sequenceId)) return;
       launchedSequencesRef.current.add(charge.sequenceId);
       onLaunchRequest?.({
@@ -697,6 +741,7 @@ const Card: React.FC<CardProps> = ({
   const handlePointerDown = (e: any) => {
     if (!interactionEnabled || e.button !== 0) return;
     if (pointerMode === PointerMode.LAUNCH) {
+      if (!launchAllowed) return;
       e.stopPropagation();
       startLaunchCharge(e as ThreeEvent<PointerEvent>);
       return;
@@ -709,9 +754,9 @@ const Card: React.FC<CardProps> = ({
 
   // Use the original light-reactive paper material so cards retain depth and
   // do not look like flat, self-illuminated white shapes.
-  let emissiveColor = 'black';
-  let emissiveIntensity = 0;
-  
+  let emissiveColor = data.role === 'core' ? '#b45309' : 'black';
+  let emissiveIntensity = data.role === 'core' ? 0.22 : 0;
+
   if (hovered) {
     if (pointerMode === PointerMode.DELETE) {
       emissiveColor = '#ef4444';
@@ -719,8 +764,15 @@ const Card: React.FC<CardProps> = ({
     } else if (pointerMode === PointerMode.PUSH) {
       emissiveColor = '#3b82f6';
       emissiveIntensity = 0.6;
+    } else if (pointerMode === PointerMode.LAUNCH && !launchAllowed) {
+      emissiveColor = '#f97316';
+      emissiveIntensity = 0.45;
     }
   }
+
+  const backColor = data.role === 'core'
+    ? '#b45309'
+    : data.role === 'ammo' ? '#b91c1c' : '#2563eb';
 
   return (
     <>
@@ -764,7 +816,7 @@ const Card: React.FC<CardProps> = ({
         <primitive object={geometry} attach="geometry" />
         <meshStandardMaterial color="#f0f0f0" attach="material-0" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
         <meshStandardMaterial map={texture} attach="material-1" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
-        <meshStandardMaterial color="#2563eb" attach="material-2" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
+        <meshStandardMaterial color={backColor} attach="material-2" emissive={emissiveColor} emissiveIntensity={emissiveIntensity} />
       </mesh>
     </RigidBody>
     {launchPreview && (
@@ -797,5 +849,6 @@ export default React.memo(Card, (previous, next) =>
   previous.launchPreset === next.launchPreset &&
   previous.physicsSettings === next.physicsSettings &&
   previous.onPhysicsHandleChange === next.onPhysicsHandleChange &&
-  previous.onLaunchRequest === next.onLaunchRequest
+  previous.onLaunchRequest === next.onLaunchRequest &&
+  previous.launchAllowed === next.launchAllowed
 );

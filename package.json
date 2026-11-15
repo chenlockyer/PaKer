@@ -21,6 +21,8 @@
     "test:save": "node scripts/game-save-self-test.mjs",
     "test:level": "node scripts/level-tutorial-self-test.mjs",
     "test:campaign": "node scripts/campaign-self-test.mjs",
+    "test:battle": "node scripts/battle-self-test.mjs",
+    "test:battle:ui": "node scripts/battle-ui-smoke.mjs",
     "test:level-factory": "node scripts/level-factory/self-test.mjs",
     "level:build": "node scripts/level-factory/build.mjs",
     "desktop": "npm run build && electron electron/main.cjs",

@@ -10,6 +10,8 @@ import BlueprintStudio from './components/BlueprintStudio';
 import LevelStudio from './components/LevelStudio';
 import CampaignSelect from './components/CampaignSelect';
 import CampaignResumeModal from './components/CampaignResumeModal';
+import BattleSetup from './components/BattleSetup';
+import BattleHUD from './components/BattleHUD';
 import SaveLibraryModal, { SaveLibraryMode } from './components/SaveLibraryModal';
 import {
   Blueprint,
@@ -103,6 +105,10 @@ import {
   persistPhysicsSettings,
 } from './services/physicsSettingsService';
 import { useTutorialDirector } from './hooks/useTutorialDirector';
+import { useBattleController } from './hooks/useBattleController';
+import type { BattleConfig, BattlePhase, BattleSide, BattleState } from './battle/types';
+import { CORE_MIN_PLACEMENT_CLEARANCE } from './battle/types';
+import { lowestCardCorner, quatFromEulerXYZ } from './battle/geometry';
 import {
   clearActiveCampaign,
   clearCampaignSession,
@@ -133,6 +139,10 @@ const EMPTY_BLUEPRINT_PROGRESS: BlueprintGuideProgress = {
 };
 const levelUsesBlueprintGuide = (level: LevelDefinition) =>
   level.requiresBlueprintMatch || level.tutorial.cues.some(cue => cue.enabled && cue.kind === 'blueprint-step');
+
+const BATTLE_INPUT_PHASES: BattlePhase[] = ['build', 'engineer', 'fire'];
+const BATTLE_PLACEMENT_PHASES: BattlePhase[] = ['build', 'engineer'];
+const BATTLE_CONFIG_STORAGE_KEY = 'paker_battle_config_v1';
 const BUILT_IN_PRESET_IDS = new Set([
   'flat',
   'stand_x',
@@ -195,6 +205,16 @@ const App: React.FC = () => {
   const [showLevelStudio, setShowLevelStudio] = useState(false);
   const [showCampaignSelect, setShowCampaignSelect] = useState(false);
   const [showCampaignResume, setShowCampaignResume] = useState(false);
+  const [showBattleSetup, setShowBattleSetup] = useState(false);
+  const [battleConfig, setBattleConfig] = useState<Partial<BattleConfig>>(() => {
+    try {
+      const raw = localStorage.getItem(BATTLE_CONFIG_STORAGE_KEY);
+      return raw ? JSON.parse(raw) as Partial<BattleConfig> : {};
+    } catch {
+      return {};
+    }
+  });
+  const [battleVerdict, setBattleVerdict] = useState<{ ok: boolean; reason?: string } | null>(null);
   const [lang, setLang] = useState<'en' | 'zh'>('zh');
   const [theme, setTheme] = useState<AppTheme>(() => {
     const savedTheme = localStorage.getItem('hoc_theme');
@@ -300,6 +320,38 @@ const App: React.FC = () => {
     isFreezeMode,
     draggingCardId,
   };
+
+  // --- LOGIC: BATTLE (Card Siege) ---
+  const handleBattlePhaseChange = useCallback((next: BattleState, previous: BattleState) => {
+    // Building with physics paused is allowed, but the settle check always
+    // releases every card so a frozen core cannot cheat the rules.
+    if (next.phase === 'settle' && previous.phase !== 'settle') {
+      setIsFreezeMode(false);
+      setCards(previousCards => previousCards.map(card => (
+        card.locked ? { ...card, locked: false } : card
+      )));
+    }
+    if (next.phase !== previous.phase) {
+      if (next.phase === 'fire') playCountdownSound();
+      if (next.phase === 'finished') {
+        if (next.outcome?.winner === 'draw') playFailureSound();
+        else playSuccessSound();
+      }
+      // Hand the player the right tool for the phase: building uses the place
+      // tool, firing uses the launch tool.
+      if (next.phase === 'build' || next.phase === 'engineer') setPointerMode(PointerMode.PLACE);
+      if (next.phase === 'fire') setPointerMode(PointerMode.LAUNCH);
+    }
+    setBattleVerdict(null);
+  }, []);
+
+  const battle = useBattleController({
+    active: appState === AppState.BATTLE,
+    cards,
+    liveTransforms: liveCardTransformsRef,
+    cardSize,
+    onPhaseChange: handleBattlePhaseChange,
+  });
 
   const recordCardHistory = useCallback((snapshot: CardData[], snapshotCardSize = cardSize) => {
     undoHistoryRef.current = [
@@ -492,6 +544,38 @@ const App: React.FC = () => {
 
   // --- LOGIC: CARDS ---
   const addCard = useCallback((card: CardData) => {
+    if (appState === AppState.BATTLE) {
+      const side = battle.state.activeSide;
+      const role = battle.pendingRole;
+      const verdict = battle.validatePlacement(card.position, role);
+      if (!verdict.ok) {
+        setBattleVerdict(verdict);
+        return;
+      }
+      if (role === 'core') {
+        const quaternion = quatFromEulerXYZ(card.rotation[0], card.rotation[1], card.rotation[2]);
+        if (lowestCardCorner(card.position, quaternion, cardSize) < CORE_MIN_PLACEMENT_CLEARANCE) {
+          setBattleVerdict({ ok: false, reason: 'core-too-low' });
+          return;
+        }
+      }
+      const battleCard: CardData = {
+        ...card,
+        locked: isFreezeMode,
+        role,
+        owner: side,
+        ...(role === 'core'
+          ? { rank: 'J', suit: 'spades' as CardData['suit'], color: 'red' as CardData['color'] }
+          : {}),
+      };
+      setCards(previous => {
+        recordCardHistory(previous);
+        return [...previous, battleCard];
+      });
+      battle.noteCardAdded(battleCard);
+      setBattleVerdict(null);
+      return;
+    }
     if (
       gameMode === GameMode.CHALLENGE &&
       (challengePhase !== ChallengePhase.BUILDING || cards.length >= currentLevel.maxCards)
@@ -515,6 +599,9 @@ const App: React.FC = () => {
       return [...prev, newCard];
     });
   }, [
+    appState,
+    battle,
+    cardSize,
     challengePhase,
     cards.length,
     currentLevel.maxCards,
@@ -525,13 +612,17 @@ const App: React.FC = () => {
   ]);
 
   const removeCard = useCallback((id: string) => {
+    if (appState === AppState.BATTLE) {
+      const card = cards.find(item => item.id === id);
+      if (card) battle.noteCardRemoved(card);
+    }
     setCards(prev => {
       const next = prev.filter(c => c.id !== id);
       if (next.length === prev.length) return prev;
       recordCardHistory(prev);
       return next;
     });
-  }, [recordCardHistory]);
+  }, [appState, battle, cards, recordCardHistory]);
 
   const updateCard = useCallback((id: string, position: [number, number, number], rotation: [number, number, number]) => {
     setCards(prev => {
@@ -553,7 +644,8 @@ const App: React.FC = () => {
 
   const handleCardLaunch = useCallback((record: LaunchRecord) => {
     launchHistoryRef.current = [...launchHistoryRef.current.slice(-199), record];
-  }, []);
+    if (appState === AppState.BATTLE) battle.noteLaunch(record);
+  }, [appState, battle]);
 
   const clearCards = useCallback(() => {
     setCards(previous => {
@@ -1269,6 +1361,62 @@ const App: React.FC = () => {
     restartLevelTutorial(null);
   }, [resetCardHistory, restartLevelTutorial]);
 
+  /* ---------------- Card Siege ---------------- */
+
+  const startBattleMatch = useCallback((config: Partial<BattleConfig>) => {
+    const merged = { ...battleConfig, ...config };
+    setBattleConfig(merged);
+    try {
+      localStorage.setItem(BATTLE_CONFIG_STORAGE_KEY, JSON.stringify(merged));
+    } catch { /* storage is optional */ }
+    setShowBattleSetup(false);
+    setGameMode(GameMode.FREE);
+    setActiveCustomLevel(null);
+    setActiveCampaignEntryId(null);
+    setCards([]);
+    liveCardTransformsRef.current.clear();
+    resetCardHistory();
+    setIsFreezeMode(false);
+    setPointerMode(PointerMode.PLACE);
+    setCurrentPresetId(DEFAULT_PRESETS[0].id);
+    setCardSize(CardSize.BRIDGE);
+    setDraggingCardId(null);
+    setBattleVerdict(null);
+    stopBlueprintGuide();
+    setBlueprintRecording(null);
+    setBlueprintProgress(EMPTY_BLUEPRINT_PROGRESS);
+    restartLevelTutorial(null);
+    setAppState(AppState.BATTLE);
+    battle.start(merged);
+  }, [
+    battle,
+    battleConfig,
+    resetCardHistory,
+    restartLevelTutorial,
+    stopBlueprintGuide,
+  ]);
+
+  const exitBattle = useCallback(() => {
+    battle.reset();
+    setCards([]);
+    liveCardTransformsRef.current.clear();
+    resetCardHistory();
+    setIsFreezeMode(false);
+    setBattleVerdict(null);
+    setAppState(AppState.MENU);
+  }, [battle, resetCardHistory]);
+
+  const rematchBattle = useCallback(() => {
+    startBattleMatch(battleConfig);
+  }, [battleConfig, startBattleMatch]);
+
+  useEffect(() => {
+    if (appState !== AppState.BATTLE) return;
+    if (battle.state.phase === 'build') battle.requestCamera('mine');
+    // Only reframe when the building side changes, never on every tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appState, battle.state.phase, battle.state.activeSide]);
+
   const startWindTest = useCallback(() => {
     if (
       challengePhase !== ChallengePhase.BUILDING ||
@@ -1426,9 +1574,15 @@ const App: React.FC = () => {
     setCustomLevels(previous => previous.map(level => level.id === verified.id ? verified : level));
   }, [activeCustomLevel, challengePhase]);
 
-  const interactionEnabled =
+  const battlePhase: BattlePhase = battle.state.phase;
+  const battleInputAllowed = appState !== AppState.BATTLE ||
+    BATTLE_INPUT_PHASES.includes(battlePhase);
+  const battlePlacementAllowed = appState !== AppState.BATTLE ||
+    BATTLE_PLACEMENT_PHASES.includes(battlePhase);
+  const interactionEnabled = (
     gameMode === GameMode.FREE ||
-    challengePhase === ChallengePhase.BUILDING;
+    challengePhase === ChallengePhase.BUILDING
+  ) && battleInputAllowed;
   const windStrength =
     gameMode === GameMode.CHALLENGE &&
     challengePhase === ChallengePhase.TESTING &&
@@ -1437,6 +1591,7 @@ const App: React.FC = () => {
       : 0;
   const placementEnabled =
     interactionEnabled &&
+    battlePlacementAllowed &&
     !blueprintGuide?.placing &&
     (gameMode === GameMode.FREE || cards.length < currentLevel.maxCards);
 
@@ -1446,11 +1601,13 @@ const App: React.FC = () => {
       showSettings ||
       showBlueprintStudio ||
       showLevelStudio ||
+      showBattleSetup ||
       saveLibraryMode !== null ||
       tutorialDirector.entryVisible ||
-      appState !== AppState.GAME,
+      (appState !== AppState.GAME && appState !== AppState.BATTLE) ||
+      (appState === AppState.BATTLE && !BATTLE_INPUT_PHASES.includes(battle.state.phase)),
     );
-  }, [appState, saveLibraryMode, setInputSuspended, showBlueprintStudio, showLevelStudio, showSettings, tutorialDirector.entryVisible]);
+  }, [appState, battle.state.phase, saveLibraryMode, setInputSuspended, showBattleSetup, showBlueprintStudio, showLevelStudio, showSettings, tutorialDirector.entryVisible]);
 
   const cyclePreset = useCallback((direction: -1 | 1) => {
     if (!interactionEnabled || presets.length === 0) return;
@@ -1530,6 +1687,7 @@ const App: React.FC = () => {
       {appState === AppState.MENU && (
         <MainMenu 
            onStartChallenge={startChallenge}
+           onStartBattle={() => setShowBattleSetup(true)}
            onStartFree={startFreeBuild}
            onLoad={loadLatestGame}
            onSettings={() => setShowSettings(true)}
@@ -1539,6 +1697,85 @@ const App: React.FC = () => {
            lang={lang}
            theme={theme}
         />
+      )}
+
+      {appState === AppState.BATTLE && (
+        <>
+          <GameScene
+            rotationPreset={currentPreset}
+            interactionMode={interactionMode}
+            pointerMode={pointerMode}
+            launchPreset={launchPreset}
+            isFreezeMode={isFreezeMode}
+            cards={cards}
+            addCard={addCard}
+            removeCard={removeCard}
+            interactionEnabled={interactionEnabled}
+            placementEnabled={placementEnabled}
+            windStrength={0}
+            onHeightChange={handleHeightChange}
+            showTargetGuide={false}
+            targetHeight={0}
+            cardSize={cardSize}
+            testType={ChallengeTestType.STABILITY}
+            testActive={false}
+            weightMass={0}
+            weightDropHeight={0}
+            theme={theme}
+            physicsSettings={physicsSettings}
+            onCardTransformChange={handleCardTransformChange}
+            onCardLaunch={handleCardLaunch}
+            blueprintGuide={null}
+            onBlueprintPlaceOrigin={() => undefined}
+            onBlueprintProgress={() => undefined}
+            onBlueprintStepComplete={() => undefined}
+            onBlueprintStepRegression={() => undefined}
+            onCameraHintChange={handleCameraHintChange}
+            tutorialWorldTarget={null}
+            onTutorialWorldScreenPoint={() => undefined}
+            battle={{
+              arena: battle.arena,
+              activeSide: battle.state.activeSide,
+              placingSide: BATTLE_PLACEMENT_PHASES.includes(battle.state.phase)
+                ? battle.state.activeSide
+                : null,
+              cameraRequest: battle.cameraRequest,
+              placementGuard: (position, rotation) => battle.validatePlacement(
+                position,
+                battle.pendingRole,
+                rotation,
+              ),
+              onPlacementStatus: status => setBattleVerdict(status),
+              canLaunchCard: battle.canLaunch,
+            }}
+          />
+          <BattleHUD
+            lang={lang}
+            state={battle.state}
+            arena={battle.arena}
+            budgets={battle.budgets}
+            pendingRole={battle.pendingRole}
+            placementVerdict={battleVerdict}
+            presets={presets}
+            currentPresetId={currentPresetId}
+            setPresetId={setCurrentPresetId}
+            pointerMode={pointerMode}
+            setPointerMode={setPointerMode}
+            launchPreset={launchPreset}
+            setLaunchPreset={setLaunchPreset}
+            isFreezeMode={isFreezeMode}
+            onToggleFreeze={() => toggleFreezeMode()}
+            onSetRole={battle.setPendingRole}
+            onSkip={battle.skip}
+            onResign={() => battle.resign(battle.state.activeSide)}
+            onRequestCamera={battle.requestCamera}
+            onRematch={rematchBattle}
+            onExit={exitBattle}
+            onUndo={undoCards}
+            canUndo={undoHistoryRef.current.length > 0}
+            cardSize={cardSize}
+          />
+        </>
       )}
 
       {appState === AppState.GAME && (
@@ -1726,6 +1963,15 @@ const App: React.FC = () => {
         launchCampaignEntry(entryId);
       }} />}
       {showCampaignResume && storedCampaignSession && storedSessionLevel && <CampaignResumeModal level={storedSessionLevel} lang={lang} onContinue={() => launchCampaignEntry(storedCampaignSession.levelEntryId, storedCampaignSession)} onRestart={() => { clearCampaignSession(); launchCampaignEntry(storedCampaignSession.levelEntryId); }} onChapters={() => { setShowCampaignResume(false); setShowCampaignSelect(true); }} />}
+
+      {showBattleSetup && (
+        <BattleSetup
+          lang={lang}
+          initial={battleConfig}
+          onStart={startBattleMatch}
+          onClose={() => setShowBattleSetup(false)}
+        />
+      )}
 
       {import.meta.env.DEV && appState === AppState.PHYSICS_LAB && (
         <PhysicsLab

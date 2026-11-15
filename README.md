@@ -106,6 +106,27 @@ npm run test:level-factory  # 用真实运行时服务复验生成结果
 *   **Shift + Q / Shift + E**: 切换上一个 / 下一个预设
 *   设置中可以切换回旧版键位，或重新绑定任意操作
 
+## 纸牌攻城 · 1v1 对战
+
+![对战界面](docs/screenshots/battle-build.png)
+
+一人操作蓝红两方，轮流建造堡垒、保护核心、亲手弹射纸牌把对手的核心打下来。
+物理即规则：没有血条和隐藏伤害，核心落地或被推出合法区域就判负。
+
+*   **竞技场**：双方各一块建筑区，中间是中立缓冲区，后部黄色核心区
+*   **建造**：每方 150 秒，只能在自己的区域放牌；核心牌必须放进核心区且离地一张牌
+*   **稳定检查**：建造结束强制解除冻结，结构自己站住才算数
+*   **回合**：检查 3s → 工程 15s（放 1 张储备牌或装填 1 张弹药）→ 发射 20s → 结算 ≤6s
+*   **胜负**：核心落地 / 出界 0.75 秒即负；回合用尽按核心高度与位移判定
+*   **资源**：30 结构牌 + 10 储备牌 + 12 弹药牌（开始前可调），核心牌不占预算
+
+```bash
+npm run test:battle        # 引擎自测（无浏览器）
+```
+
+规则、判定阈值与代码结构见 [docs/battle-system.md](docs/battle-system.md)，
+原始设计稿在 [docs/pvp-battle-mode-design.md](docs/pvp-battle-mode-design.md)。
+
 ---
 
 ## 🇺🇸 English
@@ -113,6 +134,19 @@ npm run test:level-factory  # 用真实运行时服务复验生成结果
 ### 📖 Overview
 
 **PaKer** (House of Cards 3D) is a physics-based construction sandbox that merges engineering principles with creative freedom. Build intricate card structures using realistic physics or defy the laws of nature with time-manipulation tools.
+
+### ⚔️ Card Siege (1v1)
+
+Run both sides yourself: build a fortress, hide your gold core card and hand-fire ammo cards at the other core. There is no health bar — a core that rests on the floor or leaves its legal area loses.
+
+*   150 s build per side, then a settle check that forces physics back on
+*   Turns: inspect 3 s → engineer 15 s → fire 20 s → resolve ≤6 s
+*   30 structure + 10 reserve + 12 ammo cards per side, one engineer action and one shot per turn
+*   Rules, thresholds and code layout: [docs/battle-system.md](docs/battle-system.md)
+
+```bash
+npm run test:battle        # engine self-test, no browser required
+```
 
 ### ✨ Key Features
 

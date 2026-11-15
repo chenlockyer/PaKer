@@ -8,6 +8,8 @@ export interface CardData {
   color: 'red' | 'black';
   locked: boolean;
   role?: CardRole;
+  /** Card Siege ownership. Only set by the battle mode. */
+  owner?: 'A' | 'B';
 }
 
 export interface PhysicsSettings {
@@ -29,6 +31,17 @@ export interface PhysicsSettings {
 }
 
 export type CardRole = 'structure' | 'ammo' | 'core';
+
+/** Verdict returned by the battle placement guard for a ghost pose. */
+export interface PlacementGuardResult {
+  ok: boolean;
+  reason?: string;
+}
+
+export type PlacementGuard = (
+  position: [number, number, number],
+  rotation: [number, number, number],
+) => PlacementGuardResult;
 
 export type LaunchPreset =
   | 'short-edge'
@@ -260,7 +273,8 @@ export enum PointerMode {
 export enum AppState {
   MENU = 'MENU',
   GAME = 'GAME',
-  PHYSICS_LAB = 'PHYSICS_LAB'
+  PHYSICS_LAB = 'PHYSICS_LAB',
+  BATTLE = 'BATTLE'
 }
 
 export enum GameMode {

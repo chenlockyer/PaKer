@@ -33,6 +33,7 @@ import {
   PhysicsSettings,
 } from '../types';
 import { ChallengeTestType } from '../types';
+import type { PlacementGuard } from '../types';
 import { playPlaceSound } from '../services/audioService';
 import {
   InputAction,
@@ -114,6 +115,12 @@ interface PhysicsWorldProps {
   onBlueprintProgress: (progress: BlueprintGuideProgress) => void;
   onBlueprintStepComplete: (playerCardIds: string[]) => void;
   onBlueprintStepRegression: (stepIndex: number) => void;
+  /** Battle mode: reject placements outside the active build zone. */
+  placementGuard?: PlacementGuard;
+  /** Battle mode: report why a ghost pose is refused so the HUD can explain. */
+  onPlacementStatus?: (status: { ok: boolean; reason?: string } | null) => void;
+  /** Battle mode: only the active side's loaded ammo may be fired. */
+  canLaunchCard?: (card: CardData) => boolean;
 }
 
 interface ActiveLaunchMember {
@@ -448,7 +455,9 @@ const GhostCard = ({
   onPlace,
   floorRef,
   cardsGroupRef,
-  cardSize
+  cardSize,
+  placementGuard,
+  onPlacementStatus,
 }: { 
   rotationPreset: RotationPreset; 
   isFreezeMode: boolean;
@@ -456,6 +465,8 @@ const GhostCard = ({
   floorRef: React.RefObject<THREE.Mesh>;
   cardsGroupRef: React.RefObject<THREE.Group>;
   cardSize: CardSize;
+  placementGuard?: PlacementGuard;
+  onPlacementStatus?: (status: { ok: boolean; reason?: string } | null) => void;
 }) => {
   const { camera, raycaster } = useThree();
   const { world, rapier } = useRapier();
@@ -473,6 +484,7 @@ const GhostCard = ({
   const [isSnapHeld, setIsSnapHeld] = useState(false);
   const snapLatchRef = useRef<GhostSnapLatch | null>(null);
   const placementValidRef = useRef(true);
+  const placementStatusRef = useRef<string | null>(null);
   const [placementVisual, setPlacementVisual] = useState<{
     valid: boolean;
     snapped: boolean;
@@ -694,7 +706,22 @@ const GhostCard = ({
       quaternion,
       heightLockRef.current.active,
     );
-    placementValidRef.current = resolved.valid;
+    // Battle zones are a placement rule, not a collision: the ghost turns red
+    // and the click is rejected when the guard rejects the pose. The guard also
+    // reports why so the HUD can explain the refusal instead of doing nothing.
+    const euler = new THREE.Euler().setFromQuaternion(quaternion, 'XYZ');
+    const guard = placementGuard
+      ? placementGuard(
+        [resolved.position.x, resolved.position.y, resolved.position.z],
+        [euler.x, euler.y, euler.z],
+      )
+      : null;
+    if (guard?.reason !== placementStatusRef.current) {
+      placementStatusRef.current = guard?.reason ?? null;
+      onPlacementStatus?.(guard && !guard.ok ? { ok: false, reason: guard.reason } : null);
+    }
+    const allowed = !guard || guard.ok;
+    placementValidRef.current = resolved.valid && allowed;
     if (meshRef.current) {
       meshRef.current.position.copy(resolved.position);
       meshRef.current.quaternion.copy(quaternion);
@@ -704,17 +731,18 @@ const GhostCard = ({
       point.clone().sub(resolved.position).applyQuaternion(inverseQuaternion).toArray()
     ) as [[number, number, number], [number, number, number]] | undefined;
     setPlacementVisual(previous => {
+      const valid = resolved.valid && allowed;
       if (
-        previous.valid === resolved.valid &&
+        previous.valid === valid &&
         previous.snapped === snapped &&
         previous.snapType === snapType &&
         String(previous.anchor) === String(anchor) &&
         String(previous.targetLine) === String(targetLine)
       ) return previous;
-      return { valid: resolved.valid, snapped, snapType, anchor, targetLine };
+      return { valid, snapped, snapType, anchor, targetLine };
     });
     rotationDirtyRef.current = false;
-  }, [dimensions.height, dimensions.thickness, dimensions.width, resolveCollisions, snapAnchors, snapSegments]);
+  }, [dimensions.height, dimensions.thickness, dimensions.width, onPlacementStatus, placementGuard, resolveCollisions, snapAnchors, snapSegments]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -923,11 +951,13 @@ const GhostCard = ({
 const PrecisionGhost = ({
   isFreezeMode,
   onPlace,
-  cardSize
+  cardSize,
+  placementGuard,
 }: {
   isFreezeMode: boolean;
   onPlace: (pos: THREE.Vector3, rot: THREE.Euler) => void;
   cardSize: CardSize;
+  placementGuard?: PlacementGuard;
 }) => {
   const [target, setTarget] = useState<THREE.Object3D | null>(null);
   const [mode, setMode] = useState<'translate' | 'rotate'>('translate');
@@ -935,6 +965,19 @@ const PrecisionGhost = ({
   useEffect(() => { targetRef.current = target; }, [target]);
   const initialPos = useMemo(() => new THREE.Vector3(0, 1.5, 0), []);
   const dimensions = CARD_DIMENSIONS[cardSize];
+  const commitPlacement = React.useCallback(() => {
+    const current = targetRef.current;
+    if (!current) return;
+    const rotation = current.rotation;
+    const guard = placementGuard
+      ? placementGuard(
+        [current.position.x, current.position.y, current.position.z],
+        [rotation.x, rotation.y, rotation.z],
+      )
+      : null;
+    if (guard && !guard.ok) return;
+    onPlace(current.position.clone(), current.rotation.clone());
+  }, [onPlace, placementGuard]);
 
   useInputAction('precision.translate', event => {
     if (event.phase === 'down') setMode('translate');
@@ -943,22 +986,16 @@ const PrecisionGhost = ({
     if (event.phase === 'down') setMode('rotate');
   });
   useInputAction('action.confirm', event => {
-    if (event.phase === 'down' && targetRef.current) {
-      onPlace(targetRef.current.position.clone(), targetRef.current.rotation.clone());
-    }
+    if (event.phase === 'down') commitPlacement();
   });
 
   useEffect(() => {
-    const handleCustomEvent = () => {
-         if (targetRef.current) {
-             onPlace(targetRef.current.position.clone(), targetRef.current.rotation.clone());
-          }
-    };
+    const handleCustomEvent = () => commitPlacement();
     window.addEventListener('trigger-precision-place', handleCustomEvent);
     return () => {
         window.removeEventListener('trigger-precision-place', handleCustomEvent);
     };
-  }, [onPlace]);
+  }, [commitPlacement]);
 
   return (
     <>
@@ -1021,6 +1058,9 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
   onBlueprintProgress,
   onBlueprintStepComplete,
   onBlueprintStepRegression,
+  placementGuard,
+  onPlacementStatus,
+  canLaunchCard,
 }) => {
   
   const floorRef = useRef<THREE.Mesh>(null);
@@ -1397,6 +1437,7 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
               onPhysicsHandleChange={handlePhysicsHandleChange}
               onLaunchRequest={handleLaunchRequest}
               physicsSettings={physicsSettings}
+              launchAllowed={canLaunchCard ? canLaunchCard(card) : true}
             />
           );
         })}
@@ -1412,12 +1453,15 @@ const PhysicsWorld: React.FC<PhysicsWorldProps> = ({
               floorRef={floorRef}
               cardsGroupRef={cardsGroupRef}
               cardSize={cardSize}
+              placementGuard={placementGuard}
+              onPlacementStatus={onPlacementStatus}
           />
         ) : (
           <PrecisionGhost 
               isFreezeMode={isFreezeMode}
               onPlace={handlePlaceNew}
               cardSize={cardSize}
+              placementGuard={placementGuard}
           />
         )
       )}
