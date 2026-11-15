@@ -369,7 +369,14 @@ const App: React.FC = () => {
     void loadBundledOfficialCampaign().then(campaign => {
       if (!active) return;
       setOfficialCampaign(campaign);
-      if (!loadActiveCampaign()) {
+      const saved = loadActiveCampaign();
+      // A saved copy of the built-in campaign from an older revision would hide
+      // newly shipped chapters, so refresh it. Progress survives: results are
+      // keyed by level id + publish revision, not by campaign instance.
+      const stale = saved !== null && saved.id === campaign.id &&
+        saved.publishRevision < campaign.publishRevision;
+      if (!saved || stale) {
+        if (stale) clearCampaignSession();
         setActiveCampaign(campaign);
         setCampaignProgress(loadCampaignProgress(campaign.id));
       }

@@ -1,0 +1,497 @@
+{
+  "schemaVersion": 2,
+  "publishRevision": 1,
+  "id": "gate",
+  "name": {
+    "zh": "牌拱门",
+    "en": "Card Gate"
+  },
+  "description": {
+    "zh": "搭出两根柱子和一根门楣，让门楣的重量分到两侧",
+    "en": "Raise two piers and a lintel so the lintel shares its weight with both sides"
+  },
+  "origin": "official",
+  "requiresBlueprintMatch": true,
+  "author": "PaKer",
+  "tags": [
+    "官方",
+    "关卡",
+    "第一章 · 搭建基础"
+  ],
+  "createdAt": "2026-11-15T00:00:00.000Z",
+  "updatedAt": "2026-11-15T00:00:00.000Z",
+  "status": "published",
+  "sourceBlueprintId": "gate_blueprint",
+  "embeddedBlueprint": {
+    "schemaVersion": 2,
+    "id": "gate_blueprint",
+    "name": "牌拱门",
+    "description": "搭出两根柱子和一根门楣，让门楣的重量分到两侧",
+    "author": "PaKer",
+    "category": "tutorial",
+    "tags": [
+      "官方",
+      "关卡",
+      "第一章 · 搭建基础"
+    ],
+    "createdAt": "2026-11-15T00:00:00.000Z",
+    "updatedAt": "2026-11-15T00:00:00.000Z",
+    "cardSize": "BRIDGE",
+    "cardDimensions": {
+      "width": 1.8,
+      "height": 2.8,
+      "thickness": 0.02
+    },
+    "cardCount": 11,
+    "coordinateSpace": "structure-local",
+    "status": "published",
+    "tolerances": {
+      "horizontal": 0.26,
+      "height": 0.18,
+      "rotationDegrees": 8,
+      "nearHorizontal": 0.55,
+      "nearHeight": 0.4,
+      "nearRotationDegrees": 24
+    },
+    "steps": [
+      {
+        "id": "left_step",
+        "order": 0,
+        "title": "左柱支撑",
+        "description": "先立起一侧的两组支撑，柱子要垂直于地面。",
+        "cardIds": [
+          "gt_left_p1_a",
+          "gt_left_p1_b",
+          "gt_left_p2_a",
+          "gt_left_p2_b"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "short_edge_forward_10"
+      },
+      {
+        "id": "left_deck_step",
+        "order": 1,
+        "title": "左柱横梁",
+        "description": "左柱封顶，这一层才有平面刚度。",
+        "cardIds": [
+          "gt_left_deck"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      },
+      {
+        "id": "right_step",
+        "order": 2,
+        "title": "右柱支撑",
+        "description": "另一侧保持同样的间距，两根柱子决定拱门的高度。",
+        "cardIds": [
+          "gt_right_p1_a",
+          "gt_right_p1_b",
+          "gt_right_p2_a",
+          "gt_right_p2_b"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "short_edge_forward_10"
+      },
+      {
+        "id": "right_deck_step",
+        "order": 3,
+        "title": "右柱横梁",
+        "description": "两侧横梁落在同一高度，门楣才能水平。",
+        "cardIds": [
+          "gt_right_deck"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      },
+      {
+        "id": "bridge_step",
+        "order": 4,
+        "title": "门楣",
+        "description": "把长牌平放在两根柱子上，重量由两侧共同承担。",
+        "cardIds": [
+          "gt_bridge"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      }
+    ],
+    "snapshot": {
+      "capturedAt": "2026-11-15T00:00:00.000Z",
+      "source": "live-physics",
+      "originWorld": [
+        0,
+        0,
+        0
+      ],
+      "bounds": {
+        "min": [
+          -2.42652,
+          0,
+          -1.4
+        ],
+        "max": [
+          2.42652,
+          2.80333,
+          1.4
+        ],
+        "size": [
+          4.85304,
+          2.80333,
+          2.8
+        ]
+      },
+      "cards": [
+        {
+          "id": "gt_left_p1_a",
+          "order": 0,
+          "position": [
+            -2.17357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "spades",
+          "rank": "A",
+          "color": "black"
+        },
+        {
+          "id": "gt_left_p1_b",
+          "order": 1,
+          "position": [
+            -1.66643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "hearts",
+          "rank": "2",
+          "color": "red"
+        },
+        {
+          "id": "gt_left_p2_a",
+          "order": 2,
+          "position": [
+            -0.93357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "clubs",
+          "rank": "3",
+          "color": "black"
+        },
+        {
+          "id": "gt_left_p2_b",
+          "order": 3,
+          "position": [
+            -0.42643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "diamonds",
+          "rank": "4",
+          "color": "red"
+        },
+        {
+          "id": "gt_left_deck",
+          "order": 4,
+          "position": [
+            -1.3,
+            2.77213,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "suit": "spades",
+          "rank": "5",
+          "color": "black"
+        },
+        {
+          "id": "gt_right_p1_a",
+          "order": 5,
+          "position": [
+            0.42643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "hearts",
+          "rank": "6",
+          "color": "red"
+        },
+        {
+          "id": "gt_right_p1_b",
+          "order": 6,
+          "position": [
+            0.93357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "clubs",
+          "rank": "7",
+          "color": "black"
+        },
+        {
+          "id": "gt_right_p2_a",
+          "order": 7,
+          "position": [
+            1.66643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "diamonds",
+          "rank": "8",
+          "color": "red"
+        },
+        {
+          "id": "gt_right_p2_b",
+          "order": 8,
+          "position": [
+            2.17357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "spades",
+          "rank": "9",
+          "color": "black"
+        },
+        {
+          "id": "gt_right_deck",
+          "order": 9,
+          "position": [
+            1.3,
+            2.77213,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "suit": "hearts",
+          "rank": "10",
+          "color": "red"
+        },
+        {
+          "id": "gt_bridge",
+          "order": 10,
+          "position": [
+            0,
+            2.79333,
+            0
+          ],
+          "quaternion": [
+            0,
+            0.707107,
+            0,
+            0.707107
+          ],
+          "suit": "clubs",
+          "rank": "J",
+          "color": "black"
+        }
+      ]
+    }
+  },
+  "blueprintChecksum": "fnv1a-edc8e5f8",
+  "maxCards": 14,
+  "minCards": 11,
+  "heightMultiplier": 1,
+  "testDuration": 5,
+  "testType": "STABILITY",
+  "testStages": [
+    {
+      "id": "gate_stage_1",
+      "name": "稳定性测试",
+      "testType": "STABILITY",
+      "duration": 5
+    }
+  ],
+  "tutorial": {
+    "enabled": true,
+    "displayMode": "first-time",
+    "skippable": true,
+    "entryDurationMs": 3800,
+    "entryTitle": {
+      "zh": "第四课 · 跨与承重",
+      "en": "Lesson 4 · Spans and Load"
+    },
+    "entrySubtitle": {
+      "zh": "跨度越大，两侧的柱子越要站稳。",
+      "en": "The wider the span, the harder both piers must work."
+    },
+    "cues": [
+      {
+        "id": "cue_preset",
+        "kind": "preset",
+        "enabled": true,
+        "text": {
+          "zh": "先选短边后倾 10° 的预设",
+          "en": "Pick the short-edge leaning preset"
+        },
+        "target": {
+          "type": "preset",
+          "presetId": "short_edge_forward_10"
+        },
+        "highlight": "arrow",
+        "hints": [
+          {
+            "delayMs": 4000,
+            "highlight": "pulse",
+            "text": {
+              "zh": "预设轮盘里带箭头的图标就是倾斜放置",
+              "en": "The arrowed icon in the preset wheel is the leaning placement"
+            }
+          }
+        ],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "presetId": "short_edge_forward_10"
+      },
+      {
+        "id": "cue_first_step",
+        "kind": "blueprint-step",
+        "enabled": true,
+        "text": {
+          "zh": "按蓝图放下第一组牌",
+          "en": "Place the first group of cards"
+        },
+        "target": {
+          "type": "blueprint-step",
+          "stepIndex": 0
+        },
+        "highlight": "blueprint-glow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "blueprintStepIndex": 0
+      },
+      {
+        "id": "cue_finish_build",
+        "kind": "blueprint-step",
+        "enabled": true,
+        "text": {
+          "zh": "补齐剩余蓝图，再用空格锁定高度",
+          "en": "Finish the blueprint; hold Space to lock height"
+        },
+        "target": {
+          "type": "blueprint-step",
+          "stepIndex": 4
+        },
+        "highlight": "blueprint-glow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "blueprintStepIndex": 4
+      },
+      {
+        "id": "cue_test",
+        "kind": "test-start",
+        "enabled": true,
+        "text": {
+          "zh": "开始测试，看它能不能站住",
+          "en": "Start the test and see if it holds"
+        },
+        "target": {
+          "type": "control",
+          "control": "test"
+        },
+        "highlight": "arrow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      },
+      {
+        "id": "cue_success",
+        "kind": "test-success",
+        "enabled": true,
+        "text": {
+          "zh": "站住了！",
+          "en": "It stands!"
+        },
+        "target": {
+          "type": "none"
+        },
+        "highlight": "pulse",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      }
+    ]
+  },
+  "scoring": {
+    "baseScore": 250,
+    "unusedCardBonus": 50,
+    "heightBonus": 100
+  },
+  "verification": {
+    "passed": true,
+    "playtestedAt": "2026-11-15T00:00:00.000Z",
+    "blueprintChecksum": "fnv1a-edc8e5f8"
+  }
+}

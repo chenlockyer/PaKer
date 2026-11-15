@@ -1,0 +1,682 @@
+{
+  "schemaVersion": 2,
+  "publishRevision": 1,
+  "id": "twin-bridge",
+  "name": {
+    "zh": "双塔连桥",
+    "en": "Twin Bridge"
+  },
+  "description": {
+    "zh": "两座塔各自站稳，再用一张牌连成整体",
+    "en": "Raise two towers, then lock them together with one card"
+  },
+  "origin": "official",
+  "requiresBlueprintMatch": false,
+  "author": "PaKer",
+  "tags": [
+    "官方",
+    "关卡",
+    "第三章 · 极限工艺"
+  ],
+  "createdAt": "2026-11-15T00:00:00.000Z",
+  "updatedAt": "2026-11-15T00:00:00.000Z",
+  "status": "published",
+  "sourceBlueprintId": "twin-bridge_blueprint",
+  "embeddedBlueprint": {
+    "schemaVersion": 2,
+    "id": "twin-bridge_blueprint",
+    "name": "双塔连桥",
+    "description": "两座塔各自站稳，再用一张牌连成整体",
+    "author": "PaKer",
+    "category": "architecture",
+    "tags": [
+      "官方",
+      "关卡",
+      "第三章 · 极限工艺"
+    ],
+    "createdAt": "2026-11-15T00:00:00.000Z",
+    "updatedAt": "2026-11-15T00:00:00.000Z",
+    "cardSize": "BRIDGE",
+    "cardDimensions": {
+      "width": 1.8,
+      "height": 2.8,
+      "thickness": 0.02
+    },
+    "cardCount": 21,
+    "coordinateSpace": "structure-local",
+    "status": "published",
+    "tolerances": {
+      "horizontal": 0.32,
+      "height": 0.22,
+      "rotationDegrees": 10,
+      "nearHorizontal": 0.62,
+      "nearHeight": 0.46,
+      "nearRotationDegrees": 28
+    },
+    "steps": [
+      {
+        "id": "s1_step",
+        "order": 0,
+        "title": "第 1 层双塔支撑",
+        "description": "左右两座塔同步上升，每层都先立支撑再封顶。",
+        "cardIds": [
+          "tb_left_s1_p1_a",
+          "tb_left_s1_p1_b",
+          "tb_left_s1_p2_a",
+          "tb_left_s1_p2_b",
+          "tb_right_s1_p1_a",
+          "tb_right_s1_p1_b",
+          "tb_right_s1_p2_a",
+          "tb_right_s1_p2_b"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "short_edge_forward_10"
+      },
+      {
+        "id": "s1_deck_step",
+        "order": 1,
+        "title": "第 1 层双塔横梁",
+        "description": "两座塔的横梁要落在同一高度，桥面才能平稳地躺上去。",
+        "cardIds": [
+          "tb_left_s1_deck",
+          "tb_right_s1_deck"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      },
+      {
+        "id": "s2_step",
+        "order": 2,
+        "title": "第 2 层双塔支撑",
+        "description": "左右两座塔同步上升，每层都先立支撑再封顶。",
+        "cardIds": [
+          "tb_left_s2_p1_a",
+          "tb_left_s2_p1_b",
+          "tb_left_s2_p2_a",
+          "tb_left_s2_p2_b",
+          "tb_right_s2_p1_a",
+          "tb_right_s2_p1_b",
+          "tb_right_s2_p2_a",
+          "tb_right_s2_p2_b"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "short_edge_forward_10"
+      },
+      {
+        "id": "s2_deck_step",
+        "order": 3,
+        "title": "第 2 层双塔横梁",
+        "description": "两座塔的横梁要落在同一高度，桥面才能平稳地躺上去。",
+        "cardIds": [
+          "tb_left_s2_deck",
+          "tb_right_s2_deck"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      },
+      {
+        "id": "bridge_step",
+        "order": 4,
+        "title": "连桥",
+        "description": "一张平放的长牌横跨两座塔顶，把左右塔锁成一个整体。",
+        "cardIds": [
+          "tb_bridge"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      }
+    ],
+    "snapshot": {
+      "capturedAt": "2026-11-15T00:00:00.000Z",
+      "source": "live-physics",
+      "originWorld": [
+        0,
+        0,
+        0
+      ],
+      "bounds": {
+        "min": [
+          -2.95,
+          0,
+          -1.4
+        ],
+        "max": [
+          2.95,
+          5.58667,
+          1.4
+        ],
+        "size": [
+          5.9,
+          5.58667,
+          2.8
+        ]
+      },
+      "cards": [
+        {
+          "id": "tb_left_s1_p1_a",
+          "order": 0,
+          "position": [
+            -2.42356,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "spades",
+          "rank": "A",
+          "color": "black"
+        },
+        {
+          "id": "tb_left_s1_p1_b",
+          "order": 1,
+          "position": [
+            -1.91643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "hearts",
+          "rank": "2",
+          "color": "red"
+        },
+        {
+          "id": "tb_left_s1_p2_a",
+          "order": 2,
+          "position": [
+            -1.18357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "clubs",
+          "rank": "3",
+          "color": "black"
+        },
+        {
+          "id": "tb_left_s1_p2_b",
+          "order": 3,
+          "position": [
+            -0.67643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "diamonds",
+          "rank": "4",
+          "color": "red"
+        },
+        {
+          "id": "tb_left_s1_deck",
+          "order": 4,
+          "position": [
+            -1.55,
+            2.77213,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "suit": "spades",
+          "rank": "5",
+          "color": "black"
+        },
+        {
+          "id": "tb_left_s2_p1_a",
+          "order": 5,
+          "position": [
+            -1.55,
+            4.1638,
+            -0.87356
+          ],
+          "quaternion": [
+            0,
+            0.642788,
+            0.766044,
+            0
+          ],
+          "suit": "hearts",
+          "rank": "6",
+          "color": "red"
+        },
+        {
+          "id": "tb_left_s2_p1_b",
+          "order": 6,
+          "position": [
+            -1.55,
+            4.1638,
+            -0.36644
+          ],
+          "quaternion": [
+            0,
+            0.766044,
+            0.642788,
+            0
+          ],
+          "suit": "clubs",
+          "rank": "7",
+          "color": "black"
+        },
+        {
+          "id": "tb_left_s2_p2_a",
+          "order": 7,
+          "position": [
+            -1.55,
+            4.1638,
+            0.36644
+          ],
+          "quaternion": [
+            0,
+            0.642788,
+            0.766044,
+            0
+          ],
+          "suit": "diamonds",
+          "rank": "8",
+          "color": "red"
+        },
+        {
+          "id": "tb_left_s2_p2_b",
+          "order": 8,
+          "position": [
+            -1.55,
+            4.1638,
+            0.87356
+          ],
+          "quaternion": [
+            0,
+            0.766044,
+            0.642788,
+            0
+          ],
+          "suit": "spades",
+          "rank": "9",
+          "color": "black"
+        },
+        {
+          "id": "tb_left_s2_deck",
+          "order": 9,
+          "position": [
+            -1.55,
+            5.55547,
+            0
+          ],
+          "quaternion": [
+            0,
+            0.707107,
+            0,
+            0.707107
+          ],
+          "suit": "hearts",
+          "rank": "10",
+          "color": "red"
+        },
+        {
+          "id": "tb_right_s1_p1_a",
+          "order": 10,
+          "position": [
+            0.67643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "clubs",
+          "rank": "J",
+          "color": "black"
+        },
+        {
+          "id": "tb_right_s1_p1_b",
+          "order": 11,
+          "position": [
+            1.18357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "diamonds",
+          "rank": "Q",
+          "color": "red"
+        },
+        {
+          "id": "tb_right_s1_p2_a",
+          "order": 12,
+          "position": [
+            1.91643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "spades",
+          "rank": "K",
+          "color": "black"
+        },
+        {
+          "id": "tb_right_s1_p2_b",
+          "order": 13,
+          "position": [
+            2.42357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "hearts",
+          "rank": "A",
+          "color": "red"
+        },
+        {
+          "id": "tb_right_s1_deck",
+          "order": 14,
+          "position": [
+            1.55,
+            2.77213,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "suit": "clubs",
+          "rank": "2",
+          "color": "black"
+        },
+        {
+          "id": "tb_right_s2_p1_a",
+          "order": 15,
+          "position": [
+            1.55,
+            4.1638,
+            -0.87356
+          ],
+          "quaternion": [
+            0,
+            0.642788,
+            0.766044,
+            0
+          ],
+          "suit": "diamonds",
+          "rank": "3",
+          "color": "red"
+        },
+        {
+          "id": "tb_right_s2_p1_b",
+          "order": 16,
+          "position": [
+            1.55,
+            4.1638,
+            -0.36644
+          ],
+          "quaternion": [
+            0,
+            0.766044,
+            0.642788,
+            0
+          ],
+          "suit": "spades",
+          "rank": "4",
+          "color": "black"
+        },
+        {
+          "id": "tb_right_s2_p2_a",
+          "order": 17,
+          "position": [
+            1.55,
+            4.1638,
+            0.36644
+          ],
+          "quaternion": [
+            0,
+            0.642788,
+            0.766044,
+            0
+          ],
+          "suit": "hearts",
+          "rank": "5",
+          "color": "red"
+        },
+        {
+          "id": "tb_right_s2_p2_b",
+          "order": 18,
+          "position": [
+            1.55,
+            4.1638,
+            0.87356
+          ],
+          "quaternion": [
+            0,
+            0.766044,
+            0.642788,
+            0
+          ],
+          "suit": "clubs",
+          "rank": "6",
+          "color": "black"
+        },
+        {
+          "id": "tb_right_s2_deck",
+          "order": 19,
+          "position": [
+            1.55,
+            5.55547,
+            0
+          ],
+          "quaternion": [
+            0,
+            0.707107,
+            0,
+            0.707107
+          ],
+          "suit": "diamonds",
+          "rank": "7",
+          "color": "red"
+        },
+        {
+          "id": "tb_bridge",
+          "order": 20,
+          "position": [
+            0,
+            5.57667,
+            0
+          ],
+          "quaternion": [
+            0,
+            0.707107,
+            0,
+            0.707107
+          ],
+          "suit": "spades",
+          "rank": "8",
+          "color": "black"
+        }
+      ]
+    }
+  },
+  "blueprintChecksum": "fnv1a-653b5d8f",
+  "maxCards": 24,
+  "minCards": 18,
+  "heightMultiplier": 3,
+  "testDuration": 8,
+  "testType": "WIND",
+  "windStrength": 0.05,
+  "testStages": [
+    {
+      "id": "twin-bridge_stage_1",
+      "name": "风力测试",
+      "testType": "WIND",
+      "duration": 8,
+      "windStrength": 0.05
+    }
+  ],
+  "tutorial": {
+    "enabled": true,
+    "displayMode": "first-time",
+    "skippable": true,
+    "entryDurationMs": 3800,
+    "entryTitle": {
+      "zh": "第九课 · 整体",
+      "en": "Lesson 9 · One Frame"
+    },
+    "entrySubtitle": {
+      "zh": "两座塔的横梁在同一高度，桥面才锁得住。",
+      "en": "Both tower decks must share a height for the bridge to lock them."
+    },
+    "cues": [
+      {
+        "id": "cue_preset",
+        "kind": "preset",
+        "enabled": true,
+        "text": {
+          "zh": "从短边倾斜的支撑开始",
+          "en": "Start with short-edge leaning supports"
+        },
+        "target": {
+          "type": "preset",
+          "presetId": "short_edge_forward_10"
+        },
+        "highlight": "arrow",
+        "hints": [
+          {
+            "delayMs": 5000,
+            "highlight": "pulse",
+            "text": {
+              "zh": "一组 A 字架就能站住，但成对摆放才承得住上面一层",
+              "en": "One A-frame stands, but a pair carries the storey above"
+            }
+          }
+        ],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "presetId": "short_edge_forward_10"
+      },
+      {
+        "id": "cue_height",
+        "kind": "height",
+        "enabled": true,
+        "text": {
+          "zh": "把结构搭到目标高度",
+          "en": "Build up to the target height"
+        },
+        "target": {
+          "type": "world",
+          "position": [
+            0,
+            5.3,
+            0
+          ]
+        },
+        "highlight": "arrow",
+        "hints": [
+          {
+            "delayMs": 6000,
+            "highlight": "pulse",
+            "text": {
+              "zh": "按住空格可以锁定当前高度再放牌",
+              "en": "Hold Space to lock the current height while placing"
+            }
+          }
+        ],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "targetHeight": 5.3
+      },
+      {
+        "id": "cue_test",
+        "kind": "test-start",
+        "enabled": true,
+        "text": {
+          "zh": "开始测试",
+          "en": "Start the test"
+        },
+        "target": {
+          "type": "control",
+          "control": "test"
+        },
+        "highlight": "arrow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      },
+      {
+        "id": "cue_success",
+        "kind": "test-success",
+        "enabled": true,
+        "text": {
+          "zh": "撑住了！",
+          "en": "It held!"
+        },
+        "target": {
+          "type": "none"
+        },
+        "highlight": "pulse",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      }
+    ]
+  },
+  "scoring": {
+    "baseScore": 400,
+    "unusedCardBonus": 50,
+    "heightBonus": 100
+  },
+  "verification": {
+    "passed": true,
+    "playtestedAt": "2026-11-15T00:00:00.000Z",
+    "blueprintChecksum": "fnv1a-653b5d8f"
+  }
+}

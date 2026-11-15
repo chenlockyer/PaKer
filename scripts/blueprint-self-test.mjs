@@ -250,11 +250,11 @@ try {
     logLevel: 'silent',
   });
   const officialLevels = await import(`${pathToFileURL(officialLevelsBundlePath).href}?v=${Date.now()}`);
-  assert.equal(officialLevels.OFFICIAL_LEVELS.length, 4);
+  assert.ok(officialLevels.OFFICIAL_LEVELS.length >= 12, 'the official campaign ships at least twelve levels');
   officialLevels.OFFICIAL_LEVELS.forEach(officialLevel => {
     assert.equal(officialLevel.origin, 'official');
     assert.equal(officialLevel.status, 'published');
-    assert.equal(officialLevel.requiresBlueprintMatch, false);
+    assert.equal(typeof officialLevel.requiresBlueprintMatch, 'boolean');
     assert.equal(levelService.getLevelPublishBlockingIssues(officialLevel).length, 0);
     assert.equal(
       officialLevel.blueprintChecksum,

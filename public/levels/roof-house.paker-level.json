@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 2,
+  "publishRevision": 1,
+  "id": "roof-house",
+  "name": {
+    "zh": "一层纸牌屋",
+    "en": "One-Story House"
+  },
+  "description": {
+    "zh": "使用不超过 10 张牌搭建有屋顶的一层房子，并顶住 5 秒轻风",
+    "en": "Build a roofed one-story house with no more than 10 cards and hold 5 seconds of light wind"
+  },
+  "origin": "official",
+  "requiresBlueprintMatch": true,
+  "author": "PaKer",
+  "tags": [
+    "官方",
+    "关卡",
+    "第一章 · 搭建基础"
+  ],
+  "createdAt": "2026-11-15T00:00:00.000Z",
+  "updatedAt": "2026-11-15T00:00:00.000Z",
+  "status": "published",
+  "sourceBlueprintId": "roof-house_blueprint",
+  "embeddedBlueprint": {
+    "schemaVersion": 2,
+    "id": "roof-house_blueprint",
+    "name": "一层纸牌屋",
+    "description": "使用不超过 10 张牌搭建有屋顶的一层房子，并顶住 5 秒轻风",
+    "author": "PaKer",
+    "category": "tutorial",
+    "tags": [
+      "官方",
+      "关卡",
+      "第一章 · 搭建基础"
+    ],
+    "createdAt": "2026-11-15T00:00:00.000Z",
+    "updatedAt": "2026-11-15T00:00:00.000Z",
+    "cardSize": "BRIDGE",
+    "cardDimensions": {
+      "width": 1.8,
+      "height": 2.8,
+      "thickness": 0.02
+    },
+    "cardCount": 10,
+    "coordinateSpace": "structure-local",
+    "status": "published",
+    "tolerances": {
+      "horizontal": 0.26,
+      "height": 0.18,
+      "rotationDegrees": 8,
+      "nearHorizontal": 0.55,
+      "nearHeight": 0.4,
+      "nearRotationDegrees": 24
+    },
+    "steps": [
+      {
+        "id": "s1_step",
+        "order": 0,
+        "title": "第 1 层支撑",
+        "description": "两张相向倾斜的牌构成一组支撑，成对摆放后形成承重面带。",
+        "cardIds": [
+          "rh_base_s1_p1_a",
+          "rh_base_s1_p1_b",
+          "rh_base_s1_p2_a",
+          "rh_base_s1_p2_b"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "short_edge_forward_10"
+      },
+      {
+        "id": "s1_deck_step",
+        "order": 1,
+        "title": "第 1 层横梁",
+        "description": "把平放的牌横跨两组支撑的顶端，锁定这一层的平面。",
+        "cardIds": [
+          "rh_base_s1_deck"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      },
+      {
+        "id": "roof_step",
+        "order": 2,
+        "title": "屋顶斜撑",
+        "description": "用长边接地的矮支撑压在顶层横梁上，形成收口的屋顶。",
+        "cardIds": [
+          "rh_roof_p1_a",
+          "rh_roof_p1_b",
+          "rh_roof_p2_a",
+          "rh_roof_p2_b"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "long_edge_left_10"
+      },
+      {
+        "id": "roof_deck_step",
+        "order": 3,
+        "title": "屋脊",
+        "description": "最后盖上屋脊牌，让屋顶的重量落回两层支撑之间。",
+        "cardIds": [
+          "rh_roof_deck"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      }
+    ],
+    "snapshot": {
+      "capturedAt": "2026-11-15T00:00:00.000Z",
+      "source": "live-physics",
+      "originWorld": [
+        0,
+        0,
+        0
+      ],
+      "bounds": {
+        "min": [
+          -1.12652,
+          0,
+          -1.4
+        ],
+        "max": [
+          1.12652,
+          4.58066,
+          1.4
+        ],
+        "size": [
+          2.25304,
+          4.58066,
+          2.8
+        ]
+      },
+      "cards": [
+        {
+          "id": "rh_base_s1_p1_a",
+          "order": 0,
+          "position": [
+            -0.87357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "spades",
+          "rank": "A",
+          "color": "black"
+        },
+        {
+          "id": "rh_base_s1_p1_b",
+          "order": 1,
+          "position": [
+            -0.36643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "hearts",
+          "rank": "2",
+          "color": "red"
+        },
+        {
+          "id": "rh_base_s1_p2_a",
+          "order": 2,
+          "position": [
+            0.36643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "clubs",
+          "rank": "3",
+          "color": "black"
+        },
+        {
+          "id": "rh_base_s1_p2_b",
+          "order": 3,
+          "position": [
+            0.87357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "diamonds",
+          "rank": "4",
+          "color": "red"
+        },
+        {
+          "id": "rh_base_s1_deck",
+          "order": 4,
+          "position": [
+            0,
+            2.77213,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "suit": "spades",
+          "rank": "5",
+          "color": "black"
+        },
+        {
+          "id": "rh_roof_p1_a",
+          "order": 5,
+          "position": [
+            -0.71674,
+            3.67139,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0.642788,
+            0.766044
+          ],
+          "suit": "hearts",
+          "rank": "6",
+          "color": "red"
+        },
+        {
+          "id": "rh_roof_p1_b",
+          "order": 6,
+          "position": [
+            -0.38326,
+            3.67139,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0.766044,
+            0.642788
+          ],
+          "suit": "clubs",
+          "rank": "7",
+          "color": "black"
+        },
+        {
+          "id": "rh_roof_p2_a",
+          "order": 7,
+          "position": [
+            0.38326,
+            3.67139,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0.642788,
+            0.766044
+          ],
+          "suit": "diamonds",
+          "rank": "8",
+          "color": "red"
+        },
+        {
+          "id": "rh_roof_p2_b",
+          "order": 8,
+          "position": [
+            0.71674,
+            3.67139,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0.766044,
+            0.642788
+          ],
+          "suit": "spades",
+          "rank": "9",
+          "color": "black"
+        },
+        {
+          "id": "rh_roof_deck",
+          "order": 9,
+          "position": [
+            0,
+            4.57066,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "suit": "hearts",
+          "rank": "10",
+          "color": "red"
+        }
+      ]
+    }
+  },
+  "blueprintChecksum": "fnv1a-92c1428d",
+  "maxCards": 10,
+  "minCards": 10,
+  "heightMultiplier": 1,
+  "testDuration": 5,
+  "testType": "WIND",
+  "windStrength": 0.012,
+  "testStages": [
+    {
+      "id": "roof-house_stage_1",
+      "name": "风力测试",
+      "testType": "WIND",
+      "duration": 5,
+      "windStrength": 0.012
+    }
+  ],
+  "tutorial": {
+    "enabled": true,
+    "displayMode": "first-time",
+    "skippable": true,
+    "entryDurationMs": 3800,
+    "entryTitle": {
+      "zh": "第二课 · 成对与封顶",
+      "en": "Lesson 2 · Pairs and Decks"
+    },
+    "entrySubtitle": {
+      "zh": "两组支撑加一张横梁，才有平面的刚度。",
+      "en": "Two supports and a deck are what give a plane its stiffness."
+    },
+    "cues": [
+      {
+        "id": "cue_preset",
+        "kind": "preset",
+        "enabled": true,
+        "text": {
+          "zh": "先选短边后倾 10° 的预设",
+          "en": "Pick the short-edge leaning preset"
+        },
+        "target": {
+          "type": "preset",
+          "presetId": "short_edge_forward_10"
+        },
+        "highlight": "arrow",
+        "hints": [
+          {
+            "delayMs": 4000,
+            "highlight": "pulse",
+            "text": {
+              "zh": "预设轮盘里带箭头的图标就是倾斜放置",
+              "en": "The arrowed icon in the preset wheel is the leaning placement"
+            }
+          }
+        ],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "presetId": "short_edge_forward_10"
+      },
+      {
+        "id": "cue_first_step",
+        "kind": "blueprint-step",
+        "enabled": true,
+        "text": {
+          "zh": "按蓝图放下第一组牌",
+          "en": "Place the first group of cards"
+        },
+        "target": {
+          "type": "blueprint-step",
+          "stepIndex": 0
+        },
+        "highlight": "blueprint-glow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "blueprintStepIndex": 0
+      },
+      {
+        "id": "cue_finish_build",
+        "kind": "blueprint-step",
+        "enabled": true,
+        "text": {
+          "zh": "补齐剩余蓝图，再用空格锁定高度",
+          "en": "Finish the blueprint; hold Space to lock height"
+        },
+        "target": {
+          "type": "blueprint-step",
+          "stepIndex": 3
+        },
+        "highlight": "blueprint-glow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "blueprintStepIndex": 3
+      },
+      {
+        "id": "cue_test",
+        "kind": "test-start",
+        "enabled": true,
+        "text": {
+          "zh": "开始测试，看它能不能站住",
+          "en": "Start the test and see if it holds"
+        },
+        "target": {
+          "type": "control",
+          "control": "test"
+        },
+        "highlight": "arrow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      },
+      {
+        "id": "cue_success",
+        "kind": "test-success",
+        "enabled": true,
+        "text": {
+          "zh": "站住了！",
+          "en": "It stands!"
+        },
+        "target": {
+          "type": "none"
+        },
+        "highlight": "pulse",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      }
+    ]
+  },
+  "scoring": {
+    "baseScore": 250,
+    "unusedCardBonus": 50,
+    "heightBonus": 100
+  },
+  "verification": {
+    "passed": true,
+    "playtestedAt": "2026-11-15T00:00:00.000Z",
+    "blueprintChecksum": "fnv1a-92c1428d"
+  }
+}

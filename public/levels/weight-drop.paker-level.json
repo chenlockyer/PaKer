@@ -1,0 +1,464 @@
+{
+  "schemaVersion": 2,
+  "publishRevision": 1,
+  "id": "weight-drop",
+  "name": {
+    "zh": "落物冲击",
+    "en": "Drop Impact"
+  },
+  "description": {
+    "zh": "重物会从 5.1 米高处落下：房子要够高、屋顶要够稳才接得住",
+    "en": "A weight drops from 5.1 m — build tall enough, with a roof steady enough to catch it"
+  },
+  "origin": "official",
+  "requiresBlueprintMatch": false,
+  "author": "PaKer",
+  "tags": [
+    "官方",
+    "关卡",
+    "第二章 · 结构考验"
+  ],
+  "createdAt": "2026-11-15T00:00:00.000Z",
+  "updatedAt": "2026-11-15T00:00:00.000Z",
+  "status": "published",
+  "sourceBlueprintId": "weight-drop_blueprint",
+  "embeddedBlueprint": {
+    "schemaVersion": 2,
+    "id": "weight-drop_blueprint",
+    "name": "落物冲击",
+    "description": "重物会从 5.1 米高处落下：房子要够高、屋顶要够稳才接得住",
+    "author": "PaKer",
+    "category": "challenge",
+    "tags": [
+      "官方",
+      "关卡",
+      "第二章 · 结构考验"
+    ],
+    "createdAt": "2026-11-15T00:00:00.000Z",
+    "updatedAt": "2026-11-15T00:00:00.000Z",
+    "cardSize": "BRIDGE",
+    "cardDimensions": {
+      "width": 1.8,
+      "height": 2.8,
+      "thickness": 0.02
+    },
+    "cardCount": 10,
+    "coordinateSpace": "structure-local",
+    "status": "published",
+    "tolerances": {
+      "horizontal": 0.32,
+      "height": 0.22,
+      "rotationDegrees": 10,
+      "nearHorizontal": 0.62,
+      "nearHeight": 0.46,
+      "nearRotationDegrees": 28
+    },
+    "steps": [
+      {
+        "id": "s1_step",
+        "order": 0,
+        "title": "第 1 层支撑",
+        "description": "两张相向倾斜的牌构成一组支撑，成对摆放后形成承重面带。",
+        "cardIds": [
+          "wd_base_s1_p1_a",
+          "wd_base_s1_p1_b",
+          "wd_base_s1_p2_a",
+          "wd_base_s1_p2_b"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "short_edge_forward_10"
+      },
+      {
+        "id": "s1_deck_step",
+        "order": 1,
+        "title": "第 1 层横梁",
+        "description": "把平放的牌横跨两组支撑的顶端，锁定这一层的平面。",
+        "cardIds": [
+          "wd_base_s1_deck"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      },
+      {
+        "id": "roof_step",
+        "order": 2,
+        "title": "屋顶斜撑",
+        "description": "用长边接地的矮支撑压在顶层横梁上，形成收口的屋顶。",
+        "cardIds": [
+          "wd_roof_p1_a",
+          "wd_roof_p1_b",
+          "wd_roof_p2_a",
+          "wd_roof_p2_b"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "long_edge_left_10"
+      },
+      {
+        "id": "roof_deck_step",
+        "order": 3,
+        "title": "屋脊",
+        "description": "最后盖上屋脊牌，让屋顶的重量落回两层支撑之间。",
+        "cardIds": [
+          "wd_roof_deck"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "flat_landscape"
+      }
+    ],
+    "snapshot": {
+      "capturedAt": "2026-11-15T00:00:00.000Z",
+      "source": "live-physics",
+      "originWorld": [
+        0,
+        0,
+        0
+      ],
+      "bounds": {
+        "min": [
+          -1.12652,
+          0,
+          -1.4
+        ],
+        "max": [
+          1.12652,
+          4.58066,
+          1.4
+        ],
+        "size": [
+          2.25304,
+          4.58066,
+          2.8
+        ]
+      },
+      "cards": [
+        {
+          "id": "wd_base_s1_p1_a",
+          "order": 0,
+          "position": [
+            -0.87357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "spades",
+          "rank": "A",
+          "color": "black"
+        },
+        {
+          "id": "wd_base_s1_p1_b",
+          "order": 1,
+          "position": [
+            -0.36643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "hearts",
+          "rank": "2",
+          "color": "red"
+        },
+        {
+          "id": "wd_base_s1_p2_a",
+          "order": 2,
+          "position": [
+            0.36643,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            0.541675,
+            0.454519,
+            0.541675,
+            -0.454519
+          ],
+          "suit": "clubs",
+          "rank": "3",
+          "color": "black"
+        },
+        {
+          "id": "wd_base_s1_p2_b",
+          "order": 3,
+          "position": [
+            0.87357,
+            1.38047,
+            0
+          ],
+          "quaternion": [
+            -0.454519,
+            -0.541675,
+            -0.454519,
+            0.541675
+          ],
+          "suit": "diamonds",
+          "rank": "4",
+          "color": "red"
+        },
+        {
+          "id": "wd_base_s1_deck",
+          "order": 4,
+          "position": [
+            0,
+            2.77213,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "suit": "spades",
+          "rank": "5",
+          "color": "black"
+        },
+        {
+          "id": "wd_roof_p1_a",
+          "order": 5,
+          "position": [
+            -0.71674,
+            3.67139,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0.642788,
+            0.766044
+          ],
+          "suit": "hearts",
+          "rank": "6",
+          "color": "red"
+        },
+        {
+          "id": "wd_roof_p1_b",
+          "order": 6,
+          "position": [
+            -0.38326,
+            3.67139,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0.766044,
+            0.642788
+          ],
+          "suit": "clubs",
+          "rank": "7",
+          "color": "black"
+        },
+        {
+          "id": "wd_roof_p2_a",
+          "order": 7,
+          "position": [
+            0.38326,
+            3.67139,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0.642788,
+            0.766044
+          ],
+          "suit": "diamonds",
+          "rank": "8",
+          "color": "red"
+        },
+        {
+          "id": "wd_roof_p2_b",
+          "order": 8,
+          "position": [
+            0.71674,
+            3.67139,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0.766044,
+            0.642788
+          ],
+          "suit": "spades",
+          "rank": "9",
+          "color": "black"
+        },
+        {
+          "id": "wd_roof_deck",
+          "order": 9,
+          "position": [
+            0,
+            4.57066,
+            0
+          ],
+          "quaternion": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "suit": "hearts",
+          "rank": "10",
+          "color": "red"
+        }
+      ]
+    }
+  },
+  "blueprintChecksum": "fnv1a-7f6c0f8e",
+  "maxCards": 12,
+  "minCards": 8,
+  "heightMultiplier": 1,
+  "testDuration": 6,
+  "testType": "WEIGHT_DROP",
+  "weightMass": 0.45,
+  "weightDropOffset": 3.4,
+  "testStages": [
+    {
+      "id": "weight-drop_stage_1",
+      "name": "落物冲击",
+      "testType": "WEIGHT_DROP",
+      "duration": 6,
+      "weightMass": 0.45,
+      "weightDropOffset": 3.4
+    }
+  ],
+  "tutorial": {
+    "enabled": true,
+    "displayMode": "first-time",
+    "skippable": true,
+    "entryDurationMs": 3800,
+    "entryTitle": {
+      "zh": "第五课 · 承重路径",
+      "en": "Lesson 5 · Load Path"
+    },
+    "entrySubtitle": {
+      "zh": "重量要沿着牌一直传到地面。",
+      "en": "Weight has to travel down the cards into the floor."
+    },
+    "cues": [
+      {
+        "id": "cue_preset",
+        "kind": "preset",
+        "enabled": true,
+        "text": {
+          "zh": "从短边倾斜的支撑开始",
+          "en": "Start with short-edge leaning supports"
+        },
+        "target": {
+          "type": "preset",
+          "presetId": "short_edge_forward_10"
+        },
+        "highlight": "arrow",
+        "hints": [
+          {
+            "delayMs": 5000,
+            "highlight": "pulse",
+            "text": {
+              "zh": "一组 A 字架就能站住，但成对摆放才承得住上面一层",
+              "en": "One A-frame stands, but a pair carries the storey above"
+            }
+          }
+        ],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "presetId": "short_edge_forward_10"
+      },
+      {
+        "id": "cue_height",
+        "kind": "height",
+        "enabled": true,
+        "text": {
+          "zh": "把结构搭到目标高度",
+          "en": "Build up to the target height"
+        },
+        "target": {
+          "type": "world",
+          "position": [
+            0,
+            1.7,
+            0
+          ]
+        },
+        "highlight": "arrow",
+        "hints": [
+          {
+            "delayMs": 6000,
+            "highlight": "pulse",
+            "text": {
+              "zh": "按住空格可以锁定当前高度再放牌",
+              "en": "Hold Space to lock the current height while placing"
+            }
+          }
+        ],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "targetHeight": 1.7
+      },
+      {
+        "id": "cue_test",
+        "kind": "test-start",
+        "enabled": true,
+        "text": {
+          "zh": "开始测试",
+          "en": "Start the test"
+        },
+        "target": {
+          "type": "control",
+          "control": "test"
+        },
+        "highlight": "arrow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      },
+      {
+        "id": "cue_success",
+        "kind": "test-success",
+        "enabled": true,
+        "text": {
+          "zh": "撑住了！",
+          "en": "It held!"
+        },
+        "target": {
+          "type": "none"
+        },
+        "highlight": "pulse",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      }
+    ]
+  },
+  "scoring": {
+    "baseScore": 300,
+    "unusedCardBonus": 50,
+    "heightBonus": 100
+  },
+  "verification": {
+    "passed": true,
+    "playtestedAt": "2026-11-15T00:00:00.000Z",
+    "blueprintChecksum": "fnv1a-7f6c0f8e"
+  }
+}

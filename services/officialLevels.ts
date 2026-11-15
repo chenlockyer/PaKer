@@ -1,89 +1,91 @@
 import {
   Blueprint,
-  ChallengeTestType,
+  CARD_DIMENSIONS,
   LevelDefinition,
 } from '../types';
 import { checksumBlueprint } from './levelService';
-import { createDefaultTutorial } from './tutorialService';
-import { OFFICIAL_TUTORIAL_BLUEPRINTS } from './officialBlueprints';
+import {
+  GENERATED_OFFICIAL_LEVELS,
+  GeneratedOfficialLevel,
+} from './officialLevelData.generated';
 
-const CREATED_AT = '2026-07-29T00:00:00.000Z';
+/**
+ * The official campaign levels are data, not hand written geometry.
+ *
+ * `services/officialLevelData.generated.ts` is produced by
+ * `npm run level:build` from `scripts/level-factory/`, where every reference
+ * structure is simulated with Rapier before it is written out. This module only
+ * turns that data back into the blueprint + level shape the runtime expects and
+ * computes the integrity checksum, so a level can never drift from its
+ * blueprint.
+ */
 
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const CREATED_AT = '2026-11-15T00:00:00.000Z';
 
-const makeOfficialLevel = ({
-  id,
-  name,
-  description,
-  blueprint,
-  maxCards,
-  minCards,
-  heightMultiplier,
-  testDuration,
-  testType,
-  windStrength,
-  weightMass,
-  weightDropOffset,
-}: {
-  id: string;
-  name: LevelDefinition['name'];
-  description: LevelDefinition['description'];
-  blueprint: Blueprint;
-  maxCards: number;
-  minCards: number;
-  heightMultiplier: number;
-  testDuration: number;
-  testType: ChallengeTestType;
-  windStrength?: number;
-  weightMass?: number;
-  weightDropOffset?: number;
-}): LevelDefinition => {
-  const embeddedBlueprint = clone(blueprint);
-  embeddedBlueprint.id = `${id}_blueprint`;
+const makeBlueprint = (level: GeneratedOfficialLevel): Blueprint => {
+  const dimensions = CARD_DIMENSIONS[level.cardSize];
+  return {
+    schemaVersion: 2,
+    id: `${level.id}_blueprint`,
+    name: level.name.zh,
+    description: level.description.zh,
+    author: 'PaKer',
+    category: level.category,
+    tags: level.tags,
+    createdAt: level.capturedAt,
+    updatedAt: level.capturedAt,
+    cardSize: level.cardSize,
+    cardDimensions: {
+      width: dimensions.width,
+      height: dimensions.height,
+      thickness: dimensions.thickness,
+    },
+    cardCount: level.cards.length,
+    coordinateSpace: 'structure-local',
+    status: 'published',
+    tolerances: level.tolerances,
+    steps: level.steps,
+    snapshot: {
+      capturedAt: level.capturedAt,
+      source: 'live-physics',
+      originWorld: level.originWorld,
+      bounds: level.bounds,
+      cards: level.cards,
+    },
+  };
+};
+
+const makeOfficialLevel = (level: GeneratedOfficialLevel): LevelDefinition => {
+  const embeddedBlueprint = makeBlueprint(level);
   const blueprintChecksum = checksumBlueprint(embeddedBlueprint);
+  const firstStage = level.testStages[0];
   return {
     schemaVersion: 2,
     publishRevision: 1,
-    id,
-    name,
-    description,
+    id: level.id,
+    name: level.name,
+    description: level.description,
     origin: 'official',
-    requiresBlueprintMatch: false,
+    requiresBlueprintMatch: level.requiresBlueprintMatch,
     author: 'PaKer',
-    tags: ['官方', '关卡'],
+    tags: level.tags,
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
     status: 'published',
-    sourceBlueprintId: blueprint.id,
+    sourceBlueprintId: embeddedBlueprint.id,
     embeddedBlueprint,
     blueprintChecksum,
-    maxCards,
-    minCards,
-    heightMultiplier,
-    testDuration,
-    testType,
-    windStrength,
-    weightMass,
-    weightDropOffset,
-    testStages: [{
-      id: `${id}_stage_1`,
-      name: testType === ChallengeTestType.WIND
-        ? '风力测试'
-        : testType === ChallengeTestType.WEIGHT_DROP
-          ? '落物冲击'
-          : '稳定性测试',
-      testType,
-      duration: testDuration,
-      windStrength,
-      weightMass,
-      weightDropOffset,
-    }],
-    tutorial: createDefaultTutorial(),
-    scoring: {
-      baseScore: testDuration * 50,
-      unusedCardBonus: 50,
-      heightBonus: 100,
-    },
+    maxCards: level.maxCards,
+    minCards: level.minCards,
+    heightMultiplier: level.heightMultiplier,
+    testDuration: firstStage.duration,
+    testType: firstStage.testType,
+    windStrength: firstStage.testType === 'WIND' ? firstStage.windStrength : undefined,
+    weightMass: firstStage.testType === 'WEIGHT_DROP' ? firstStage.weightMass : undefined,
+    weightDropOffset: firstStage.testType === 'WEIGHT_DROP' ? firstStage.weightDropOffset : undefined,
+    testStages: level.testStages,
+    tutorial: level.tutorial,
+    scoring: level.scoring,
     verification: {
       passed: true,
       playtestedAt: CREATED_AT,
@@ -92,67 +94,6 @@ const makeOfficialLevel = ({
   };
 };
 
-export const OFFICIAL_LEVELS: LevelDefinition[] = [
-  makeOfficialLevel({
-    id: 'a-frame',
-    name: { zh: 'A 字架入门', en: 'A-Frame Basics' },
-    description: {
-      zh: '只使用 2 张牌搭建一个能够独立站立的 A 字架',
-      en: 'Build a freestanding A-frame using only 2 cards',
-    },
-    blueprint: OFFICIAL_TUTORIAL_BLUEPRINTS[0],
-    maxCards: 2,
-    minCards: 2,
-    heightMultiplier: 1,
-    testDuration: 3,
-    testType: ChallengeTestType.STABILITY,
-  }),
-  makeOfficialLevel({
-    id: 'roof-house',
-    name: { zh: '一层纸牌屋', en: 'One-Story House' },
-    description: {
-      zh: '使用不超过 10 张牌搭建有屋顶的一层房子',
-      en: 'Build a roofed one-story house with no more than 10 cards',
-    },
-    blueprint: OFFICIAL_TUTORIAL_BLUEPRINTS[3],
-    maxCards: 10,
-    minCards: 10,
-    heightMultiplier: 1,
-    testDuration: 5,
-    testType: ChallengeTestType.WIND,
-    windStrength: 0.018,
-  }),
-  makeOfficialLevel({
-    id: 'weight-drop',
-    name: { zh: '落物冲击', en: 'Drop Impact' },
-    description: {
-      zh: '搭建一层结构，承受从上方落下的重物冲击',
-      en: 'Build one story and survive a weight dropped from above',
-    },
-    blueprint: OFFICIAL_TUTORIAL_BLUEPRINTS[3],
-    maxCards: 12,
-    minCards: 6,
-    heightMultiplier: 1,
-    testDuration: 6,
-    testType: ChallengeTestType.WEIGHT_DROP,
-    weightMass: 0.45,
-    weightDropOffset: 4,
-  }),
-  makeOfficialLevel({
-    id: 'two-story-wind',
-    name: { zh: '两层风力挑战', en: 'Two-Story Wind Trial' },
-    description: {
-      zh: '搭建两层纸牌屋，并承受 10 秒轻风',
-      en: 'Build two stories and survive 10 seconds of light wind',
-    },
-    blueprint: OFFICIAL_TUTORIAL_BLUEPRINTS[3],
-    maxCards: 20,
-    minCards: 8,
-    heightMultiplier: 2,
-    testDuration: 10,
-    testType: ChallengeTestType.WIND,
-    windStrength: 0.07,
-  }),
-];
+export const OFFICIAL_LEVELS: LevelDefinition[] = GENERATED_OFFICIAL_LEVELS.map(makeOfficialLevel);
 
 export const OFFICIAL_LEVEL_IDS = new Set(OFFICIAL_LEVELS.map(level => level.id));

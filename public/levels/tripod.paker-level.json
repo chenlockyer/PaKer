@@ -1,0 +1,301 @@
+{
+  "schemaVersion": 2,
+  "publishRevision": 1,
+  "id": "tripod",
+  "name": {
+    "zh": "三足鼎立",
+    "en": "Three-Legged Stand"
+  },
+  "description": {
+    "zh": "用 3 张牌搭出互相压住的三角支撑，并保持 4 秒",
+    "en": "Stand three cards against each other in a triangle for 4 seconds"
+  },
+  "origin": "official",
+  "requiresBlueprintMatch": true,
+  "author": "PaKer",
+  "tags": [
+    "官方",
+    "关卡",
+    "第一章 · 搭建基础"
+  ],
+  "createdAt": "2026-11-15T00:00:00.000Z",
+  "updatedAt": "2026-11-15T00:00:00.000Z",
+  "status": "published",
+  "sourceBlueprintId": "tripod_blueprint",
+  "embeddedBlueprint": {
+    "schemaVersion": 2,
+    "id": "tripod_blueprint",
+    "name": "三足鼎立",
+    "description": "用 3 张牌搭出互相压住的三角支撑，并保持 4 秒",
+    "author": "PaKer",
+    "category": "tutorial",
+    "tags": [
+      "官方",
+      "关卡",
+      "第一章 · 搭建基础"
+    ],
+    "createdAt": "2026-11-15T00:00:00.000Z",
+    "updatedAt": "2026-11-15T00:00:00.000Z",
+    "cardSize": "BRIDGE",
+    "cardDimensions": {
+      "width": 1.8,
+      "height": 2.8,
+      "thickness": 0.02
+    },
+    "cardCount": 3,
+    "coordinateSpace": "structure-local",
+    "status": "published",
+    "tolerances": {
+      "horizontal": 0.26,
+      "height": 0.18,
+      "rotationDegrees": 8,
+      "nearHorizontal": 0.55,
+      "nearHeight": 0.4,
+      "nearRotationDegrees": 24
+    },
+    "steps": [
+      {
+        "id": "legs_step",
+        "order": 0,
+        "title": "三足鼎立",
+        "description": "三张牌各自向内倾斜，顶端互相压住，形成最省牌的三向支撑。",
+        "cardIds": [
+          "tp_1",
+          "tp_2",
+          "tp_3"
+        ],
+        "freezeDuringBuild": false,
+        "releasePhysicsAfterStep": false,
+        "recommendedPresetId": "short_edge_forward_10"
+      }
+    ],
+    "snapshot": {
+      "capturedAt": "2026-11-15T00:00:00.000Z",
+      "source": "live-physics",
+      "originWorld": [
+        0,
+        0,
+        0
+      ],
+      "bounds": {
+        "min": [
+          -1.44325,
+          0,
+          -1.66653
+        ],
+        "max": [
+          1.44325,
+          2.66914,
+          1.66653
+        ],
+        "size": [
+          2.88651,
+          2.66914,
+          3.33305
+        ]
+      },
+      "cards": [
+        {
+          "id": "tp_1",
+          "order": 0,
+          "position": [
+            1.00112,
+            1.33457,
+            0
+          ],
+          "quaternion": [
+            -0.415627,
+            -0.572061,
+            -0.415627,
+            0.572061
+          ],
+          "suit": "spades",
+          "rank": "A",
+          "color": "black"
+        },
+        {
+          "id": "tp_2",
+          "order": 1,
+          "position": [
+            -0.44276,
+            1.33457,
+            0.83363
+          ],
+          "quaternion": [
+            -0.15213,
+            0.78145,
+            0.567757,
+            0.209389
+          ],
+          "suit": "hearts",
+          "rank": "2",
+          "color": "red"
+        },
+        {
+          "id": "tp_3",
+          "order": 2,
+          "position": [
+            -0.44276,
+            1.33457,
+            -0.83363
+          ],
+          "quaternion": [
+            -0.567757,
+            0.209389,
+            0.15213,
+            0.78145
+          ],
+          "suit": "clubs",
+          "rank": "3",
+          "color": "black"
+        }
+      ]
+    }
+  },
+  "blueprintChecksum": "fnv1a-9a4ff647",
+  "maxCards": 3,
+  "minCards": 3,
+  "heightMultiplier": 1,
+  "testDuration": 4,
+  "testType": "STABILITY",
+  "testStages": [
+    {
+      "id": "tripod_stage_1",
+      "name": "稳定性测试",
+      "testType": "STABILITY",
+      "duration": 4
+    }
+  ],
+  "tutorial": {
+    "enabled": true,
+    "displayMode": "first-time",
+    "skippable": true,
+    "entryDurationMs": 3800,
+    "entryTitle": {
+      "zh": "第三课 · 第三只脚",
+      "en": "Lesson 3 · The Third Leg"
+    },
+    "entrySubtitle": {
+      "zh": "两张牌只能撑一条线，三张牌才撑住一个面。",
+      "en": "Two cards hold a line; three cards hold a plane."
+    },
+    "cues": [
+      {
+        "id": "cue_preset",
+        "kind": "preset",
+        "enabled": true,
+        "text": {
+          "zh": "先选短边后倾 10° 的预设",
+          "en": "Pick the short-edge leaning preset"
+        },
+        "target": {
+          "type": "preset",
+          "presetId": "short_edge_forward_10"
+        },
+        "highlight": "arrow",
+        "hints": [
+          {
+            "delayMs": 4000,
+            "highlight": "pulse",
+            "text": {
+              "zh": "预设轮盘里带箭头的图标就是倾斜放置",
+              "en": "The arrowed icon in the preset wheel is the leaning placement"
+            }
+          }
+        ],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "presetId": "short_edge_forward_10"
+      },
+      {
+        "id": "cue_first_step",
+        "kind": "blueprint-step",
+        "enabled": true,
+        "text": {
+          "zh": "按蓝图放下第一组牌",
+          "en": "Place the first group of cards"
+        },
+        "target": {
+          "type": "blueprint-step",
+          "stepIndex": 0
+        },
+        "highlight": "blueprint-glow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "blueprintStepIndex": 0
+      },
+      {
+        "id": "cue_finish_build",
+        "kind": "blueprint-step",
+        "enabled": true,
+        "text": {
+          "zh": "补齐剩余蓝图，再用空格锁定高度",
+          "en": "Finish the blueprint; hold Space to lock height"
+        },
+        "target": {
+          "type": "blueprint-step",
+          "stepIndex": 0
+        },
+        "highlight": "blueprint-glow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        },
+        "blueprintStepIndex": 0
+      },
+      {
+        "id": "cue_test",
+        "kind": "test-start",
+        "enabled": true,
+        "text": {
+          "zh": "开始测试，看它能不能站住",
+          "en": "Start the test and see if it holds"
+        },
+        "target": {
+          "type": "control",
+          "control": "test"
+        },
+        "highlight": "arrow",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      },
+      {
+        "id": "cue_success",
+        "kind": "test-success",
+        "enabled": true,
+        "text": {
+          "zh": "站住了！",
+          "en": "It stands!"
+        },
+        "target": {
+          "type": "none"
+        },
+        "highlight": "pulse",
+        "hints": [],
+        "feedback": {
+          "flash": true,
+          "sound": true
+        }
+      }
+    ]
+  },
+  "scoring": {
+    "baseScore": 200,
+    "unusedCardBonus": 50,
+    "heightBonus": 100
+  },
+  "verification": {
+    "passed": true,
+    "playtestedAt": "2026-11-15T00:00:00.000Z",
+    "blueprintChecksum": "fnv1a-9a4ff647"
+  }
+}

@@ -389,6 +389,11 @@ const Card: React.FC<CardProps> = ({
 
     const gust = windStrength * (0.8 + Math.sin(clock.elapsedTime * 2.4) * 0.2);
     const [x, y, z] = physicsPositionRef.current;
+    // Rapier keeps user forces and torques until they are reset, so a per-frame
+    // wind gust has to clear last frame's contribution first. Without this the
+    // wind ramps up linearly and every wind test becomes a countdown to launch.
+    body.resetForces(false);
+    body.resetTorques(false);
     body.addForceAtPoint(
       { x: gust, y: 0, z: gust * 0.18 },
       { x, y: y + 0.65, z },
