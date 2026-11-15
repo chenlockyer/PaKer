@@ -111,7 +111,7 @@ const drive = async (browser) => {
   await page.getByRole('button', { name: '己方' }).click();
   await page.waitForTimeout(900);
   const before = await budgetText(0);
-  const spot = await quickPlaceBlueprint(1, [[0.5, 0.55], [0.5, 0.45], [0.55, 0.5], [0.45, 0.6]]);
+  const spot = await quickPlaceBlueprint(1, [[0.5, 0.78], [0.46, 0.82], [0.54, 0.74], [0.5, 0.7]]);
   log('blueprint placed at', spot, '| structure budget', before, '→', await budgetText(0));
   await page.waitForTimeout(1200);
   log('blue collapse:', await collapseText(0));
@@ -124,7 +124,7 @@ const drive = async (browser) => {
   log('phase after finishing blue:', await phaseName());
   await page.getByRole('button', { name: '己方' }).click();
   await page.waitForTimeout(900);
-  const redSpot = await quickPlaceBlueprint(1, [[0.5, 0.55], [0.5, 0.45], [0.55, 0.5], [0.45, 0.6]]);
+  const redSpot = await quickPlaceBlueprint(1, [[0.5, 0.78], [0.46, 0.82], [0.54, 0.74], [0.5, 0.7]]);
   log('red blueprint placed at', redSpot, '| structure budget', await budgetText(0));
   await page.waitForTimeout(1000);
   log('red collapse:', await collapseText(1));

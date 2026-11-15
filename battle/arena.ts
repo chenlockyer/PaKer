@@ -77,26 +77,39 @@ export const isInBuffer = (
 /** The area a side is allowed to build in, as a rect (used by the HUD). */
 export const zoneOf = (arena: BattleArena, side: BattleSide) => arena.zones[side];
 
-/** Where a side's camera looks when the HUD asks to frame a player. */
+/**
+ * Where a side's camera looks when the HUD asks to frame a player.
+ *
+ * `mine` is the default fighting view: stand behind your own house and look
+ * across the table at the opponent, so your zone fills the lower third, the
+ * neutral band the middle and the enemy's house the upper third. `theirs`
+ * pushes up to the front edge of your own zone for a close look at the target.
+ */
 export const sideCamera = (
   arena: BattleArena,
   side: BattleSide,
-  view: 'global' | 'mine' | 'theirs' = 'global',
+  view: 'global' | 'mine' | 'theirs' = 'mine',
 ): { position: [number, number, number]; target: [number, number, number] } => {
   if (view === 'global') return arena.camera;
   // Side A builds on the +Z half, side B on the -Z half.
   const outward = side === 'A' ? 1 : -1;
+  const opponent: BattleSide = side === 'A' ? 'B' : 'A';
   const [ownX, ownZ] = rectCenter(arena.zones[side]);
+  const [otherX, otherZ] = rectCenter(arena.zones[opponent]);
+
   if (view === 'mine') {
+    // Over the shoulder, facing the enemy. These numbers are tuned so both
+    // 13.5 × 13.5 zones fit in a 45° frame: own zone in the lower third, the
+    // enemy's in the upper third, with the neutral band between them.
     return {
-      position: [ownX + 1, 12, ownZ + outward * 14],
-      target: [ownX, 1.2, ownZ - outward * 0.5],
+      position: [ownX + outward * 2, 36, ownZ + outward * 28],
+      target: [0, 1.5, -outward * 2],
     };
   }
-  const opponent: BattleSide = side === 'A' ? 'B' : 'A';
-  const [otherX, otherZ] = rectCenter(arena.zones[opponent]);
+
+  // Target view: from the front edge of the own zone, straight at the enemy.
   return {
-    position: [otherX - 2, 13, otherZ + outward * 20],
-    target: [otherX, 1.2, otherZ],
+    position: [ownX + outward * 2, 16, ownZ - outward * 5.5],
+    target: [otherX, 2, otherZ],
   };
 };

@@ -1494,13 +1494,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (appState !== AppState.BATTLE) return;
-    if (battle.state.phase === 'build') {
+    // Every build phase and every turn opens on the fighting view: behind your
+    // own house, looking at the opponent.
+    if (battle.state.phase === 'build' || battle.state.phase === 'inspect') {
       battle.requestCamera('mine');
-      return;
-    }
-    // Open the first turn on the whole arena so both houses are visible.
-    if (battle.state.phase === 'inspect' && battle.state.round === 1) {
-      battle.requestCamera('global');
     }
     // Only reframe on phase/side changes, never on every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
