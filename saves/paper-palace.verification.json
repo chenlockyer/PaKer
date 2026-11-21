@@ -1,0 +1,55 @@
+{
+  "verifiedAt": "2026-11-21T12:21:58.381Z",
+  "saveId": "paker-palace-paper-001",
+  "cards": 132,
+  "settleMs": 7000,
+  "thresholds": {
+    "maxTiltDegrees": 8,
+    "maxDropMetres": 0.05,
+    "maxShiftMetres": 0.06
+  },
+  "measured": {
+    "maxTiltDegrees": 0.041,
+    "maxDropMetres": 0.022,
+    "maxShiftMetres": 0.022
+  },
+  "worst": [
+    {
+      "id": "palace_052",
+      "tilt": 0.04,
+      "drop": 0.0131,
+      "shift": 0.0132
+    },
+    {
+      "id": "palace_081",
+      "tilt": 0.03,
+      "drop": 0.0009,
+      "shift": 0.0011
+    },
+    {
+      "id": "palace_127",
+      "tilt": 0.03,
+      "drop": 0.0009,
+      "shift": 0.0011
+    },
+    {
+      "id": "palace_079",
+      "tilt": 0.03,
+      "drop": 0.0009,
+      "shift": 0.0011
+    },
+    {
+      "id": "palace_078",
+      "tilt": 0.03,
+      "drop": 0.0009,
+      "shift": 0.0011
+    },
+    {
+      "id": "palace_125",
+      "tilt": 0.03,
+      "drop": 0.0009,
+      "shift": 0.0011
+    }
+  ],
+  "passed": true
+}

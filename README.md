@@ -104,7 +104,25 @@ npm run test:level-factory  # 用真实运行时服务复验生成结果
 
 *   **按住 C**: 打开鼠标姿态轮盘，松开应用所选预设
 *   **Shift + Q / Shift + E**: 切换上一个 / 下一个预设
-*   设置中可以切换回旧版键位，或重新绑定任意操作
+*   设置中可以切换回旧版键盘键位，或重新绑定任意操作
+
+## 纸牌宫殿 · 现成存档
+
+![纸牌宫殿](docs/screenshots/palace-in-app.png)
+
+132 张牌的三进院落：三层主殿 + 两座配殿 + 后殿 + 前廊 + 宫门 + 四面院墙，
+19.85 × 25.39 × 11.11 m。已经写进本机客户端的存档库，**读档 → 纸牌宫殿 → 读取** 即可。
+
+每个单元都取自官方关卡的已验证结构，单元之间互不接触，所以整座宫殿是「各自站稳」拼起来的；
+`npm run palace:verify` 会读档后用真实物理跑 7 秒，逐张比对存档与实时位姿（倾角 < 8°、下沉 < 5 cm）才算通过。
+
+```bash
+npm run palace:build     # 生成 saves/paper-palace.paker-save.json
+npm run palace:verify    # 无头物理验证 + 截图
+npm run palace:seed      # 写进桌面客户端存档库并读档验证
+```
+
+结构、验证数据与改法见 [docs/palace-save.md](docs/palace-save.md)。
 
 ## 纸牌攻城 · 1v1 对战
 

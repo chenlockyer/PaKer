@@ -27,7 +27,10 @@
     "level:build": "node scripts/level-factory/build.mjs",
     "desktop": "npm run build && electron electron/main.cjs",
     "pack:win": "npm run build && electron-builder --win --dir",
-    "dist:win": "npm run build && electron-builder --win nsis"
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "palace:build": "node scripts/palace/build-save.mjs",
+    "palace:verify": "node scripts/palace/verify-palace.mjs",
+    "palace:seed": "node scripts/palace/seed-save.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

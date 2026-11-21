@@ -1,0 +1,2257 @@
+{
+  "schemaVersion": 2,
+  "kind": "paker-build",
+  "id": "paker-palace-paper-001",
+  "name": "纸牌宫殿",
+  "source": "manual",
+  "savedAt": "2026-11-21T12:23:22.302Z",
+  "cardSize": "BRIDGE",
+  "currentPresetId": "flat_landscape",
+  "isFreezeMode": false,
+  "cards": [
+    {
+      "id": "palace_001",
+      "position": [
+        -0.873566,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "A",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_002",
+      "position": [
+        -0.366434,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "4",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_003",
+      "position": [
+        0.366434,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "7",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_004",
+      "position": [
+        0.873566,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "10",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_005",
+      "position": [
+        0,
+        2.772131,
+        -1.386518
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "suit": "spades",
+      "rank": "K",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_006",
+      "position": [
+        0,
+        4.163798,
+        -2.260082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "3",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_007",
+      "position": [
+        0,
+        4.163798,
+        -1.752954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "6",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_008",
+      "position": [
+        0,
+        4.163798,
+        -1.020082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "9",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_009",
+      "position": [
+        0,
+        4.163798,
+        -0.512954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "Q",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_010",
+      "position": [
+        0,
+        5.555465,
+        -1.386518
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "suit": "hearts",
+      "rank": "2",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_011",
+      "position": [
+        -0.873566,
+        6.947131,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "5",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_012",
+      "position": [
+        -0.366434,
+        6.947131,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "8",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_013",
+      "position": [
+        0.366434,
+        6.947131,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "J",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_014",
+      "position": [
+        0.873566,
+        6.947131,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "A",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_015",
+      "position": [
+        0,
+        8.338796,
+        -1.386518
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "suit": "clubs",
+      "rank": "4",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_016",
+      "position": [
+        -0.253566,
+        9.730461,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "7",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_017",
+      "position": [
+        0.253566,
+        9.730461,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "10",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_018",
+      "position": [
+        -4.673568,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "K",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_019",
+      "position": [
+        -4.166436,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "3",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_020",
+      "position": [
+        -3.433568,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "6",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_021",
+      "position": [
+        -2.926436,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "9",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_022",
+      "position": [
+        -3.800002,
+        2.772131,
+        -1.386518
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "suit": "hearts",
+      "rank": "Q",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_023",
+      "position": [
+        -3.800002,
+        4.163798,
+        -2.260082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "2",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_024",
+      "position": [
+        -3.800002,
+        4.163798,
+        -1.752954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "5",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_025",
+      "position": [
+        -3.800002,
+        4.163798,
+        -1.020082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "8",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_026",
+      "position": [
+        -3.800002,
+        4.163798,
+        -0.512954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "J",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_027",
+      "position": [
+        -3.800002,
+        5.555465,
+        -1.386518
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "suit": "clubs",
+      "rank": "A",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_028",
+      "position": [
+        -4.053568,
+        6.947131,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "4",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_029",
+      "position": [
+        -3.546436,
+        6.947131,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "7",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_030",
+      "position": [
+        2.926436,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "10",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_031",
+      "position": [
+        3.433568,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "K",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_032",
+      "position": [
+        4.166436,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "3",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_033",
+      "position": [
+        4.673568,
+        1.380465,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "6",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_034",
+      "position": [
+        3.800002,
+        2.772131,
+        -1.386518
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "suit": "hearts",
+      "rank": "9",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_035",
+      "position": [
+        3.800002,
+        4.163798,
+        -2.260082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "Q",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_036",
+      "position": [
+        3.800002,
+        4.163798,
+        -1.752954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "2",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_037",
+      "position": [
+        3.800002,
+        4.163798,
+        -1.020082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "5",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_038",
+      "position": [
+        3.800002,
+        4.163798,
+        -0.512954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "8",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_039",
+      "position": [
+        3.800002,
+        5.555465,
+        -1.386518
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "suit": "clubs",
+      "rank": "J",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_040",
+      "position": [
+        3.546436,
+        6.947131,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "A",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_041",
+      "position": [
+        4.053568,
+        6.947131,
+        -1.386518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "4",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_042",
+      "position": [
+        -0.873566,
+        1.380465,
+        -7.266518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "7",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_043",
+      "position": [
+        -0.366434,
+        1.380465,
+        -7.266518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "10",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_044",
+      "position": [
+        0.366434,
+        1.380465,
+        -7.266518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "K",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_045",
+      "position": [
+        0.873566,
+        1.380465,
+        -7.266518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "3",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_046",
+      "position": [
+        0,
+        2.772131,
+        -7.266518
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "suit": "hearts",
+      "rank": "6",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_047",
+      "position": [
+        0,
+        4.163798,
+        -8.140082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "9",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_048",
+      "position": [
+        0,
+        4.163798,
+        -7.632954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "Q",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_049",
+      "position": [
+        0,
+        4.163798,
+        -6.900082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "2",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_050",
+      "position": [
+        0,
+        4.163798,
+        -6.392954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "5",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_051",
+      "position": [
+        0,
+        5.555465,
+        -7.266518
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "suit": "clubs",
+      "rank": "8",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_052",
+      "position": [
+        -0.253566,
+        6.947131,
+        -7.266518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "J",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_053",
+      "position": [
+        0.253566,
+        6.947131,
+        -7.266518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "A",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_054",
+      "position": [
+        -2.85,
+        1.380467,
+        2.906436
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "4",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_055",
+      "position": [
+        -2.85,
+        1.380467,
+        3.413564
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "7",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_056",
+      "position": [
+        -0.95,
+        1.380467,
+        2.906436
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "10",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_057",
+      "position": [
+        -0.95,
+        1.380467,
+        3.413564
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "K",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_058",
+      "position": [
+        0.95,
+        1.380467,
+        2.906436
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "3",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_059",
+      "position": [
+        0.95,
+        1.380467,
+        3.413564
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "6",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_060",
+      "position": [
+        2.85,
+        1.380467,
+        2.906436
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "9",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_061",
+      "position": [
+        2.85,
+        1.380467,
+        3.413564
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "Q",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_062",
+      "position": [
+        -2.173565,
+        1.380465,
+        8.146518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "2",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_063",
+      "position": [
+        -1.666434,
+        1.380465,
+        8.146518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "5",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_064",
+      "position": [
+        -0.933566,
+        1.380465,
+        8.146518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "8",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_065",
+      "position": [
+        -0.426434,
+        1.380465,
+        8.146518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "J",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_066",
+      "position": [
+        -1.3,
+        2.772131,
+        8.146518
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "suit": "hearts",
+      "rank": "A",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_067",
+      "position": [
+        0.426434,
+        1.380465,
+        8.146518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "4",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_068",
+      "position": [
+        0.933566,
+        1.380465,
+        8.146518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "7",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_069",
+      "position": [
+        1.666434,
+        1.380465,
+        8.146518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "10",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_070",
+      "position": [
+        2.173566,
+        1.380465,
+        8.146518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "K",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_071",
+      "position": [
+        1.3,
+        2.772131,
+        8.146518
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "suit": "clubs",
+      "rank": "3",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_072",
+      "position": [
+        0,
+        2.793331,
+        8.146518
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "suit": "diamonds",
+      "rank": "6",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_073",
+      "position": [
+        -6.65,
+        1.380467,
+        -12.440082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "9",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_074",
+      "position": [
+        -6.65,
+        1.380467,
+        -11.932954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "Q",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_075",
+      "position": [
+        -4.75,
+        1.380467,
+        -12.440082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "2",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_076",
+      "position": [
+        -4.75,
+        1.380467,
+        -11.932954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "5",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_077",
+      "position": [
+        -2.85,
+        1.380467,
+        -12.440082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "8",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_078",
+      "position": [
+        -2.85,
+        1.380467,
+        -11.932954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "J",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_079",
+      "position": [
+        -0.95,
+        1.380467,
+        -12.440082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "A",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_080",
+      "position": [
+        -0.95,
+        1.380467,
+        -11.932954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "4",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_081",
+      "position": [
+        0.95,
+        1.380467,
+        -12.440082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "7",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_082",
+      "position": [
+        0.95,
+        1.380467,
+        -11.932954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "10",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_083",
+      "position": [
+        2.85,
+        1.380467,
+        -12.440082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "K",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_084",
+      "position": [
+        2.85,
+        1.380467,
+        -11.932954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "3",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_085",
+      "position": [
+        4.75,
+        1.380467,
+        -12.440082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "6",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_086",
+      "position": [
+        4.75,
+        1.380467,
+        -11.932954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "9",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_087",
+      "position": [
+        6.65,
+        1.380467,
+        -12.440082
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "Q",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_088",
+      "position": [
+        6.65,
+        1.380467,
+        -11.932954
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "2",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_089",
+      "position": [
+        -8.973569,
+        1.380465,
+        -8.036518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "5",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_090",
+      "position": [
+        -8.466437,
+        1.380465,
+        -8.036518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "8",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_091",
+      "position": [
+        -8.973569,
+        1.380465,
+        -6.136518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "J",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_092",
+      "position": [
+        -8.466437,
+        1.380465,
+        -6.136518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "A",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_093",
+      "position": [
+        -8.973569,
+        1.380465,
+        -4.236518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "4",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_094",
+      "position": [
+        -8.466437,
+        1.380465,
+        -4.236518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "7",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_095",
+      "position": [
+        -8.973569,
+        1.380465,
+        -2.336518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "10",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_096",
+      "position": [
+        -8.466437,
+        1.380465,
+        -2.336518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "K",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_097",
+      "position": [
+        -8.973569,
+        1.380465,
+        -0.436518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "3",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_098",
+      "position": [
+        -8.466437,
+        1.380465,
+        -0.436518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "6",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_099",
+      "position": [
+        -8.973569,
+        1.380465,
+        1.463482
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "9",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_100",
+      "position": [
+        -8.466437,
+        1.380465,
+        1.463482
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "Q",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_101",
+      "position": [
+        -8.973569,
+        1.380465,
+        3.363482
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "2",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_102",
+      "position": [
+        -8.466437,
+        1.380465,
+        3.363482
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "5",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_103",
+      "position": [
+        -8.973569,
+        1.380465,
+        5.263482
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "8",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_104",
+      "position": [
+        -8.466437,
+        1.380465,
+        5.263482
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "J",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_105",
+      "position": [
+        8.466437,
+        1.380465,
+        -8.036518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "A",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_106",
+      "position": [
+        8.973569,
+        1.380465,
+        -8.036518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "4",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_107",
+      "position": [
+        8.466437,
+        1.380465,
+        -6.136518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "7",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_108",
+      "position": [
+        8.973569,
+        1.380465,
+        -6.136518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "10",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_109",
+      "position": [
+        8.466437,
+        1.380465,
+        -4.236518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "K",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_110",
+      "position": [
+        8.973569,
+        1.380465,
+        -4.236518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "3",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_111",
+      "position": [
+        8.466437,
+        1.380465,
+        -2.336518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "6",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_112",
+      "position": [
+        8.973569,
+        1.380465,
+        -2.336518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "9",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_113",
+      "position": [
+        8.466437,
+        1.380465,
+        -0.436518
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "Q",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_114",
+      "position": [
+        8.973569,
+        1.380465,
+        -0.436518
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "2",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_115",
+      "position": [
+        8.466437,
+        1.380465,
+        1.463482
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "5",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_116",
+      "position": [
+        8.973569,
+        1.380465,
+        1.463482
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "8",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_117",
+      "position": [
+        8.466437,
+        1.380465,
+        3.363482
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "spades",
+      "rank": "J",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_118",
+      "position": [
+        8.973569,
+        1.380465,
+        3.363482
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "hearts",
+      "rank": "A",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_119",
+      "position": [
+        8.466437,
+        1.380465,
+        5.263482
+      ],
+      "rotation": [
+        -1.570796,
+        0.174534,
+        -1.570796
+      ],
+      "suit": "clubs",
+      "rank": "4",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_120",
+      "position": [
+        8.973569,
+        1.380465,
+        5.263482
+      ],
+      "rotation": [
+        -1.570796,
+        -0.174534,
+        -1.570796
+      ],
+      "suit": "diamonds",
+      "rank": "7",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_121",
+      "position": [
+        -9.026522,
+        1.380467,
+        11.932954
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "10",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_122",
+      "position": [
+        -9.026522,
+        1.380467,
+        12.440082
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "K",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_123",
+      "position": [
+        -7.126522,
+        1.380467,
+        11.932954
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "3",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_124",
+      "position": [
+        -7.126522,
+        1.380467,
+        12.440082
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "6",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_125",
+      "position": [
+        -5.226522,
+        1.380467,
+        11.932954
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "9",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_126",
+      "position": [
+        -5.226522,
+        1.380467,
+        12.440082
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "Q",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_127",
+      "position": [
+        5.226522,
+        1.380467,
+        11.932954
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "2",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_128",
+      "position": [
+        5.226522,
+        1.380467,
+        12.440082
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "5",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_129",
+      "position": [
+        7.126522,
+        1.380467,
+        11.932954
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "spades",
+      "rank": "8",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_130",
+      "position": [
+        7.126522,
+        1.380467,
+        12.440082
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "hearts",
+      "rank": "J",
+      "color": "red",
+      "locked": false
+    },
+    {
+      "id": "palace_131",
+      "position": [
+        9.026522,
+        1.380467,
+        11.932954
+      ],
+      "rotation": [
+        -1.396265,
+        0,
+        -3.141593
+      ],
+      "suit": "clubs",
+      "rank": "A",
+      "color": "black",
+      "locked": false
+    },
+    {
+      "id": "palace_132",
+      "position": [
+        9.026522,
+        1.380467,
+        12.440082
+      ],
+      "rotation": [
+        -1.745328,
+        0,
+        -3.141593
+      ],
+      "suit": "diamonds",
+      "rank": "4",
+      "color": "red",
+      "locked": false
+    }
+  ]
+}
