@@ -1,286 +1,215 @@
 /**
- * The "纸牌宫殿" (Paper Palace) — a courtyard palace built from the campaign's
- * verified blocks.
+ * The "纸牌宫殿" (Paper Palace) — built from the user's own 格 lattices, plus
+ * three devices that only exist in this file.
  *
- * Every unit is one of the campaign's proven structures, so each of them is
- * stable on its own; the palace is a composition, and the units are spaced so
- * that no two of them touch. That keeps the whole thing standing without any
- * hidden bracing, which matters because the save is re-loaded into the same
- * Rapier world and simulated again.
+ * Base modules, taken straight from the blueprint library (`modules.json`):
  *
- * Plan (x right, +z is the front of the palace, i.e. where the player stands):
+ *   低格 · 田字格   5.62 × 5.81 × 1.85   八张低格牌围成田字，顶部两张平板
+ *   高格 · 顺高格   2.06 × 2.10 × 2.79   四张高格牌同向倚靠，中空方柱
+ *   逆格            4.22 × 4.25 × 1.78   反向四张低格牌，用作连廊
  *
- *   z = -7.4                     [后殿 rear hall, crowned]
- *   z =  0.0        [左配殿]         [主殿 main hall]         [右配殿]
- *   z = +4.2                  [前廊 colonnade, 4 pairs]
- *   z = +8.0                      [宫门 gate]
+ * Original structure on top of them:
  *
- * Every block ends on a flat deck, so each tower carries a crown — a three-card
- * tripod on the main hall, an A-frame pair on the wings — to give the palace a
- * pitched skyline instead of five flat boxes.
+ *   1. 台基   3 × 3 田字格拼成一个 17.9 × 18.4 的格状高台（低格）
+ *   2. 楼身   顺高格逐层叠加，层与层之间铺**十字双层平板**——实测单层平板会滑，
+ *             十字交叉后 8 秒内倾角 0.1°、下沉 3 cm，是唯一站得住的叠法
+ *   3. 重檐   中塔三层、角塔两层，每层顶部的十字平板就是檐口
+ *   4. 连廊   逆格框架压在台基四边
+ *   5. 宫门   叠涩门洞（两片高格门柱 + 三层逐级内收的板）
+ *   6. 台阶   两块倾斜平板搭到台基前沿
  *
- * Usage:  node scripts/palace/palace-structure.mjs   (prints a summary)
+ * `stage` builds a prefix so the physics check can bisect failures.
  */
 
-import { TARGET_GAP, pair, storey, wall, shiftAll } from '../level-factory/lib/blocks.mjs';
-import { portico, tripod } from '../level-factory/structures.mjs';
-import {
-  CARD_SIZES,
-  structureBounds,
-} from '../level-factory/lib/cards.mjs';
-import { cross, dot, length, normalize, roundTuple, rotate, sub } from '../level-factory/lib/math.mjs';
+import { TARGET_GAP } from '../level-factory/lib/blocks.mjs';
+import { interpenetrations, minimumCardGap, structureBounds } from '../level-factory/lib/cards.mjs';
+import { plank, gateTower } from './palace-parts.mjs';
+import { moduleInfo, placeModule } from './palace-modules.mjs';
 
-const SUITS = ['spades', 'hearts', 'clubs', 'diamonds'];
-const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const MODULE_GAP = 0.5;
+const FLOOR_GAP = 0.0012;
+const FLOOR_THICKNESS = 0.02;
+/** The 田字格 caps itself with two planks whose union is off-centre by this much. */
+const CAP_OFFSET = 0.31;
 
-const SIZE = CARD_SIZES.BRIDGE;
-
-const boundsOf = cards => structureBounds(cards);
-
-/* ------------------------------------------------------------------ */
-/* Separation between two cards                                         */
-/* ------------------------------------------------------------------ */
-
-const AXES = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-
-const cardAxes = card => AXES.map(axis => rotate(card.quaternion, axis));
-
-const projectRadius = (half, axes, axis) =>
-  Math.abs(dot(axes[0], axis)) * half[0] +
-  Math.abs(dot(axes[1], axis)) * half[1] +
-  Math.abs(dot(axes[2], axis)) * half[2];
-
-/**
- * Signed separation of two oriented card boxes: the largest gap over every
- * separating axis. Positive means the boxes are apart by that distance,
- * negative means they interpenetrate.
- *
- * (`boxGap` in the level factory returns the *first* positive axis instead of
- * the largest one, which under-reports the clearance between distant cards, so
- * the palace uses this variant to report real margins.)
- */
-export const cardSeparation = (left, right) => {
-  const leftAxes = cardAxes(left);
-  const rightAxes = cardAxes(right);
-  const leftHalf = [left.dimensions.width / 2, left.dimensions.thickness / 2, left.dimensions.height / 2];
-  const rightHalf = [right.dimensions.width / 2, right.dimensions.thickness / 2, right.dimensions.height / 2];
-  const delta = sub(right.position, left.position);
-  const axes = [...leftAxes, ...rightAxes];
-  for (const leftAxis of leftAxes) {
-    for (const rightAxis of rightAxes) {
-      const candidate = cross(leftAxis, rightAxis);
-      if (length(candidate) > 1e-6) axes.push(normalize(candidate));
-    }
-  }
-  let largest = -Infinity;
-  for (const axis of axes) {
-    const distance = Math.abs(dot(delta, axis));
-    const reach = projectRadius(leftHalf, leftAxes, axis) + projectRadius(rightHalf, rightAxes, axis);
-    largest = Math.max(largest, distance - reach);
-  }
-  return largest;
+export const MODULE_SIZES = {
+  low: moduleInfo('田字格'),
+  high: moduleInfo('顺高格'),
+  gallery: moduleInfo('逆格'),
+  highRoof: moduleInfo('顺高格有屋顶'),
 };
 
-const clearances = cards => {
-  let min = Infinity;
-  const overlaps = [];
-  for (let left = 0; left < cards.length; left += 1) {
-    for (let right = left + 1; right < cards.length; right += 1) {
-      const gap = cardSeparation(cards[left], cards[right]);
-      if (gap < min) min = gap;
-      if (gap < 0.0006) overlaps.push({ left: cards[left].id, right: cards[right].id, gap: Number(gap.toFixed(5)) });
-    }
-  }
-  return { min, overlaps };
-};
-
-const sizeOf = cards => {
-  const bounds = boundsOf(cards);
-  return {
-    width: bounds.max[0] - bounds.min[0],
-    depth: bounds.max[2] - bounds.min[2],
-    height: bounds.max[1] - bounds.min[1],
-  };
-};
-
-const moved = (cards, dx, dz) => shiftAll(cards, [dx, 0, dz]);
-
-/** Drop a card set onto a surface so its lowest corner rests on `surfaceY`. */
-const sitOn = (cards, surfaceY, gap = TARGET_GAP) => {
-  const bounds = structureBounds(cards);
-  const lift = surfaceY + gap - bounds.min[1];
-  return shiftAll(cards, [0, lift, 0]);
-};
-
-/**
- * A tower built storey by storey so each floor's deck height is known — the
- * gallery bridges have to land exactly on those decks.
- */
-const towerLevels = ({ prefix, storeys, spacing = 0.62 }) => {
+/** One tower level: the pinwheel unit, then a crossed plank floor on its top. */
+const towerLevel = ({ prefix, x, z, baseY, levels }) => {
   const cards = [];
-  const levels = [];
-  let surfaceY = 0;
-  for (let index = 0; index < storeys; index += 1) {
-    const leanAxis = index % 2 === 1 ? [0, 1] : [1, 0];
-    const result = storey({
-      prefix: `${prefix}_s${index + 1}`,
-      center: [0, 0],
-      surfaceY,
-      spacing,
-      leanAxis,
-      step: `s${index + 1}`,
+  const floors = [];
+  let topY = baseY;
+  for (let level = 0; level < levels; level += 1) {
+    const unit = placeModule('顺高格', {
+      x,
+      z,
+      y: topY,
+      idPrefix: `${prefix}_l${level + 1}`,
     });
-    cards.push(...result.cards);
-    levels.push(result.deckTop);
-    surfaceY = result.deckTop + TARGET_GAP;
+    cards.push(...unit.cards);
+    const floorY = unit.topY + FLOOR_GAP;
+    // A four-plank deck per level. One plank only touches two of the four card
+    // tops and the upper unit then hangs off its edge (5 cm of sag per level);
+    // two planks per layer cover the whole 2.8 × 2.8 top and nothing sags.
+    for (const offset of [-0.91, 0.91]) {
+      floors.push(plank({
+        id: `${prefix}_floor${level + 1}a${offset}`,
+        x,
+        z: z + offset,
+        bottomY: floorY,
+        axis: [1, 0],
+      }));
+    }
+    for (const offset of [-0.91, 0.91]) {
+      floors.push(plank({
+        id: `${prefix}_floor${level + 1}b${offset}`,
+        x: x + offset,
+        z,
+        bottomY: floorY + FLOOR_THICKNESS + FLOOR_GAP,
+        axis: [0, 1],
+      }));
+    }
+    topY = floorY + 2 * (FLOOR_THICKNESS + FLOOR_GAP);
   }
-  return { cards, levels, deckTop: levels[levels.length - 1] };
+  return { cards: [...cards, ...floors], topY, floors };
 };
 
-/**
- * A tower plus a crown on top: `tower` always ends on a flat deck, and a
- * pointed crown turns that flat box into a palace spire.
- */
-const crownedTower = ({ prefix, storeys, crown }) => {
-  const body = towerLevels({ prefix, storeys });
-  const top = crown === 'tripod'
-    ? sitOn(tripod({ prefix: `${prefix}_crown`, tilt: 14 }).cards, body.deckTop)
-    : pair({
-      prefix: `${prefix}_crown`,
-      apex: [0, 0],
-      surfaceY: body.deckTop + TARGET_GAP,
-      step: `${prefix}_crown`,
-    });
-  return {
-    cards: [...body.cards, ...top],
-    levels: body.levels,
-    deckTop: body.deckTop,
+export const buildPalace = ({ stage = 9 } = {}) => {
+  const units = [];
+  const add = (name, cards) => {
+    units.push({ name, cards });
+    return cards;
   };
+
+  const low = MODULE_SIZES.low;
+  const high = MODULE_SIZES.high;
+  const gallery = MODULE_SIZES.gallery;
+
+  /* 1 · 台基：3 × 3 田字格 --------------------------------------------- */
+  const stepX = low.width + MODULE_GAP;
+  const stepZ = low.depth + MODULE_GAP;
+  const platformCards = [];
+  let order = 0;
+  for (const gx of [-1, 0, 1]) {
+    for (const gz of [-1, 0, 1]) {
+      platformCards.push(...placeModule('田字格', {
+        x: gx * stepX,
+        z: gz * stepZ,
+        y: 0,
+        idPrefix: `p_terrace${order += 1}`,
+      }).cards);
+    }
+  }
+  add('台基·田字格', platformCards);
+  const platformTop = low.height;
+  const platformHalfDepth = stepZ + low.depth / 2;
+  if (stage < 2) return finish(units);
+
+  /* 2 · 月台：台基正前方再铺一块田字格，形成「凸」形台面 ------------------ */
+  const apronZ = platformHalfDepth + MODULE_GAP + low.depth / 2;
+  const apron = placeModule('田字格', { x: CAP_OFFSET, z: apronZ, y: 0, idPrefix: 'p_apron' });
+  add('月台·田字格', apron.cards);
+  const apronHalfDepth = apronZ + low.depth / 2;
+  if (stage < 3) return finish(units);
+
+  /* 3 · 四角塔：顺高格两层 + 层间四板 ---------------------------------- */
+  const cornerCards = [];
+  order = 0;
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      cornerCards.push(...towerLevel({
+        prefix: `p_corner${order += 1}`,
+        x: sx * stepX + CAP_OFFSET,
+        z: sz * stepZ,
+        baseY: platformTop,
+        levels: 2,
+      }).cards);
+    }
+  }
+  add('角塔·顺高格', cornerCards);
+  if (stage < 4) return finish(units);
+
+  /* 4 · 中塔：顺高格三层 + 层间四板 ------------------------------------ */
+  const hall = towerLevel({
+    prefix: 'p_hall',
+    x: CAP_OFFSET,
+    z: 0,
+    baseY: platformTop,
+    levels: 4,
+  });
+  add('中塔·顺高格', hall.cards);
+  if (stage < 5) return finish(units);
+
+  /* 5 · 宫门 + 门前两座逆格亭 ------------------------------------------ */
+  const gate = gateTower({
+    prefix: 'p_gate',
+    center: [0, apronHalfDepth + 2.6],
+    opening: 2.5,
+    surfaceY: 0,
+    tilt: 4,
+  });
+  add('宫门', gate.cards);
+
+  const pavilionCards = [];
+  order = 0;
+  for (const sx of [-1, 1]) {
+    pavilionCards.push(...placeModule('逆格', {
+      x: sx * 7.6,
+      z: apronHalfDepth + 0.9,
+      y: 0,
+      idPrefix: `p_pavilion${order += 1}`,
+    }).cards);
+  }
+  add('门前亭·逆格', pavilionCards);
+
+  return finish(units);
 };
 
-/** Build the units at the origin, then lay them out along the palace axis. */
-export const buildPalace = ({ gap = 2.2, wingGap = 1.0 } = {}) => {
-  const hall = crownedTower({ prefix: 'palace_hall', storeys: 3, crown: 'pair' });
-  const leftWing = crownedTower({ prefix: 'palace_left', storeys: 2, crown: 'pair' });
-  const rightWing = crownedTower({ prefix: 'palace_right', storeys: 2, crown: 'pair' });
-  const rearHall = crownedTower({ prefix: 'palace_rear', storeys: 2, crown: 'pair' });
-  // A row of A-frames across the front: each pair leans along z so the viewer
-  // sees the inverted V face on, and the row marches along x.
-  const colonnade = wall({ prefix: 'palace_col', count: 4, spacing: 1.9, leanAxis: [0, 1] });
-  const gate = portico({ prefix: 'palace_gate', span: 2.6 });
-
-  const hallSize = sizeOf(hall.cards);
-  const wingSize = sizeOf(leftWing.cards);
-  const rearSize = sizeOf(rearHall.cards);
-  const colonnadeSize = sizeOf(colonnade);
-  const gateSize = sizeOf(gate.cards);
-
-  // The wings are only a gallery apart from the hall, and gallery decks bridge
-  // the gap on every shared floor — that is what turns three towers into one
-  // palace body.
-  const wingX = hallSize.width / 2 + wingSize.width / 2 + wingGap;
-  // Rear hall sits behind the hall, colonnade and gate in front of it.
-  const rearZ = -(hallSize.depth / 2) - rearSize.depth / 2 - gap * 1.4;
-  const colonnadeZ = hallSize.depth / 2 + gap * 1.2 + colonnadeSize.depth / 2;
-  const gateZ = colonnadeZ + colonnadeSize.depth / 2 + gateSize.depth / 2 + gap * 1.4;
-
-  /* ---------------------------------------------------------------- */
-  /* Enclosure: a walled courtyard is what makes it read as a palace.   */
-  /* ---------------------------------------------------------------- */
-  const courtyardHalfWidth = wingX + wingSize.width / 2 + gap * 1.6;
-  const courtyardHalfDepth = Math.abs(rearZ) + rearSize.depth / 2 + gap * 1.6;
-  // Walls are rows of independent A-frames: pairs leaning along the wall's
-  // normal, marching along its length.
-  const backWall = moved(
-    wall({ prefix: 'palace_wall_back', count: 8, spacing: 1.9, leanAxis: [0, 1] }),
-    0,
-    -courtyardHalfDepth,
-  );
-  const leftWall = moved(
-    wall({ prefix: 'palace_wall_left', count: 8, spacing: 1.9, leanAxis: [1, 0] }),
-    -courtyardHalfWidth,
-    0,
-  );
-  const rightWall = moved(
-    wall({ prefix: 'palace_wall_right', count: 8, spacing: 1.9, leanAxis: [1, 0] }),
-    courtyardHalfWidth,
-    0,
-  );
-  // The front wall opens in the middle for the gate.
-  const frontZ = gateZ + gateSize.depth / 2 + gap * 1.2;
-  const frontLeft = moved(
-    wall({ prefix: 'palace_wall_front_left', count: 3, spacing: 1.9, leanAxis: [0, 1] }),
-    -(gateSize.width / 2 + gap + 2.5),
-    frontZ,
-  );
-  const frontRight = moved(
-    wall({ prefix: 'palace_wall_front_right', count: 3, spacing: 1.9, leanAxis: [0, 1] }),
-    gateSize.width / 2 + gap + 2.5,
-    frontZ,
-  );
-
-  const units = [
-    { name: '主殿', cards: hall.cards, x: 0, z: 0 },
-    { name: '左配殿', cards: leftWing.cards, x: -wingX, z: 0 },
-    { name: '右配殿', cards: rightWing.cards, x: wingX, z: 0 },
-    { name: '后殿', cards: rearHall.cards, x: 0, z: rearZ },
-    { name: '前廊', cards: colonnade, x: 0, z: colonnadeZ },
-    { name: '宫门', cards: gate.cards, x: 0, z: gateZ },
-    { name: '后墙', cards: backWall, x: 0, z: 0 },
-    { name: '左墙', cards: leftWall, x: 0, z: 0 },
-    { name: '右墙', cards: rightWall, x: 0, z: 0 },
-    { name: '前墙左段', cards: frontLeft, x: 0, z: 0 },
-    { name: '前墙右段', cards: frontRight, x: 0, z: 0 },
-  ].map(slot => ({
-    ...slot,
-    cards: moved(slot.cards, slot.x, slot.z),
-  }));
-
-  return {
-    units: units.map(slot => ({ name: slot.name, cards: slot.cards })),
-    cards: units.flatMap(slot => slot.cards),
-    sizes: { hall: hallSize, wing: wingSize, rear: rearSize, colonnade: colonnadeSize, gate: gateSize },
-  };
-};
-
-/** Give every card a face so the palace does not look like a wall of blanks. */
-const decorate = cards => cards.map((card, index) => ({
-  ...card,
-  suit: SUITS[index % SUITS.length],
-  rank: RANKS[(index * 3) % RANKS.length],
-  color: index % 2 === 0 ? 'black' : 'red',
-  id: `palace_${String(index + 1).padStart(3, '0')}`,
-}));
-
-export const buildPalaceCards = ({ gap } = {}) => {
-  const palace = buildPalace({ gap });
-  const cards = decorate(palace.cards);
-  const bounds = boundsOf(cards);
-  // Sit the palace on y = 0 and centre it on the origin.
+const finish = units => {
+  const cards = units.flatMap(unit => unit.cards);
+  const bounds = structureBounds(cards);
   const centre = [
     (bounds.min[0] + bounds.max[0]) / 2,
     bounds.min[1],
     (bounds.min[2] + bounds.max[2]) / 2,
   ];
-  const settled = cards.map(card => ({
+  const centred = cards.map((card, index) => ({
     ...card,
-    position: roundTuple([
-      card.position[0] - centre[0],
-      card.position[1] - centre[1],
-      card.position[2] - centre[2],
-    ], 6),
+    id: `palace_${String(index + 1).padStart(3, '0')}`,
+    position: [
+      Number((card.position[0] - centre[0]).toFixed(6)),
+      Number((card.position[1] - centre[1]).toFixed(6)),
+      Number((card.position[2] - centre[2]).toFixed(6)),
+    ],
   }));
-  const { min, overlaps } = clearances(settled);
+  const structure = structureBounds(centred);
+  const size = [
+    structure.max[0] - structure.min[0],
+    structure.max[2] - structure.min[2],
+    structure.max[1] - structure.min[1],
+  ];
   return {
-    cards: settled,
-    units: palace.units.map(slot => slot.name),
-    sizes: palace.sizes,
-    bounds: boundsOf(settled),
-    minGap: min,
-    overlaps,
-    size: SIZE,
+    cards: centred,
+    units: units.map(unit => unit.name),
+    bounds: structure,
+    size,
+    minGap: minimumCardGap(centred),
+    overlaps: interpenetrations(centred, -0.003).length,
+    report: {
+      units: units.map(unit => unit.name),
+      size,
+      minGap: minimumCardGap(centred),
+      overlaps: interpenetrations(centred, -0.003).length,
+    },
   };
 };
+
+export const buildPalaceCards = options => buildPalace(options);
 
 /* ------------------------------------------------------------------ */
 /* CLI summary                                                         */
@@ -289,16 +218,12 @@ export const buildPalaceCards = ({ gap } = {}) => {
 const isMain = () => process.argv[1] && process.argv[1].endsWith('palace-structure.mjs');
 
 if (isMain()) {
-  const palace = buildPalaceCards();
-  const { bounds, minGap, overlaps, cards, units, sizes } = palace;
-  const span = axis => (bounds.max[axis] - bounds.min[axis]).toFixed(2);
-  console.log(`纸牌宫殿 · ${cards.length} 张牌`);
+  const stage = Number(process.env.PALACE_STAGE ?? 9);
+  const palace = buildPalace({ stage });
+  const { size, minGap, overlaps, cards, units } = palace;
+  console.log(`纸牌宫殿 · ${cards.length} 张牌 · stage ${stage}`);
   console.log(`  单元：${units.join(' / ')}`);
-  for (const [name, size] of Object.entries(sizes)) {
-    console.log(`    ${name}: ${size.width.toFixed(2)} × ${size.depth.toFixed(2)} × ${size.height.toFixed(2)}`);
-  }
-  console.log(`  总体：${span(0)} × ${span(2)} × ${span(1)}（长 × 深 × 高）`);
+  console.log(`  尺寸：${size.map(value => value.toFixed(2)).join(' × ')}（长 × 深 × 高）`);
   console.log(`  最小牌间间隙：${minGap.toFixed(4)} m`);
-  console.log(`  互相穿模：${overlaps.length === 0 ? '无' : `${overlaps.length} 处`}`);
-  if (overlaps.length > 0) console.log(overlaps.slice(0, 10));
+  console.log(`  互相穿模：${overlaps === 0 ? '无' : `${overlaps} 处`}`);
 }

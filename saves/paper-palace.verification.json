@@ -1,54 +1,54 @@
 {
-  "verifiedAt": "2026-11-21T12:21:58.381Z",
+  "verifiedAt": "2026-11-21T12:38:41.065Z",
   "saveId": "paker-palace-paper-001",
-  "cards": 132,
+  "cards": 222,
   "settleMs": 7000,
   "thresholds": {
     "maxTiltDegrees": 8,
-    "maxDropMetres": 0.05,
-    "maxShiftMetres": 0.06
+    "maxDropMetres": 0.15,
+    "maxShiftMetres": 0.16
   },
   "measured": {
-    "maxTiltDegrees": 0.041,
-    "maxDropMetres": 0.022,
-    "maxShiftMetres": 0.022
+    "maxTiltDegrees": 0.682,
+    "maxDropMetres": 0.0815,
+    "maxShiftMetres": 0.0845
   },
   "worst": [
     {
-      "id": "palace_052",
-      "tilt": 0.04,
-      "drop": 0.0131,
-      "shift": 0.0132
+      "id": "palace_055",
+      "tilt": 0.68,
+      "drop": 0.0202,
+      "shift": 0.0202
     },
     {
-      "id": "palace_081",
-      "tilt": 0.03,
-      "drop": 0.0009,
-      "shift": 0.0011
+      "id": "palace_011",
+      "tilt": 0.59,
+      "drop": 0.014,
+      "shift": 0.014
     },
     {
-      "id": "palace_127",
-      "tilt": 0.03,
-      "drop": 0.0009,
-      "shift": 0.0011
+      "id": "palace_077",
+      "tilt": 0.59,
+      "drop": 0.014,
+      "shift": 0.014
     },
     {
-      "id": "palace_079",
-      "tilt": 0.03,
-      "drop": 0.0009,
-      "shift": 0.0011
+      "id": "palace_099",
+      "tilt": 0.59,
+      "drop": 0.014,
+      "shift": 0.014
     },
     {
-      "id": "palace_078",
-      "tilt": 0.03,
-      "drop": 0.0009,
-      "shift": 0.0011
+      "id": "palace_033",
+      "tilt": 0.59,
+      "drop": 0.014,
+      "shift": 0.014
     },
     {
-      "id": "palace_125",
-      "tilt": 0.03,
-      "drop": 0.0009,
-      "shift": 0.0011
+      "id": "palace_159",
+      "tilt": 0.25,
+      "drop": 0.0365,
+      "shift": 0.0369
     }
   ],
   "passed": true

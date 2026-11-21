@@ -101,12 +101,12 @@ const main = async () => {
     const centreX = canvas.x + canvas.width / 2;
     const centreY = canvas.y + canvas.height / 2;
     await page.mouse.move(centreX, centreY);
-    for (let step = 0; step < 19; step += 1) {
+    for (let step = 0; step < 24; step += 1) {
       await page.mouse.wheel(0, 120);
       await page.waitForTimeout(55);
     }
     await page.mouse.down({ button: 'right' });
-    await page.mouse.move(centreX + canvas.width * 0.21, centreY + canvas.height * 0.055, { steps: 16 });
+    await page.mouse.move(centreX + canvas.width * 0.18, centreY + canvas.height * 0.05, { steps: 16 });
     await page.mouse.up({ button: 'right' });
     await page.waitForTimeout(700);
     await page.screenshot({ path: SCREENSHOT });

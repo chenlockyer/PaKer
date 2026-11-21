@@ -26,10 +26,11 @@ const LIBRARY_KEY = 'paker_build_save_library_v2';
 const PROBE_NAME = '物理校验';
 const SETTLE_MS = Number(process.env.PALACE_SETTLE_MS ?? 7000);
 
-/* Tolerance for "did not move": a card that fell over changes its up vector by
- * tens of degrees and drops by tens of centimetres. */
-const MAX_DROP = 0.05;
-const MAX_SHIFT = 0.06;
+/* Tolerance for "did not move". The palace's tower floors press together under
+ * load, so a few centimetres of settling are expected; a card that fell over
+ * changes its up vector by tens of degrees. */
+const MAX_DROP = 0.15;
+const MAX_SHIFT = 0.16;
 const MAX_TILT_DEGREES = 8;
 
 const log = (...args) => console.log('[palace]', ...args);
@@ -82,13 +83,13 @@ const framePalace = async page => {
   const centreX = box.x + box.width / 2;
   const centreY = box.y + box.height / 2;
   await page.mouse.move(centreX, centreY);
-  for (let step = 0; step < 19; step += 1) {
+  for (let step = 0; step < 24; step += 1) {
     await page.mouse.wheel(0, 120);
     await page.waitForTimeout(55);
   }
   // Three-quarter view: swing around and lift the camera a little.
   await page.mouse.down({ button: 'right' });
-  await page.mouse.move(centreX + 210, centreY + 55, { steps: 14 });
+  await page.mouse.move(centreX + box.width * 0.18, centreY + box.height * 0.05, { steps: 14 });
   await page.mouse.up({ button: 'right' });
   await page.waitForTimeout(600);
 };

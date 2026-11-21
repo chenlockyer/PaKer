@@ -30,7 +30,8 @@
     "dist:win": "npm run build && electron-builder --win nsis",
     "palace:build": "node scripts/palace/build-save.mjs",
     "palace:verify": "node scripts/palace/verify-palace.mjs",
-    "palace:seed": "node scripts/palace/seed-save.mjs"
+    "palace:seed": "node scripts/palace/seed-save.mjs",
+    "palace:check": "node scripts/palace/physics-check.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

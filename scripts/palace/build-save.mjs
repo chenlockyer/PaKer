@@ -121,7 +121,7 @@ const main = async () => {
     console.log(`  名称：${validated.name}（${validated.id}）`);
     console.log(`  牌数：${validated.cards.length}`);
     console.log(`  尺寸：${(bounds.max[0] - bounds.min[0]).toFixed(2)} × ${(bounds.max[2] - bounds.min[2]).toFixed(2)} × ${(bounds.max[1] - bounds.min[1]).toFixed(2)} m`);
-    console.log(`  最小间隙：${minGap.toFixed(4)} m，穿模：${overlaps.length === 0 ? '无' : overlaps.length}`);
+    console.log(`  最小间隙：${minGap.toFixed(4)} m，穿模：${overlaps === 0 ? '无' : `${overlaps} 处`}`);
     console.log(`  校验：通过（validateGameSave）`);
   } finally {
     await rm(outfile, { force: true });
